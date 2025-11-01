@@ -141,6 +141,7 @@ function getSnap(snaps, newRotationRad, tol) {
     }
     return snapped;
 }
+let activeTransformersCount = 0;
 class Transformer extends Group_1.Group {
     constructor(config) {
         super(config);
@@ -463,6 +464,7 @@ class Transformer extends Group_1.Group {
             x: pos.x - ap.x,
             y: pos.y - ap.y,
         };
+        activeTransformersCount++;
         this._fire('transformstart', { evt: e.evt, target: this.getNode() });
         this._nodes.forEach((target) => {
             target._fire('transformstart', { evt: e.evt, target });
@@ -659,6 +661,7 @@ class Transformer extends Group_1.Group {
         return this.getTransform();
     }
     _removeEvents(e) {
+        var _a;
         if (this._transforming) {
             this._transforming = false;
             if (typeof window !== 'undefined') {
@@ -668,10 +671,14 @@ class Transformer extends Group_1.Group {
                 window.removeEventListener('touchend', this._handleMouseUp, true);
             }
             var node = this.getNode();
+            activeTransformersCount--;
             this._fire('transformend', { evt: e, target: node });
+            (_a = this.getLayer()) === null || _a === void 0 ? void 0 : _a.batchDraw();
             if (node) {
                 this._nodes.forEach((target) => {
+                    var _a;
                     target._fire('transformend', { evt: e, target });
+                    (_a = target.getLayer()) === null || _a === void 0 ? void 0 : _a.batchDraw();
                 });
             }
             this._movingAnchorName = null;
@@ -784,11 +791,13 @@ class Transformer extends Group_1.Group {
                 .multiply(localTransform);
             const attrs = newLocalTransform.decompose();
             node.setAttrs(attrs);
-            this._fire('transform', { evt: evt, target: node });
-            node._fire('transform', { evt: evt, target: node });
             (_a = node.getLayer()) === null || _a === void 0 ? void 0 : _a.batchDraw();
         });
         this.rotation(Util_1.Util._getRotation(newAttrs.rotation));
+        this._nodes.forEach((node) => {
+            this._fire('transform', { evt: evt, target: node });
+            node._fire('transform', { evt: evt, target: node });
+        });
         this._resetTransformCache();
         this.update();
         this.getLayer().batchDraw();
@@ -937,6 +946,9 @@ class Transformer extends Group_1.Group {
     }
 }
 exports.Transformer = Transformer;
+Transformer.isTransforming = () => {
+    return activeTransformersCount > 0;
+};
 function validateAnchors(val) {
     if (!(val instanceof Array)) {
         Util_1.Util.warn('enabledAnchors value should be an array');
