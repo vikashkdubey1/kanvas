@@ -407,11 +407,11 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
 
-        useEffect(() => {
-            if (activeType === 'solid') {
-                setDraft(normalized.toUpperCase());
-            }
-        }, [normalized, activeType]);
+    useEffect(() => {
+        if (activeType === 'solid') {
+            setDraft(normalized.toUpperCase());
+        }
+    }, [normalized, activeType]);
 
     useEffect(() => {
         if (!isOpen) return undefined;
@@ -439,51 +439,6 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         };
     }, [isOpen]);
 
-        if (disabled) {
-            return (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={fieldLabelStyle}>{label}</span>
-                    <span style={disabledValueStyle}>—</span>
-                </div>
-            );
-    }
-    const commitStyle = (updates) => {
-        if (typeof onStyleChange !== 'function') return;
-        const nextType = updates.type ?? activeType;
-        let nextValue = updates.value ?? style?.value ?? normalized;
-        if (nextType === 'solid') {
-            nextValue = normalizeHex(nextValue, '#000000');
-        }
-        onStyleChange({ type: nextType, value: nextValue });
-    };
-
-        const handleHexChange = (event) => {
-            let next = event.target.value.trim();
-            if (!next.startsWith('#')) next = `#${next}`;
-            setDraft(next.toUpperCase());
-            if (HEX_REGEX.test(next)) {
-                commitStyle({ type: 'solid', value: next.toLowerCase() });
-            }
-        };
-
-        const handleBlur = () => {
-            setDraft(normalized.toUpperCase());
-    };
-
-    const handleTypeSelect = (nextType) => {
-        if (nextType === activeType) return;
-        commitStyle({ type: nextType, value: style?.value ?? normalized });
-    };
-
-    const renderNonSolidPlaceholder = () => {
-        const description = COLOR_TYPE_DESCRIPTIONS[activeType];
-        return (
-            <div style={colorTypePlaceholderStyle}>
-                {description || 'Choose a rich media source to apply this style.'}
-            </div>
-        );
-    };
-
     const summaryLabel = useMemo(() => {
         const match = COLOR_STYLE_OPTIONS.find((option) => option.value === activeType);
         return match?.label || 'Solid';
@@ -500,111 +455,156 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         return { backgroundColor: normalized };
     }, [activeType, normalized]);
 
-    const togglePopover = () => {
-        setIsOpen((value) => !value);
+    if (disabled) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={fieldLabelStyle}>{label}</span>
+                <span style={disabledValueStyle}></span>
+            </div>
+        );
+    }
+
+    const commitStyle = (updates) => {
+        if (typeof onStyleChange !== 'function') return;
+        const nextType = updates.type ?? activeType;
+        let nextValue = updates.value ?? style?.value ?? normalized;
+        if (nextType === 'solid') {
+            nextValue = normalizeHex(nextValue, '#000000');
+        }
+        onStyleChange({ type: nextType, value: nextValue });
     };
 
+    const handleHexChange = (event) => {
+        let next = event.target.value.trim();
+        if (!next.startsWith('#')) next = `#${next}`;
+        setDraft(next.toUpperCase());
+        if (HEX_REGEX.test(next)) {
+            commitStyle({ type: 'solid', value: next.toLowerCase() });
+        }
+    };
+
+    const handleBlur = () => {
+        setDraft(normalized.toUpperCase());
+    };
+
+    const handleTypeSelect = (nextType) => {
+        if (nextType === activeType) return;
+        commitStyle({ type: nextType, value: style?.value ?? normalized });
+    };
+
+    const renderNonSolidPlaceholder = () => {
+        const description = COLOR_TYPE_DESCRIPTIONS[activeType];
         return (
-            <div
-                ref={containerRef}
-                style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}
-            >
-                <span style={fieldLabelStyle}>{label}</span>
-                <button
-                    type="button"
-                    aria-haspopup="dialog"
-                    aria-expanded={isOpen}
-                    onClick={togglePopover}
-                    style={{
-                        ...colorPickerButtonStyle,
-                        borderColor: isOpen ? '#4f83ff' : colorPickerButtonStyle.border,
-                        boxShadow: isOpen ? '0 0 0 4px rgba(79, 131, 255, 0.14)' : 'none',
-                    }}
-                >
-                    <span style={colorPickerSummaryStyle}>
-                        <span
-                            aria-hidden="true"
-                            style={{
-                                ...colorSwatchStyle,
-                                width: 32,
-                                height: 32,
-                                ...summaryPreview,
-                            }}
-                        />
-                        <span style={colorModeBadgeStyle}>{summaryLabel}</span>
-                    </span>
-                    <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                        aria-hidden="true"
-                    >
-                        <path
-                            d="M6 8l4 4 4-4"
-                            stroke={isOpen ? '#1d4ed8' : '#475569'}
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                    </svg>
-                </button>
-                {isOpen && (
-                    <div style={colorPopoverStyle} role="dialog" aria-label={`${label} colour picker`}>
-                        <div style={colorModeGridStyle}>
-                            {COLOR_STYLE_OPTIONS.map((option) => (
-                                <ToggleButton
-                                    key={option.value}
-                                    active={option.value === activeType}
-                                    onClick={() => handleTypeSelect(option.value)}
-                                    title={option.label}
-                                >
-                                    {option.label}
-                                </ToggleButton>
-                            ))}
-                        </div>
-                        {activeType === 'solid' ? (
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                                <label style={colorPopoverSwatchStyle}>
-                                    <span
-                                        aria-hidden="true"
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            height: '100%',
-                                            background: normalized,
-                                        }}
-                                    />
-                                    <input
-                                        type="color"
-                                        value={normalized}
-                                        onChange={(event) => commitStyle({ type: 'solid', value: event.target.value })}
-                                        style={hiddenColorInputStyle}
-                                    />
-                                </label>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                    <span style={colorPopoverFieldLabelStyle}>Hex</span>
-                                    <input
-                                        type="text"
-                                        value={draft}
-                                        onChange={handleHexChange}
-                                        onBlur={handleBlur}
-                                        style={hexInputStyle}
-                                    />
-                                </div>
-                            </div>
-                        ) : (
-                            renderNonSolidPlaceholder()
-                        )}
-                    </div>
-                
-                )}
+            <div style={colorTypePlaceholderStyle}>
+                {description || 'Choose a rich media source to apply this style.'}
             </div>
         );
     };
 
-    const NumberControl = ({
+    const togglePopover = () => {
+        setIsOpen((value) => !value);
+    };
+
+    return (
+        <div
+            ref={containerRef}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}
+        >
+            <span style={fieldLabelStyle}>{label}</span>
+            <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={isOpen}
+                onClick={togglePopover}
+                style={{
+                    ...colorPickerButtonStyle,
+                    borderColor: isOpen ? '#4f83ff' : colorPickerButtonStyle.border,
+                    boxShadow: isOpen ? '0 0 0 4px rgba(79, 131, 255, 0.14)' : 'none',
+                }}
+            >
+                <span style={colorPickerSummaryStyle}>
+                    <span
+                        aria-hidden="true"
+                        style={{
+                            ...colorSwatchStyle,
+                            width: 32,
+                            height: 32,
+                            ...summaryPreview,
+                        }}
+                    />
+                    <span style={colorModeBadgeStyle}>{summaryLabel}</span>
+                </span>
+                <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                >
+                    <path
+                        d="M6 8l4 4 4-4"
+                        stroke={isOpen ? '#1d4ed8' : '#475569'}
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    />
+                </svg>
+            </button>
+            {isOpen && (
+                <div style={colorPopoverStyle} role="dialog" aria-label={`${label} colour picker`}>
+                    <div style={colorModeGridStyle}>
+                        {COLOR_STYLE_OPTIONS.map((option) => (
+                            <ToggleButton
+                                key={option.value}
+                                active={option.value === activeType}
+                                onClick={() => handleTypeSelect(option.value)}
+                                title={option.label}
+                            >
+                                {option.label}
+                            </ToggleButton>
+                        ))}
+                    </div>
+                    {activeType === 'solid' ? (
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                            <label style={colorPopoverSwatchStyle}>
+                                <span
+                                    aria-hidden="true"
+                                    style={{
+                                        display: 'block',
+                                        width: '100%',
+                                        height: '100%',
+                                        background: normalized,
+                                    }}
+                                />
+                                <input
+                                    type="color"
+                                    value={normalized}
+                                    onChange={(event) => commitStyle({ type: 'solid', value: event.target.value })}
+                                    style={hiddenColorInputStyle}
+                                />
+                            </label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <span style={colorPopoverFieldLabelStyle}>Hex</span>
+                                <input
+                                    type="text"
+                                    value={draft}
+                                    onChange={handleHexChange}
+                                    onBlur={handleBlur}
+                                    style={hexInputStyle}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        renderNonSolidPlaceholder()
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const NumberControl = ({
         label,
         value,
         onChange,
