@@ -1,6 +1,11 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Rect, Circle, Ellipse, Line, Text, Transformer } from 'react-konva';
-import { getGradientFirstColor, gradientStopsEqual, normalizeGradient } from '../utils/gradient';
+import {
+    buildGradientColorStops,
+    getGradientFirstColor,
+    gradientStopsEqual,
+    normalizeGradient,
+} from '../utils/gradient';
 
 /**
  * Canvas is the central drawing surface for the application.
@@ -59,14 +64,6 @@ const computeLinearGradientPoints = (shape, angle) => {
         startPoint: { x: -cos * halfDiagonal, y: -sin * halfDiagonal },
         endPoint: { x: cos * halfDiagonal, y: sin * halfDiagonal },
     };
-};
-
-const buildGradientColorStops = (gradient) => {
-    const normalized = normalizeGradient(gradient);
-    return normalized.stops.reduce((acc, stop) => {
-        acc.push(stop.position, stop.color);
-        return acc;
-    }, []);
 };
 
 export default function Canvas({
@@ -1064,20 +1061,59 @@ export default function Canvas({
             return { fill: shape?.fill, fillPriority: 'color' };
         }
         const gradient = normalizeGradient(shape.fillGradient);
+        if (!gradient || !Array.isArray(gradient.stops) || gradient.stops.length < 2) {
+            return { fill: shape.fill, fillPriority: 'color' };
+        }
+
+        if (gradient.type !== 'linear' && gradient.type !== 'radial') {
+            return { fill: gradient.stops[0]?.color || shape.fill, fillPriority: 'color' };
+        }
+
         const colorStops = buildGradientColorStops(gradient);
         if (colorStops.length < 4) {
             return { fill: shape.fill, fillPriority: 'color' };
         }
-        const points = computeLinearGradientPoints(shape, gradient.angle);
-        if (!points) {
-            return { fill: shape.fill, fillPriority: 'color' };
+        if (gradient.type === 'linear') {
+            const points = computeLinearGradientPoints(shape, gradient.angle);
+            if (!points) {
+                return { fill: shape.fill, fillPriority: 'color' };
+            }
+            return {
+                fill: shape.fill || gradient.stops[0]?.color,
+                fillPriority: 'linear-gradient',
+                fillLinearGradientStartPoint: points.startPoint,
+                fillLinearGradientEndPoint: points.endPoint,
+                fillLinearGradientColorStops: colorStops,
+            };
         }
+
+        // radial fallback
+        const getRadius = () => {
+            switch (shape.type) {
+                case 'rectangle':
+                    return Math.max(shape.width || 0, shape.height || 0) / 2;
+                case 'circle':
+                    return shape.radius || 0;
+                case 'ellipse':
+                    return Math.max(shape.radiusX || 0, shape.radiusY || 0);
+                default:
+                    return 0;
+            }
+        };
+
+        const endRadius = getRadius();
+        if (!endRadius) {
+            return { fill: gradient.stops[0]?.color || shape.fill, fillPriority: 'color' };
+        }
+
         return {
             fill: shape.fill || gradient.stops[0]?.color,
-            fillPriority: 'linear-gradient',
-            fillLinearGradientStartPoint: points.startPoint,
-            fillLinearGradientEndPoint: points.endPoint,
-            fillLinearGradientColorStops: colorStops,
+            fillPriority: 'radial-gradient',
+            fillRadialGradientStartPoint: { x: 0, y: 0 },
+            fillRadialGradientEndPoint: { x: 0, y: 0 },
+            fillRadialGradientStartRadius: 0,
+            fillRadialGradientEndRadius: endRadius,
+            fillRadialGradientColorStops: colorStops,
         };
     };
 
