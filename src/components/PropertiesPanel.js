@@ -685,6 +685,14 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         });
     }, [gradientValue]);
 
+    const gradientValue = useMemo(() => normalizeGradient(style?.value, DEFAULT_GRADIENT), [style?.value]);
+    const [gradientDrafts, setGradientDrafts] = useState(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
+    const gradientCss = useMemo(() => gradientToCss(gradientValue), [gradientValue]);
+
+    useEffect(() => {
+        setGradientDrafts(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
+    }, [gradientValue]);
+
     useEffect(() => {
         if (activeType === 'solid') {
             setDraft(normalized.toUpperCase());
