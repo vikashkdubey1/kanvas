@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Rect, Circle, Ellipse, Line, Text, Transformer } from 'react-konva';
+import { getGradientFirstColor, gradientStopsEqual, normalizeGradient } from '../utils/gradient';
 
 /**
  * Canvas is the central drawing surface for the application.
@@ -9,6 +10,65 @@ import { Stage, Layer, Rect, Circle, Ellipse, Line, Text, Transformer } from 're
  * Transformer so shapes can be resized/rotated, plus inline text editing
  * and undo/redo support. It also provides zoom controls.
  */
+const normalizeColor = (value, fallback) => (typeof value === 'string' ? value : fallback);
+
+const toRadians = (value) => (value * Math.PI) / 180;
+
+const computeLinearGradientPoints = (shape, angle) => {
+    const rad = toRadians(angle || 0);
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    let halfWidth = 0;
+    let halfHeight = 0;
+
+    switch (shape.type) {
+        case 'rectangle':
+            halfWidth = (shape.width || 0) / 2;
+            halfHeight = (shape.height || 0) / 2;
+            break;
+        case 'circle':
+            halfWidth = halfHeight = shape.radius || 0;
+            break;
+        case 'ellipse':
+            halfWidth = shape.radiusX || 0;
+            halfHeight = shape.radiusY || 0;
+            break;
+        case 'text': {
+            const estimatedWidth =
+                typeof shape.width === 'number' && shape.width > 0
+                    ? shape.width
+                    : Math.max(120, (shape.text ? shape.text.length : 0) * ((shape.fontSize || 24) * 0.6));
+            const estimatedHeight =
+                typeof shape.height === 'number' && shape.height > 0
+                    ? shape.height
+                    : (shape.fontSize || 24) * (shape.lineHeight || 1.2);
+            halfWidth = estimatedWidth / 2;
+            halfHeight = estimatedHeight / 2;
+            break;
+        }
+        default:
+            return null;
+    }
+
+    const halfDiagonal = Math.sqrt(halfWidth * halfWidth + halfHeight * halfHeight);
+    if (!halfDiagonal) {
+        return null;
+    }
+
+    return {
+        startPoint: { x: -cos * halfDiagonal, y: -sin * halfDiagonal },
+        endPoint: { x: cos * halfDiagonal, y: sin * halfDiagonal },
+    };
+};
+
+const buildGradientColorStops = (gradient) => {
+    const normalized = normalizeGradient(gradient);
+    return normalized.stops.reduce((acc, stop) => {
+        acc.push(stop.position, stop.color);
+        return acc;
+    }, []);
+};
+
 export default function Canvas({
     selectedTool,
     onToolChange,
@@ -19,9 +79,16 @@ export default function Canvas({
     onSelectionChange,
 }) {
     const resolvedFillType = fillStyle?.type || 'solid';
-    const resolvedFillColor = fillStyle?.value || '#d9d9d9';
+    const resolvedFillGradient = useMemo(
+        () => (resolvedFillType === 'gradient' ? normalizeGradient(fillStyle?.value) : null),
+        [resolvedFillType, fillStyle?.value]
+    );
+    const resolvedFillColor =
+        resolvedFillType === 'gradient'
+            ? getGradientFirstColor(resolvedFillGradient, '#d9d9d9')
+            : normalizeColor(fillStyle?.value, '#d9d9d9');
     const resolvedStrokeType = strokeStyle?.type || 'solid';
-    const resolvedStrokeColor = strokeStyle?.value || '#000000';
+    const resolvedStrokeColor = normalizeColor(strokeStyle?.value, '#000000');
     const stageRef = useRef(null);
     const trRef = useRef(null);
     const idCounterRef = useRef(1); // stable id generator
@@ -264,18 +331,40 @@ export default function Canvas({
         const shape = shapesRef.current.find((s) => s.id === selectedId);
         if (!shape) return;
         if (!['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type)) return;
-        const currentFill = typeof shape.fill === 'string' ? shape.fill : '';
         const currentType = typeof shape.fillType === 'string' ? shape.fillType : 'solid';
+
+        if (resolvedFillType === 'gradient' && resolvedFillGradient) {
+            const currentGradient =
+                currentType === 'gradient' ? normalizeGradient(shape.fillGradient) : null;
+            if (currentType === 'gradient' && currentGradient && gradientStopsEqual(currentGradient, resolvedFillGradient)) {
+                return;
+            }
+            applyChange((prev) =>
+                prev.map((s) =>
+                    s.id === selectedId
+                        ? {
+                              ...s,
+                              fill: getGradientFirstColor(resolvedFillGradient, resolvedFillColor),
+                              fillType: 'gradient',
+                              fillGradient: resolvedFillGradient,
+                          }
+                        : s
+                )
+            );
+            return;
+        }
+
+        const currentFill = typeof shape.fill === 'string' ? shape.fill : '';
         if (currentFill === resolvedFillColor && currentType === resolvedFillType) return;
         applyChange((prev) =>
             prev.map((s) =>
                 s.id === selectedId
-                    ? { ...s, fill: resolvedFillColor, fillType: resolvedFillType }
+                    ? { ...s, fill: resolvedFillColor, fillType: resolvedFillType, fillGradient: null }
                     : s
             )
         );
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [resolvedFillColor, resolvedFillType]);
+    }, [resolvedFillColor, resolvedFillType, resolvedFillGradient]);
 
     useEffect(() => {
         if (!selectedId) return;
@@ -405,6 +494,7 @@ export default function Canvas({
                     height: 1,
                     fill: resolvedFillColor,
                     fillType: resolvedFillType,
+                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
@@ -419,6 +509,7 @@ export default function Canvas({
                     radius: 1,
                     fill: resolvedFillColor,
                     fillType: resolvedFillType,
+                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
@@ -434,6 +525,7 @@ export default function Canvas({
                     radiusY: 1,
                     fill: resolvedFillColor,
                     fillType: resolvedFillType,
+                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
@@ -475,6 +567,7 @@ export default function Canvas({
                     text: 'Text',
                     fill: resolvedFillColor,
                     fillType: resolvedFillType,
+                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
@@ -966,6 +1059,28 @@ export default function Canvas({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedTool]);
 
+    const getFillPropsForShape = (shape) => {
+        if (!shape || shape.fillType !== 'gradient' || !shape.fillGradient) {
+            return { fill: shape?.fill, fillPriority: 'color' };
+        }
+        const gradient = normalizeGradient(shape.fillGradient);
+        const colorStops = buildGradientColorStops(gradient);
+        if (colorStops.length < 4) {
+            return { fill: shape.fill, fillPriority: 'color' };
+        }
+        const points = computeLinearGradientPoints(shape, gradient.angle);
+        if (!points) {
+            return { fill: shape.fill, fillPriority: 'color' };
+        }
+        return {
+            fill: shape.fill || gradient.stops[0]?.color,
+            fillPriority: 'linear-gradient',
+            fillLinearGradientStartPoint: points.startPoint,
+            fillLinearGradientEndPoint: points.endPoint,
+            fillLinearGradientColorStops: colorStops,
+        };
+    };
+
     const renderShape = (shape) => {
         const commonProps = {
             key: shape.id,
@@ -985,6 +1100,7 @@ export default function Canvas({
             onMouseLeave: (e) => handleShapeMouseLeave(e),
             onMouseDown: (e) => handleShapeMouseDown(shape, e),
         };
+        const fillProps = getFillPropsForShape(shape);
 
         switch (shape.type) {
             case 'rectangle':
@@ -996,7 +1112,7 @@ export default function Canvas({
                         width={shape.width}
                         height={shape.height}
                         offset={{ x: shape.width / 2, y: shape.height / 2 }}
-                        fill={shape.fill}
+                        {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
                         rotation={shape.rotation || 0}
@@ -1009,7 +1125,7 @@ export default function Canvas({
                         x={shape.x}
                         y={shape.y}
                         radius={shape.radius}
-                        fill={shape.fill}
+                        {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
                         rotation={shape.rotation || 0}
@@ -1023,7 +1139,7 @@ export default function Canvas({
                         y={shape.y}
                         radiusX={shape.radiusX}
                         radiusY={shape.radiusY}
-                        fill={shape.fill}
+                        {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
                         rotation={shape.rotation || 0}
@@ -1061,7 +1177,7 @@ export default function Canvas({
                         x={shape.x}
                         y={shape.y}
                         text={shape.text || 'Text'}
-                        fill={shape.fill}
+                        {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
                         rotation={shape.rotation || 0}

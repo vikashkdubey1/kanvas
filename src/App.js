@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Canvas from './components/Canvas';
 import Toolbar from './components/Toolbar';
 import PropertiesPanel from './components/PropertiesPanel';
+import { DEFAULT_GRADIENT, normalizeGradient } from './utils/gradient';
 
 const DEFAULT_FILL_STYLE = { type: 'solid', value: '#d9d9d9' };
 const DEFAULT_STROKE_STYLE = { type: 'solid', value: '#000000' };
@@ -85,6 +86,10 @@ export default function App() {
 
         setFillStyle((prev) => {
             const nextType = typeof shape.fillType === 'string' ? shape.fillType : prev.type;
+            if (nextType === 'gradient') {
+                const gradientValue = normalizeGradient(shape.fillGradient || prev.value || DEFAULT_GRADIENT);
+                return { type: 'gradient', value: gradientValue };
+            }
             const nextValue =
                 typeof shape.fill === 'string'
                     ? shape.fill

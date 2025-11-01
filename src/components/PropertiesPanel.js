@@ -1,4 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    DEFAULT_GRADIENT,
+    gradientToCss,
+    normalizeGradient,
+} from '../utils/gradient';
 
 const DEFAULT_FONT_VARIATIONS = [
     { value: 'normal', label: 'Regular' },
@@ -306,6 +311,54 @@ const colorPopoverFieldLabelStyle = {
     color: '#64748b',
 };
 
+const gradientPreviewStyle = {
+    borderRadius: 12,
+    border: '1px solid #cdd5e0',
+    height: 100,
+    boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)',
+};
+
+const gradientStopRowStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+};
+
+const gradientStopControlsStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+};
+
+const gradientAngleControlsStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+};
+
+const gradientAngleInputsStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+};
+
+const gradientAngleNumberStyle = {
+    width: 64,
+    height: 32,
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    padding: '0 8px',
+    fontSize: 13,
+    color: '#111827',
+};
+
+const gradientAngleSuffixStyle = {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: 600,
+};
+
     const hexInputStyle = {
         width: 80,
         height: 36,
@@ -407,6 +460,14 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
 
+    const gradientValue = useMemo(() => normalizeGradient(style?.value, DEFAULT_GRADIENT), [style?.value]);
+    const [gradientDrafts, setGradientDrafts] = useState(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
+    const gradientCss = useMemo(() => gradientToCss(gradientValue), [gradientValue]);
+
+    useEffect(() => {
+        setGradientDrafts(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
+    }, [gradientValue]);
+
     useEffect(() => {
         if (activeType === 'solid') {
             setDraft(normalized.toUpperCase());
@@ -448,12 +509,18 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         if (activeType === 'solid') {
             return { backgroundColor: normalized };
         }
+        if (activeType === 'gradient') {
+            return {
+                backgroundImage: gradientCss,
+                backgroundColor: gradientValue.stops[0]?.color || normalized,
+            };
+        }
         const preset = COLOR_TYPE_PREVIEW_BACKGROUND[activeType];
         if (preset) {
             return { ...preset };
         }
         return { backgroundColor: normalized };
-    }, [activeType, normalized]);
+    }, [activeType, normalized, gradientCss, gradientValue]);
 
     if (disabled) {
         return (
@@ -470,6 +537,8 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         let nextValue = updates.value ?? style?.value ?? normalized;
         if (nextType === 'solid') {
             nextValue = normalizeHex(nextValue, '#000000');
+        } else if (nextType === 'gradient') {
+            nextValue = normalizeGradient(nextValue, gradientValue);
         }
         onStyleChange({ type: nextType, value: nextValue });
     };
@@ -489,7 +558,118 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
 
     const handleTypeSelect = (nextType) => {
         if (nextType === activeType) return;
+        if (nextType === 'gradient') {
+            commitStyle({ type: 'gradient', value: gradientValue });
+            return;
+        }
         commitStyle({ type: nextType, value: style?.value ?? normalized });
+    };
+
+    const handleGradientStopColorChange = (index, color) => {
+        const safeColor = normalizeHex(color, gradientValue.stops[index]?.color || '#000000');
+        const stops = gradientValue.stops.map((stop, stopIndex) =>
+            stopIndex === index ? { ...stop, color: safeColor } : stop
+        );
+        commitStyle({ type: 'gradient', value: { ...gradientValue, stops } });
+    };
+
+    const handleGradientHexChange = (index, event) => {
+        let next = event.target.value.trim();
+        if (!next.startsWith('#')) next = `#${next}`;
+        setGradientDrafts((prev) =>
+            prev.map((draft, draftIndex) => (draftIndex === index ? next.toUpperCase() : draft))
+        );
+        if (HEX_REGEX.test(next)) {
+            const stops = gradientValue.stops.map((stop, stopIndex) =>
+                stopIndex === index ? { ...stop, color: next.toLowerCase() } : stop
+            );
+            commitStyle({ type: 'gradient', value: { ...gradientValue, stops } });
+        }
+    };
+
+    const handleGradientHexBlur = () => {
+        setGradientDrafts(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
+    };
+
+    const handleGradientAngleChange = (nextAngle) => {
+        const normalizedAngle = Number.isNaN(nextAngle) ? gradientValue.angle : nextAngle;
+        commitStyle({ type: 'gradient', value: { ...gradientValue, angle: normalizedAngle } });
+    };
+
+    const renderGradientEditor = () => {
+        const stops = gradientValue.stops.slice(0, 2);
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div
+                    style={{
+                        ...gradientPreviewStyle,
+                        backgroundImage: gradientCss,
+                        backgroundColor: stops[0]?.color || '#000000',
+                    }}
+                />
+                {stops.map((stop, index) => (
+                    <div key={index} style={gradientStopRowStyle}>
+                        <span style={colorPopoverFieldLabelStyle}>
+                            {index === 0 ? 'Start colour' : 'End colour'}
+                        </span>
+                        <div style={gradientStopControlsStyle}>
+                            <label style={colorPopoverSwatchStyle}>
+                                <span
+                                    aria-hidden="true"
+                                    style={{
+                                        display: 'block',
+                                        width: '100%',
+                                        height: '100%',
+                                        background: stop.color,
+                                    }}
+                                />
+                                <input
+                                    type="color"
+                                    value={stop.color}
+                                    onChange={(event) =>
+                                        handleGradientStopColorChange(index, event.target.value)
+                                    }
+                                    style={hiddenColorInputStyle}
+                                />
+                            </label>
+                            <input
+                                type="text"
+                                value={gradientDrafts[index] ?? stop.color.toUpperCase()}
+                                onChange={(event) => handleGradientHexChange(index, event)}
+                                onBlur={handleGradientHexBlur}
+                                style={hexInputStyle}
+                            />
+                        </div>
+                    </div>
+                ))}
+                <div style={gradientAngleControlsStyle}>
+                    <span style={colorPopoverFieldLabelStyle}>Angle</span>
+                    <div style={gradientAngleInputsStyle}>
+                        <input
+                            type="range"
+                            min={0}
+                            max={360}
+                            value={gradientValue.angle}
+                            onChange={(event) =>
+                                handleGradientAngleChange(Number(event.target.value))
+                            }
+                            style={{ flex: 1 }}
+                        />
+                        <input
+                            type="number"
+                            min={0}
+                            max={360}
+                            value={Math.round(gradientValue.angle)}
+                            onChange={(event) =>
+                                handleGradientAngleChange(Number(event.target.value))
+                            }
+                            style={gradientAngleNumberStyle}
+                        />
+                        <span style={gradientAngleSuffixStyle}>°</span>
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     const renderNonSolidPlaceholder = () => {
@@ -595,6 +775,8 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
                                 />
                             </div>
                         </div>
+                    ) : activeType === 'gradient' ? (
+                        renderGradientEditor()
                     ) : (
                         renderNonSolidPlaceholder()
                     )}
