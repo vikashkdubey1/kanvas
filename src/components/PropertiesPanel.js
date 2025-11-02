@@ -744,6 +744,366 @@ const colorTypePlaceholderStyle = {
     textAlign: 'center',
 };
 
+const clampRange = (value, min, max) => {
+    if (!Number.isFinite(value)) return min;
+    return Math.min(Math.max(value, min), max);
+};
+
+const clamp01 = (value) => clampRange(value, 0, 1);
+
+const roundTo = (value, digits = 3) => {
+    const factor = 10 ** digits;
+    return Math.round(value * factor) / factor;
+};
+
+const componentToHex = (component) => {
+    const safe = clampRange(Math.round(component), 0, 255);
+    return safe.toString(16).padStart(2, '0');
+};
+
+const rgbaToHex = ({ r, g, b }) => `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`;
+
+const rgbaToCss = ({ r, g, b, a }) => {
+    const alpha = clamp01(a);
+    if (alpha >= 0.999) {
+        return rgbaToHex({ r, g, b }).toLowerCase();
+    }
+    return `rgba(${clampRange(Math.round(r), 0, 255)}, ${clampRange(Math.round(g), 0, 255)}, ${clampRange(
+        Math.round(b),
+        0,
+        255
+    )}, ${roundTo(alpha, 3)})`;
+};
+
+const ensureRgba = (value) => ({
+    r: clampRange(Math.round(value?.r ?? 0), 0, 255),
+    g: clampRange(Math.round(value?.g ?? 0), 0, 255),
+    b: clampRange(Math.round(value?.b ?? 0), 0, 255),
+    a: clamp01(typeof value?.a === 'number' ? value.a : 1),
+});
+
+const RGBA_STRING_RE = /^rgba?\(([^)]+)\)$/i;
+
+const FALLBACK_SOLID_RGBA = { r: 217, g: 217, b: 217, a: 1 };
+
+const parseColorString = (value, fallback = FALLBACK_SOLID_RGBA) => {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.startsWith('#')) {
+            const hex = trimmed.slice(1);
+            if (hex.length === 3) {
+                const r = parseInt(hex[0] + hex[0], 16);
+                const g = parseInt(hex[1] + hex[1], 16);
+                const b = parseInt(hex[2] + hex[2], 16);
+                if (Number.isInteger(r) && Number.isInteger(g) && Number.isInteger(b)) {
+                    return { r, g, b, a: 1 };
+                }
+            }
+            if (hex.length === 6) {
+                const int = Number.parseInt(hex, 16);
+                if (Number.isInteger(int)) {
+                    return {
+                        r: (int >> 16) & 255,
+                        g: (int >> 8) & 255,
+                        b: int & 255,
+                        a: 1,
+                    };
+                }
+            }
+        } else {
+            const match = RGBA_STRING_RE.exec(trimmed);
+            if (match) {
+                const parts = match[1]
+                    .split(',')
+                    .map((part) => part.trim())
+                    .filter(Boolean);
+                if (parts.length >= 3) {
+                    const [rPart, gPart, bPart, aPart] = parts;
+                    const r = clampRange(Number.parseFloat(rPart), 0, 255);
+                    const g = clampRange(Number.parseFloat(gPart), 0, 255);
+                    const b = clampRange(Number.parseFloat(bPart), 0, 255);
+                    const a = parts.length >= 4 ? clamp01(Number.parseFloat(aPart)) : 1;
+                    if ([r, g, b].every((component) => Number.isFinite(component))) {
+                        return {
+                            r: Math.round(r),
+                            g: Math.round(g),
+                            b: Math.round(b),
+                            a,
+                        };
+                    }
+                }
+            }
+        }
+    } else if (typeof value === 'object' && value) {
+        return ensureRgba(value);
+    }
+
+    if (typeof fallback === 'string') {
+        return parseColorString(fallback, FALLBACK_SOLID_RGBA);
+    }
+    return ensureRgba(fallback);
+};
+
+const rgbToHsva = ({ r, g, b, a }) => {
+    const red = clampRange(r, 0, 255) / 255;
+    const green = clampRange(g, 0, 255) / 255;
+    const blue = clampRange(b, 0, 255) / 255;
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    const delta = max - min;
+
+    let hue = 0;
+    if (delta !== 0) {
+        if (max === red) {
+            hue = ((green - blue) / delta) % 6;
+        } else if (max === green) {
+            hue = (blue - red) / delta + 2;
+        } else {
+            hue = (red - green) / delta + 4;
+        }
+        hue *= 60;
+        if (hue < 0) hue += 360;
+    }
+
+    const saturation = max === 0 ? 0 : delta / max;
+    const value = max;
+
+    return { h: hue, s: saturation, v: value, a: clamp01(a) };
+};
+
+const hsvaToRgba = ({ h, s, v, a }) => {
+    const hue = Number.isFinite(h) ? ((h % 360) + 360) % 360 : 0;
+    const saturation = clamp01(s);
+    const value = clamp01(v);
+    const chroma = value * saturation;
+    const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+    const m = value - chroma;
+
+    let r1 = 0;
+    let g1 = 0;
+    let b1 = 0;
+
+    if (hue < 60) {
+        r1 = chroma;
+        g1 = x;
+    } else if (hue < 120) {
+        r1 = x;
+        g1 = chroma;
+    } else if (hue < 180) {
+        g1 = chroma;
+        b1 = x;
+    } else if (hue < 240) {
+        g1 = x;
+        b1 = chroma;
+    } else if (hue < 300) {
+        r1 = x;
+        b1 = chroma;
+    } else {
+        r1 = chroma;
+        b1 = x;
+    }
+
+    return {
+        r: Math.round((r1 + m) * 255),
+        g: Math.round((g1 + m) * 255),
+        b: Math.round((b1 + m) * 255),
+        a: clamp01(a),
+    };
+};
+
+const normalizeHsva = (value) => ({
+    h: Number.isFinite(value?.h) ? ((value.h % 360) + 360) % 360 : 0,
+    s: clamp01(value?.s ?? 0),
+    v: clamp01(value?.v ?? 0),
+    a: clamp01(value?.a ?? 1),
+});
+
+const SOLID_PRESET_SWATCHES = [
+    '#000000',
+    '#111827',
+    '#1f2937',
+    '#4b5563',
+    '#9ca3af',
+    '#d1d5db',
+    '#ffffff',
+    '#ef4444',
+    '#f97316',
+    '#f59e0b',
+    '#facc15',
+    '#84cc16',
+    '#22c55e',
+    '#06b6d4',
+    '#0ea5e9',
+    '#3b82f6',
+    '#6366f1',
+    '#8b5cf6',
+    '#a855f7',
+    '#d946ef',
+    '#ec4899',
+    '#f472b6',
+    '#fb7185',
+    '#fcd34d',
+];
+
+const solidEditorWrapperStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+};
+
+const solidPickerMainStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+};
+
+const solidSaturationWrapperStyle = {
+    position: 'relative',
+    width: '100%',
+    height: 180,
+    borderRadius: 14,
+    overflow: 'hidden',
+    cursor: 'crosshair',
+    boxShadow: 'inset 0 0 0 1px rgba(15, 23, 42, 0.12)',
+};
+
+const solidSaturationIndicatorStyle = {
+    position: 'absolute',
+    width: 18,
+    height: 18,
+    borderRadius: '50%',
+    border: '2px solid #ffffff',
+    boxShadow: '0 1px 4px rgba(15, 23, 42, 0.45)',
+    transform: 'translate(-50%, -50%)',
+    pointerEvents: 'none',
+};
+
+const solidSliderGroupStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+};
+
+const solidSliderWrapperStyle = {
+    position: 'relative',
+    height: 14,
+    borderRadius: 999,
+    overflow: 'hidden',
+    cursor: 'pointer',
+    boxShadow: 'inset 0 0 0 1px rgba(15, 23, 42, 0.12)',
+};
+
+const solidSliderThumbStyle = {
+    position: 'absolute',
+    top: '50%',
+    width: 18,
+    height: 18,
+    borderRadius: '50%',
+    border: '2px solid #ffffff',
+    boxShadow: '0 1px 4px rgba(15, 23, 42, 0.45)',
+    transform: 'translate(-50%, -50%)',
+    pointerEvents: 'none',
+};
+
+const solidInputsRowStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(72px, 92px) 1fr 72px',
+    gap: 10,
+    alignItems: 'center',
+};
+
+const solidFormatSelectStyle = {
+    height: 36,
+    borderRadius: 10,
+    border: '1px solid #cdd5e0',
+    background: '#0f172a',
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: 600,
+    padding: '0 12px',
+    letterSpacing: 0.4,
+};
+
+const solidHexInputStyle = {
+    height: 36,
+    borderRadius: 10,
+    border: '1px solid #cdd5e0',
+    background: '#111827',
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: 600,
+    padding: '0 12px',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+};
+
+const solidAlphaInputWrapperStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    height: 36,
+    borderRadius: 10,
+    border: '1px solid #cdd5e0',
+    background: '#111827',
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: 600,
+    padding: '0 10px 0 14px',
+};
+
+const solidAlphaInputStyle = {
+    flex: 1,
+    border: 'none',
+    background: 'transparent',
+    color: 'inherit',
+    fontSize: 'inherit',
+    fontWeight: 'inherit',
+    textAlign: 'right',
+    outline: 'none',
+};
+
+const solidSwatchSectionStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+    paddingTop: 6,
+};
+
+const solidSwatchHeaderStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    color: '#94a3b8',
+    letterSpacing: 0.8,
+};
+
+const solidSwatchGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(28px, 1fr))',
+    gap: 6,
+};
+
+const solidSwatchButtonStyle = {
+    width: '100%',
+    paddingBottom: '100%',
+    borderRadius: 8,
+    border: '1px solid rgba(15, 23, 42, 0.25)',
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.18)',
+    position: 'relative',
+    overflow: 'hidden',
+    cursor: 'pointer',
+};
+
+const solidSwatchButtonInnerStyle = {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 'inherit',
+};
+
     const Section = ({ title, children, disabled = false }) => (
         <section
             style={{
@@ -775,8 +1135,39 @@ const ColorControl = ({
     gradientInteractionRef,
 }) => {
     const activeType = style?.type || 'solid';
-    const normalized = normalizeHex(style?.value, '#000000');
-    const [draft, setDraft] = useState(normalized.toUpperCase());
+    const solidStyleValue =
+        typeof style?.value === 'string' ? style.value : rgbaToCss(FALLBACK_SOLID_RGBA);
+    const parsedSolid = useMemo(
+        () => parseColorString(solidStyleValue, FALLBACK_SOLID_RGBA),
+        [solidStyleValue]
+    );
+    const initialHsva = useMemo(() => rgbToHsva(parsedSolid), [parsedSolid]);
+
+    const [solidHsva, setSolidHsva] = useState(initialHsva);
+    const [solidHexDraft, setSolidHexDraft] = useState(rgbaToHex(parsedSolid).toUpperCase());
+    const [solidAlphaDraft, setSolidAlphaDraft] = useState(Math.round(parsedSolid.a * 100));
+
+    const solidHsvaRef = useRef(solidHsva);
+    const solidSaturationRef = useRef(null);
+    const hueTrackRef = useRef(null);
+    const alphaTrackRef = useRef(null);
+    const saturationPointerIdRef = useRef(null);
+    const huePointerIdRef = useRef(null);
+    const alphaPointerIdRef = useRef(null);
+
+    useEffect(() => {
+        solidHsvaRef.current = solidHsva;
+    }, [solidHsva]);
+
+    useEffect(() => {
+        const nextParsed = parseColorString(style?.value, FALLBACK_SOLID_RGBA);
+        const hsva = rgbToHsva(nextParsed);
+        solidHsvaRef.current = hsva;
+        setSolidHsva(hsva);
+        setSolidHexDraft(rgbaToHex(nextParsed).toUpperCase());
+        setSolidAlphaDraft(Math.round(nextParsed.a * 100));
+    }, [style?.value]);
+
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
     const popoverRef = useRef(null);
@@ -810,12 +1201,6 @@ const ColorControl = ({
             return Number.isNaN(clamped) ? 0 : clamped;
         });
     }, [gradientValue]);
-
-    useEffect(() => {
-        if (activeType === 'solid') {
-            setDraft(normalized.toUpperCase());
-        }
-    }, [normalized, activeType]);
 
     useEffect(() => {
         if (typeof onGradientPopoverToggle === 'function') {
@@ -870,104 +1255,7 @@ const ColorControl = ({
             document.removeEventListener('touchstart', handlePointerDown);
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [isOpen]);
-
-    useEffect(() => {
-        if (!isOpen) return undefined;
-        if (typeof window === 'undefined') return undefined;
-
-        const handleResize = () => {
-            setPopoverPosition((previous) => {
-                const next = clampPositionToViewport(previous);
-                if (previous.x === next.x && previous.y === next.y) {
-                    return previous;
-                }
-                return next;
-            });
-        };
-
-        window.addEventListener('resize', handleResize);
-        return () => {
-            window.removeEventListener('resize', handleResize);
-        };
-    }, [isOpen, clampPositionToViewport]);
-
-        const summaryLabel = useMemo(() => {
-        const match = COLOR_STYLE_OPTIONS.find((option) => option.value === activeType);
-        return match?.label || 'Solid';
-    }, [activeType]);
-
-    const summaryPreview = useMemo(() => {
-        if (activeType === 'solid') {
-            return { backgroundColor: normalized };
-        }
-        if (activeType === 'gradient') {
-            return {
-                backgroundImage: gradientCss,
-                backgroundColor: gradientValue.stops[0]?.color || normalized,
-            };
-        }
-        const preset = COLOR_TYPE_PREVIEW_BACKGROUND[activeType];
-        if (preset) {
-            return { ...preset };
-        }
-        return { backgroundColor: normalized };
-    }, [activeType, normalized, gradientCss, gradientValue]);
-
-    useEffect(() => {
-        if (disabled && isOpen) {
-            setIsOpen(false);
-        }
-    }, [disabled, isOpen]);
-
-    if (disabled) {
-        return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={fieldLabelStyle}>{label}</span>
-                <span style={disabledValueStyle}></span>
-            </div>
-        );
-    }
-
-    const commitStyle = (updates) => {
-        if (typeof onStyleChange !== 'function') return;
-        const nextType = updates.type ?? activeType;
-        let nextValue = updates.value ?? style?.value ?? normalized;
-        if (nextType === 'solid') {
-            nextValue = normalizeHex(nextValue, '#000000');
-        } else if (nextType === 'gradient') {
-            nextValue = normalizeGradient(nextValue, gradientValue);
-        }
-        onStyleChange({ type: nextType, value: nextValue });
-    };
-
-    commitStyleRef.current = commitStyle;
-
-    useEffect(() => {
-        commitStyleRef.current = commitStyle;
-    }, [commitStyle]);
-
-    const handleHexChange = (event) => {
-        let next = event.target.value.trim();
-        if (!next.startsWith('#')) next = `#${next}`;
-        setDraft(next.toUpperCase());
-        if (HEX_REGEX.test(next)) {
-            commitStyle({ type: 'solid', value: next.toLowerCase() });
-        }
-    };
-
-    const handleBlur = () => {
-        setDraft(normalized.toUpperCase());
-    };
-
-    const handleTypeSelect = (nextType) => {
-        if (nextType === activeType) return;
-        if (nextType === 'gradient') {
-            commitStyle({ type: 'gradient', value: gradientValue });
-            return;
-        }
-        commitStyle({ type: nextType, value: style?.value ?? normalized });
-        };
+    }, [gradientInteractionRef, isOpen]);
 
     const clampValue = (value, min, max) => {
         if (!Number.isFinite(value)) return min;
@@ -999,6 +1287,36 @@ const ColorControl = ({
         },
         [popoverRef]
     );
+
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        if (typeof window === 'undefined') return undefined;
+
+        const handleResize = () => {
+            setPopoverPosition((previous) => {
+                const next = clampPositionToViewport(previous);
+                if (previous.x === next.x && previous.y === next.y) {
+                    return previous;
+                }
+                return next;
+            });
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+        };
+    }, [clampPositionToViewport, isOpen]);
+
+    useEffect(() => {
+        if (disabled && isOpen) {
+            setIsOpen(false);
+        }
+    }, [disabled, isOpen]);
+
+    const closePopover = useCallback(() => {
+        setIsOpen(false);
+    }, []);
 
     const handlePopoverDragMove = useCallback(
         (event) => {
@@ -1056,7 +1374,7 @@ const ColorControl = ({
         dragPointerIdRef.current = null;
         setIsDraggingPopover(false);
         return undefined;
-    }, [isOpen, handlePopoverDragEnd, handlePopoverDragMove]);
+    }, [handlePopoverDragEnd, handlePopoverDragMove, isOpen]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -1069,15 +1387,254 @@ const ColorControl = ({
         };
     }, [handlePopoverDragEnd, handlePopoverDragMove]);
 
+    const commitStyle = useCallback(
+        (updates) => {
+            if (typeof onStyleChange !== 'function') return;
+            const nextType = updates.type ?? activeType;
+            let nextValue = updates.value ?? style?.value;
+
+            if (nextType === 'solid') {
+                if (typeof nextValue !== 'string') {
+                    const rgba = hsvaToRgba(solidHsvaRef.current);
+                    nextValue = rgbaToCss(rgba);
+                }
+            } else if (nextType === 'gradient') {
+                nextValue = normalizeGradient(nextValue, gradientValueRef.current);
+            } else if (typeof nextValue !== 'string') {
+                nextValue = rgbaToCss(hsvaToRgba(solidHsvaRef.current));
+            }
+
+            onStyleChange({ type: nextType, value: nextValue });
+        },
+        [activeType, onStyleChange, style?.value]
+    );
+
+    commitStyleRef.current = commitStyle;
+
+    useEffect(() => {
+        commitStyleRef.current = commitStyle;
+    }, [commitStyle]);
+    const applySolidColor = useCallback((nextHsva) => {
+        const normalized = normalizeHsva(nextHsva);
+        solidHsvaRef.current = normalized;
+        setSolidHsva(normalized);
+        const rgba = hsvaToRgba(normalized);
+        setSolidHexDraft(rgbaToHex(rgba).toUpperCase());
+        setSolidAlphaDraft(Math.round(rgba.a * 100));
+        commitStyleRef.current({ type: 'solid', value: rgbaToCss(rgba) });
+    }, []);
+
+    const updateSaturationFromPoint = useCallback(
+        (clientX, clientY) => {
+            const rect = solidSaturationRef.current?.getBoundingClientRect();
+            if (!rect || rect.width === 0 || rect.height === 0) return;
+            const saturation = clamp01((clientX - rect.left) / rect.width);
+            const value = clamp01(1 - (clientY - rect.top) / rect.height);
+            const current = solidHsvaRef.current;
+            applySolidColor({ ...current, s: saturation, v: value });
+        },
+        [applySolidColor]
+    );
+
+    const updateHueFromPoint = useCallback(
+        (clientX) => {
+            const rect = hueTrackRef.current?.getBoundingClientRect();
+            if (!rect || rect.width === 0) return;
+            const ratio = clamp01((clientX - rect.left) / rect.width);
+            const current = solidHsvaRef.current;
+            applySolidColor({ ...current, h: ratio * 360 });
+        },
+        [applySolidColor]
+    );
+
+    const updateAlphaFromPoint = useCallback(
+        (clientX) => {
+            const rect = alphaTrackRef.current?.getBoundingClientRect();
+            if (!rect || rect.width === 0) return;
+            const ratio = clamp01((clientX - rect.left) / rect.width);
+            const current = solidHsvaRef.current;
+            applySolidColor({ ...current, a: ratio });
+        },
+        [applySolidColor]
+    );
+
+    const handleSaturationPointerMove = useCallback(
+        (event) => {
+            if (event.pointerId !== saturationPointerIdRef.current) return;
+            if (typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
+            updateSaturationFromPoint(event.clientX, event.clientY);
+        },
+        [updateSaturationFromPoint]
+    );
+
+    const handleSaturationPointerUp = useCallback(
+        (event) => {
+            if (event.pointerId !== saturationPointerIdRef.current) return;
+            saturationPointerIdRef.current = null;
+            window.removeEventListener('pointermove', handleSaturationPointerMove);
+            window.removeEventListener('pointerup', handleSaturationPointerUp);
+            window.removeEventListener('pointercancel', handleSaturationPointerUp);
+        },
+        [handleSaturationPointerMove]
+    );
+
+    const handleHuePointerMove = useCallback(
+        (event) => {
+            if (event.pointerId !== huePointerIdRef.current) return;
+            if (typeof event.clientX !== 'number') return;
+            updateHueFromPoint(event.clientX);
+        },
+        [updateHueFromPoint]
+    );
+
+    const handleHuePointerUp = useCallback(
+        (event) => {
+            if (event.pointerId !== huePointerIdRef.current) return;
+            huePointerIdRef.current = null;
+            window.removeEventListener('pointermove', handleHuePointerMove);
+            window.removeEventListener('pointerup', handleHuePointerUp);
+            window.removeEventListener('pointercancel', handleHuePointerUp);
+        },
+        [handleHuePointerMove]
+    );
+
+    const handleAlphaPointerMove = useCallback(
+        (event) => {
+            if (event.pointerId !== alphaPointerIdRef.current) return;
+            if (typeof event.clientX !== 'number') return;
+            updateAlphaFromPoint(event.clientX);
+        },
+        [updateAlphaFromPoint]
+    );
+
+    const handleAlphaPointerUp = useCallback(
+        (event) => {
+            if (event.pointerId !== alphaPointerIdRef.current) return;
+            alphaPointerIdRef.current = null;
+            window.removeEventListener('pointermove', handleAlphaPointerMove);
+            window.removeEventListener('pointerup', handleAlphaPointerUp);
+            window.removeEventListener('pointercancel', handleAlphaPointerUp);
+        },
+        [handleAlphaPointerMove]
+    );
+
+    const handleSaturationPointerDown = (event) => {
+        event.preventDefault();
+        if (typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
+        saturationPointerIdRef.current = event.pointerId;
+        updateSaturationFromPoint(event.clientX, event.clientY);
+        window.addEventListener('pointermove', handleSaturationPointerMove);
+        window.addEventListener('pointerup', handleSaturationPointerUp);
+        window.addEventListener('pointercancel', handleSaturationPointerUp);
+    };
+
+    const handleHuePointerDown = (event) => {
+        event.preventDefault();
+        if (typeof event.clientX !== 'number') return;
+        huePointerIdRef.current = event.pointerId;
+        updateHueFromPoint(event.clientX);
+        window.addEventListener('pointermove', handleHuePointerMove);
+        window.addEventListener('pointerup', handleHuePointerUp);
+        window.addEventListener('pointercancel', handleHuePointerUp);
+    };
+
+    const handleAlphaPointerDown = (event) => {
+        event.preventDefault();
+        if (typeof event.clientX !== 'number') return;
+        alphaPointerIdRef.current = event.pointerId;
+        updateAlphaFromPoint(event.clientX);
+        window.addEventListener('pointermove', handleAlphaPointerMove);
+        window.addEventListener('pointerup', handleAlphaPointerUp);
+        window.addEventListener('pointercancel', handleAlphaPointerUp);
+    };
+
+    useEffect(() => {
+        return () => {
+            window.removeEventListener('pointermove', handleSaturationPointerMove);
+            window.removeEventListener('pointerup', handleSaturationPointerUp);
+            window.removeEventListener('pointercancel', handleSaturationPointerUp);
+            window.removeEventListener('pointermove', handleHuePointerMove);
+            window.removeEventListener('pointerup', handleHuePointerUp);
+            window.removeEventListener('pointercancel', handleHuePointerUp);
+            window.removeEventListener('pointermove', handleAlphaPointerMove);
+            window.removeEventListener('pointerup', handleAlphaPointerUp);
+            window.removeEventListener('pointercancel', handleAlphaPointerUp);
+        };
+    }, [
+        handleAlphaPointerMove,
+        handleAlphaPointerUp,
+        handleHuePointerMove,
+        handleHuePointerUp,
+        handleSaturationPointerMove,
+        handleSaturationPointerUp,
+    ]);
+
+    const handleSolidHexChange = (event) => {
+        let next = event.target.value.trim();
+        if (!next.startsWith('#')) next = `#${next}`;
+        setSolidHexDraft(next.toUpperCase());
+        if (HEX_REGEX.test(next)) {
+            const parsed = parseColorString(next, parsedSolid);
+            const currentAlpha = solidHsvaRef.current.a;
+            const hsva = rgbToHsva({ ...parsed, a: currentAlpha });
+            applySolidColor({ ...hsva, a: currentAlpha });
+        }
+    };
+
+    const handleSolidHexBlur = () => {
+        const rgba = hsvaToRgba(solidHsvaRef.current);
+        setSolidHexDraft(rgbaToHex(rgba).toUpperCase());
+    };
+
+    const handleSolidAlphaChange = (event) => {
+        const numeric = clampValue(Number(event.target.value), 0, 100);
+        setSolidAlphaDraft(numeric);
+        applySolidColor({ ...solidHsvaRef.current, a: numeric / 100 });
+    };
+
+    const handleSolidAlphaBlur = () => {
+        setSolidAlphaDraft(Math.round(solidHsvaRef.current.a * 100));
+    };
+
+    const handleTypeSelect = (nextType) => {
+        if (nextType === activeType) return;
+        if (nextType === 'gradient') {
+            commitStyle({ type: 'gradient', value: gradientValueRef.current });
+            return;
+        }
+        if (nextType === 'solid') {
+            const rgba = hsvaToRgba(solidHsvaRef.current);
+            commitStyle({ type: 'solid', value: rgbaToCss(rgba) });
+            return;
+        }
+        const fallback = typeof style?.value === 'string' ? style.value : rgbaToCss(parsedSolid);
+        commitStyle({ type: nextType, value: fallback });
+    };
+    const handleGradientTypeChange = (event) => {
+        const nextType = event.target.value;
+        if (!GRADIENT_TYPES.includes(nextType)) return;
+        commitGradientUpdate((current) => {
+            current.type = nextType;
+            current.handles = getDefaultGradientHandles(nextType);
+            const nextAngle =
+                typeof DEFAULT_GRADIENT_ANGLES[nextType] === 'number'
+                    ? DEFAULT_GRADIENT_ANGLES[nextType]
+                    : getHandlesAngle(current.handles);
+            current.angle = nextAngle;
+            return current;
+        });
+    };
+
     const commitGradientUpdate = useCallback(
         (updater, options = {}) => {
             const base = gradientValueRef.current;
-            const draft = {
+            const draftValue = {
                 type: base.type,
                 angle: base.angle,
                 stops: base.stops.map((stop) => ({ ...stop })),
+                handles: base.handles ? { ...base.handles } : base.handles,
             };
-            const updated = typeof updater === 'function' ? updater(draft) || draft : draft;
+            const updated = typeof updater === 'function' ? updater(draftValue) || draftValue : draftValue;
             const normalizedGradient = normalizeGradient(updated, DEFAULT_GRADIENT);
             gradientValueRef.current = normalizedGradient;
             setGradientDrafts(normalizedGradient.stops.map((stop) => stop.color.toUpperCase()));
@@ -1098,23 +1655,8 @@ const ColorControl = ({
                 return clampValue(previous, 0, normalizedGradient.stops.length - 1);
             });
         },
-        [setActiveStopIndex, setGradientDrafts]
+        [clampValue]
     );
-
-    const handleGradientTypeChange = (event) => {
-        const nextType = event.target.value;
-        if (!GRADIENT_TYPES.includes(nextType)) return;
-        commitGradientUpdate((current) => {
-            current.type = nextType;
-            current.handles = getDefaultGradientHandles(nextType);
-            const nextAngle =
-                typeof DEFAULT_GRADIENT_ANGLES[nextType] === 'number'
-                    ? DEFAULT_GRADIENT_ANGLES[nextType]
-                    : getHandlesAngle(current.handles);
-            current.angle = nextAngle;
-            return current;
-        });
-    };
 
     const handleGradientFlip = () => {
         const stopsCount = gradientValueRef.current.stops.length;
@@ -1156,7 +1698,7 @@ const ColorControl = ({
             if (!next.startsWith('#')) next = `#${next}`;
             setActiveStopIndex(index);
             setGradientDrafts((prev) =>
-                prev.map((draft, draftIndex) => (draftIndex === index ? next.toUpperCase() : draft))
+                prev.map((draftValue, draftIndex) => (draftIndex === index ? next.toUpperCase() : draftValue))
             );
             if (HEX_REGEX.test(next)) {
                 const safe = next.toLowerCase();
@@ -1214,7 +1756,6 @@ const ColorControl = ({
             { focusIndex: index }
         );
     };
-
     const handleGradientStopRemove = (index) => {
         const totalStops = gradientValueRef.current.stops.length;
         if (totalStops <= 2) return;
@@ -1354,6 +1895,184 @@ const ColorControl = ({
         };
     }, [handleStopPointerMove, handleStopPointerUp]);
 
+    const solidHueColor = hsvaToRgba({ h: solidHsva.h, s: 1, v: 1, a: 1 });
+    const solidHueHex = rgbaToHex(solidHueColor);
+    const solidRgba = hsvaToRgba(solidHsva);
+    const solidCssValue = rgbaToCss(solidRgba);
+
+    const summaryLabel = useMemo(() => {
+        const match = COLOR_STYLE_OPTIONS.find((option) => option.value === activeType);
+        return match?.label || 'Solid';
+    }, [activeType]);
+
+    const summaryPreview = useMemo(() => {
+        if (activeType === 'solid') {
+            return { backgroundColor: solidCssValue, backgroundImage: 'none' };
+        }
+        if (activeType === 'gradient') {
+            return {
+                backgroundImage: gradientCss,
+                backgroundColor: gradientValue.stops[0]?.color || solidCssValue,
+            };
+        }
+        const preset = COLOR_TYPE_PREVIEW_BACKGROUND[activeType];
+        if (preset) {
+            return { ...preset };
+        }
+        return { backgroundColor: solidCssValue };
+    }, [activeType, gradientCss, gradientValue.stops, solidCssValue]);
+
+    const togglePopover = () => {
+        if (isOpen) {
+            closePopover();
+            return;
+        }
+
+        if (!hasCustomPositionRef.current) {
+            const triggerBounds = triggerRef.current?.getBoundingClientRect();
+            const fallbackPosition =
+                typeof window !== 'undefined'
+                    ? {
+                        x: window.innerWidth / 2 - 140,
+                        y: window.innerHeight / 2 - 160,
+                    }
+                    : { x: 0, y: 0 };
+            const desiredPosition = triggerBounds
+                ? { x: triggerBounds.right + 16, y: triggerBounds.top }
+                : fallbackPosition;
+            setPopoverPosition((previous) => {
+                const next = clampPositionToViewport(desiredPosition);
+                if (previous.x === next.x && previous.y === next.y) {
+                    return previous;
+                }
+                return next;
+            });
+        }
+
+        setIsOpen(true);
+    };
+
+    const handleSolidSwatchSelect = (value) => {
+        const parsed = parseColorString(value, parsedSolid);
+        const currentAlpha = solidHsvaRef.current.a;
+        const hsva = rgbToHsva({ ...parsed, a: currentAlpha });
+        applySolidColor({ ...hsva, a: currentAlpha });
+    };
+    const renderSolidEditor = () => {
+        const saturationStyle = {
+            ...solidSaturationWrapperStyle,
+            backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) 100%), linear-gradient(90deg, #ffffff 0%, ${solidHueHex} 100%)`,
+        };
+        const hueStyle = {
+            ...solidSliderWrapperStyle,
+            backgroundImage:
+                'linear-gradient(90deg, #ff0000 0%, #ffff00 16.66%, #00ff00 33.33%, #00ffff 50%, #0000ff 66.66%, #ff00ff 83.33%, #ff0000 100%)',
+        };
+        const alphaStyle = {
+            ...solidSliderWrapperStyle,
+            backgroundImage: `linear-gradient(45deg, rgba(226, 232, 240, 0.7) 25%, transparent 25%, transparent 50%, rgba(226, 232, 240, 0.7) 50%, rgba(226, 232, 240, 0.7) 75%, transparent 75%, transparent 100%), linear-gradient(90deg, rgba(${solidRgba.r}, ${solidRgba.g}, ${solidRgba.b}, 0) 0%, rgba(${solidRgba.r}, ${solidRgba.g}, ${solidRgba.b}, 1) 100%)`,
+            backgroundSize: '12px 12px, 100% 100%',
+        };
+        const solidHexLower = rgbaToHex(solidRgba).toLowerCase();
+
+        return (
+            <div style={solidEditorWrapperStyle}>
+                <div style={solidPickerMainStyle}>
+                    <div
+                        ref={solidSaturationRef}
+                        style={saturationStyle}
+                        onPointerDown={handleSaturationPointerDown}
+                    >
+                        <div
+                            style={{
+                                ...solidSaturationIndicatorStyle,
+                                left: `${solidHsva.s * 100}%`,
+                                top: `${(1 - solidHsva.v) * 100}%`,
+                                backgroundColor: solidCssValue,
+                            }}
+                        />
+                    </div>
+                    <div ref={hueTrackRef} style={hueStyle} onPointerDown={handleHuePointerDown}>
+                        <div
+                            style={{
+                                ...solidSliderThumbStyle,
+                                left: `${(solidHsva.h / 360) * 100}%`,
+                                background: rgbaToHex(solidHueColor),
+                            }}
+                        />
+                    </div>
+                    <div ref={alphaTrackRef} style={alphaStyle} onPointerDown={handleAlphaPointerDown}>
+                        <div
+                            style={{
+                                ...solidSliderThumbStyle,
+                                left: `${solidHsva.a * 100}%`,
+                                background: solidCssValue,
+                            }}
+                        />
+                    </div>
+                </div>
+                <div style={solidInputsRowStyle}>
+                    <select value="hex" style={solidFormatSelectStyle} disabled>
+                        <option value="hex">Hex</option>
+                    </select>
+                    <input
+                        type="text"
+                        value={solidHexDraft}
+                        onChange={handleSolidHexChange}
+                        onBlur={handleSolidHexBlur}
+                        style={solidHexInputStyle}
+                    />
+                    <div style={solidAlphaInputWrapperStyle}>
+                        <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={solidAlphaDraft}
+                            onChange={handleSolidAlphaChange}
+                            onBlur={handleSolidAlphaBlur}
+                            style={solidAlphaInputStyle}
+                        />
+                        <span>%</span>
+                    </div>
+                </div>
+                <div style={solidSwatchSectionStyle}>
+                    <div style={solidSwatchHeaderStyle}>
+                        <span>On this page</span>
+                        <span>{SOLID_PRESET_SWATCHES.length} colours</span>
+                    </div>
+                    <div style={solidSwatchGridStyle}>
+                        {SOLID_PRESET_SWATCHES.map((swatch) => {
+                            const isActive = swatch.toLowerCase() === solidHexLower;
+                            return (
+                                <button
+                                    type="button"
+                                    key={swatch}
+                                    onClick={() => handleSolidSwatchSelect(swatch)}
+                                    style={{
+                                        ...solidSwatchButtonStyle,
+                                        borderColor: isActive ? '#4f83ff' : solidSwatchButtonStyle.border,
+                                        boxShadow: isActive
+                                            ? '0 0 0 2px rgba(79, 131, 255, 0.35)'
+                                            : solidSwatchButtonStyle.boxShadow,
+                                    }}
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        style={{
+                                            ...solidSwatchButtonInnerStyle,
+                                            backgroundColor: swatch,
+                                        }}
+                                    />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
         const renderGradientEditor = () => {
             const stops = gradientValue.stops;
             const canRemove = stops.length > 2;
@@ -1377,7 +2096,9 @@ const ColorControl = ({
                             onClick={handleGradientFlip}
                             style={gradientToolbarButtonStyle}
                         >
-                            <span style={gradientToolbarIconStyle} aria-hidden="true">⇆</span>
+                            <span style={gradientToolbarIconStyle} aria-hidden="true">
+                                ⇆
+                            </span>
                             Flip
                         </button>
                         <button
@@ -1385,7 +2106,9 @@ const ColorControl = ({
                             onClick={handleGradientRotate}
                             style={gradientToolbarButtonStyle}
                         >
-                            <span style={gradientToolbarIconStyle} aria-hidden="true">↻</span>
+                            <span style={gradientToolbarIconStyle} aria-hidden="true">
+                                ↻
+                            </span>
                             Rotate 90°
                         </button>
                     </div>
@@ -1568,35 +2291,14 @@ const ColorControl = ({
         );
     };
 
-    const togglePopover = () => {
-        if (isOpen) {
-            setIsOpen(false);
-            return;
-        }
-
-        if (!hasCustomPositionRef.current) {
-            const triggerBounds = triggerRef.current?.getBoundingClientRect();
-            const fallbackPosition =
-                typeof window !== 'undefined'
-                    ? {
-                        x: window.innerWidth / 2 - 140,
-                        y: window.innerHeight / 2 - 160,
-                    }
-                    : { x: 0, y: 0 };
-            const desiredPosition = triggerBounds
-                ? { x: triggerBounds.right + 16, y: triggerBounds.top }
-                : fallbackPosition;
-            setPopoverPosition((previous) => {
-                const next = clampPositionToViewport(desiredPosition);
-                if (previous.x === next.x && previous.y === next.y) {
-                    return previous;
-                }
-                return next;
-            });
-        }
-
-        setIsOpen(true);
-    };
+    if (disabled) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={fieldLabelStyle}>{label}</span>
+                <span style={disabledValueStyle} />
+            </div>
+        );
+    }
 
     const canRenderPortal = typeof document !== 'undefined';
     const popoverNode =
@@ -1631,6 +2333,7 @@ const ColorControl = ({
                         </button>
                     </div>
                     <div style={colorPopoverBodyStyle}>
+                        {activeType === 'solid' ? renderSolidEditor() : null}
                         <div style={colorModeGridStyle}>
                             {COLOR_STYLE_OPTIONS.map((option) => (
                                 <ToggleButton
@@ -1644,43 +2347,11 @@ const ColorControl = ({
                                 </ToggleButton>
                             ))}
                         </div>
-                        {activeType === 'solid' ? (
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                                <label style={colorPopoverSwatchStyle}>
-                                    <span
-                                        aria-hidden="true"
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            height: '100%',
-                                            background: normalized,
-                                        }}
-                                    />
-                                    <input
-                                        type="color"
-                                        value={normalized}
-                                        onChange={(event) =>
-                                            commitStyle({ type: 'solid', value: event.target.value })
-                                        }
-                                        style={hiddenColorInputStyle}
-                                    />
-                                </label>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                    <span style={colorPopoverFieldLabelStyle}>Hex</span>
-                                    <input
-                                        type="text"
-                                        value={draft}
-                                        onChange={handleHexChange}
-                                        onBlur={handleBlur}
-                                        style={hexInputStyle}
-                                    />
-                                </div>
-                            </div>
-                        ) : activeType === 'gradient' ? (
-                            renderGradientEditor()
-                        ) : (
-                            renderNonSolidPlaceholder()
-                        )}
+                        {activeType === 'solid'
+                            ? null
+                            : activeType === 'gradient'
+                                ? renderGradientEditor()
+                                : renderNonSolidPlaceholder()}
                     </div>
                 </div>,
                 document.body
