@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer } from 'react-konva';
+import PagesPanel from './PagesPanel';
+import LayersPanel from './LayersPanel';
 import {
     buildGradientColorStops,
     getGradientFirstColor,
@@ -26,6 +28,9 @@ const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
 const LAYER_PANEL_MIN_WIDTH = 240;
 const LAYER_PANEL_MAX_WIDTH = 500;
 const LAYER_PANEL_DEFAULT_WIDTH = 280;
+const PAGES_SECTION_MIN_HEIGHT = 140;
+const LAYERS_SECTION_MIN_HEIGHT = 180;
+const PAGES_SECTION_DEFAULT_HEIGHT = 220;
 
 const CONTAINER_TYPES = ['frame', 'group'];
 
@@ -81,6 +86,112 @@ const getShapeDimensions = (shape) => {
         default:
             return { width: 0, height: 0 };
     }
+};
+
+const getShapeBoundingBox = (shape) => {
+    if (!shape) return null;
+    switch (shape.type) {
+        case 'rectangle':
+        case 'frame':
+        case 'group': {
+            const width = Math.max(0, shape.width || 0);
+            const height = Math.max(0, shape.height || 0);
+            const centerX = shape.x || 0;
+            const centerY = shape.y || 0;
+            return {
+                left: centerX - width / 2,
+                right: centerX + width / 2,
+                top: centerY - height / 2,
+                bottom: centerY + height / 2,
+            };
+        }
+        case 'circle': {
+            const radius = Math.max(0, shape.radius || 0);
+            const centerX = shape.x || 0;
+            const centerY = shape.y || 0;
+            return {
+                left: centerX - radius,
+                right: centerX + radius,
+                top: centerY - radius,
+                bottom: centerY + radius,
+            };
+        }
+        case 'ellipse': {
+            const radiusX = Math.max(0, shape.radiusX || 0);
+            const radiusY = Math.max(0, shape.radiusY || 0);
+            const centerX = shape.x || 0;
+            const centerY = shape.y || 0;
+            return {
+                left: centerX - radiusX,
+                right: centerX + radiusX,
+                top: centerY - radiusY,
+                bottom: centerY + radiusY,
+            };
+        }
+        case 'line':
+        case 'pen': {
+            const points = Array.isArray(shape.points) ? shape.points : [];
+            if (points.length < 2) {
+                const x = shape.x || 0;
+                const y = shape.y || 0;
+                return { left: x, right: x, top: y, bottom: y };
+            }
+            let minX = Number.POSITIVE_INFINITY;
+            let maxX = Number.NEGATIVE_INFINITY;
+            let minY = Number.POSITIVE_INFINITY;
+            let maxY = Number.NEGATIVE_INFINITY;
+            for (let index = 0; index + 1 < points.length; index += 2) {
+                const px = points[index];
+                const py = points[index + 1];
+                if (typeof px === 'number') {
+                    if (px < minX) minX = px;
+                    if (px > maxX) maxX = px;
+                }
+                if (typeof py === 'number') {
+                    if (py < minY) minY = py;
+                    if (py > maxY) maxY = py;
+                }
+            }
+            if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+                const x = shape.x || 0;
+                const y = shape.y || 0;
+                return { left: x, right: x, top: y, bottom: y };
+            }
+            return { left: minX, right: maxX, top: minY, bottom: maxY };
+        }
+        case 'text': {
+            const { width, height } = getShapeDimensions(shape);
+            const centerX = shape.x || 0;
+            const centerY = shape.y || 0;
+            return {
+                left: centerX - width / 2,
+                right: centerX + width / 2,
+                top: centerY - height / 2,
+                bottom: centerY + height / 2,
+            };
+        }
+        default:
+            return null;
+    }
+};
+
+const unionBoundingBoxes = (boxes) => {
+    if (!Array.isArray(boxes) || boxes.length === 0) return null;
+    let left = Number.POSITIVE_INFINITY;
+    let right = Number.NEGATIVE_INFINITY;
+    let top = Number.POSITIVE_INFINITY;
+    let bottom = Number.NEGATIVE_INFINITY;
+    boxes.forEach((box) => {
+        if (!box) return;
+        if (box.left < left) left = box.left;
+        if (box.right > right) right = box.right;
+        if (box.top < top) top = box.top;
+        if (box.bottom > bottom) bottom = box.bottom;
+    });
+    if (!Number.isFinite(left) || !Number.isFinite(right) || !Number.isFinite(top) || !Number.isFinite(bottom)) {
+        return null;
+    }
+    return { left, right, top, bottom };
 };
 
 const convertNormalizedPointToLocal = (point, dimensions) => ({
@@ -181,6 +292,7 @@ export default function Canvas({
         text: 1,
     });
     const stageContainerRef = useRef(null);
+    const sidePanelRef = useRef(null);
     // panning (hand tool)
     const isPanningRef = useRef(false);
     const panLastPosRef = useRef({ x: 0, y: 0 });
@@ -192,6 +304,79 @@ export default function Canvas({
 
     const [shapes, setShapes] = useState([]);
     const shapesRef = useRef(shapes);
+
+    const initialPageStateRef = useRef(null);
+    if (!initialPageStateRef.current) {
+        const createdAt = Date.now();
+        const defaultPageId = `page-${createdAt}`;
+        initialPageStateRef.current = {
+            pages: [{ id: defaultPageId, name: 'Page 1', createdAt }],
+            activePageId: defaultPageId,
+        };
+    }
+    const [pages, setPages] = useState(initialPageStateRef.current.pages);
+    const [activePageId, setActivePageId] = useState(initialPageStateRef.current.activePageId);
+    const pagesRef = useRef(pages);
+    useEffect(() => {
+        pagesRef.current = pages;
+    }, [pages]);
+    const activePageRef = useRef(activePageId);
+    useEffect(() => {
+        activePageRef.current = activePageId;
+    }, [activePageId]);
+
+    useEffect(() => {
+        if (!pages.length) {
+            const createdAt = Date.now();
+            const defaultPageId = `page-${createdAt}`;
+            const defaultPage = { id: defaultPageId, name: 'Page 1', createdAt };
+            setPages([defaultPage]);
+            setActivePageId(defaultPageId);
+            return;
+        }
+        if (!pages.some((page) => page.id === activePageId)) {
+            setActivePageId(pages[0].id);
+        }
+    }, [pages, activePageId]);
+
+    useEffect(() => {
+        setShapes((current) => {
+            if (!Array.isArray(current) || current.length === 0) return current;
+            const fallbackPageId = activePageRef.current || pagesRef.current[0]?.id;
+            if (!fallbackPageId) return current;
+            let changed = false;
+            const patched = current.map((shape) => {
+                if (!shape.pageId) {
+                    changed = true;
+                    return { ...shape, pageId: fallbackPageId };
+                }
+                return shape;
+            });
+            return changed ? patched : current;
+        });
+    }, [pages, activePageId]);
+
+    const shapesOnActivePage = useMemo(() => {
+        const fallbackPageId = activePageId || pages[0]?.id || null;
+        if (!fallbackPageId) return shapes;
+        return shapes.filter((shape) => (shape.pageId || fallbackPageId) === fallbackPageId);
+    }, [shapes, activePageId, pages]);
+    const activeShapesRef = useRef(shapesOnActivePage);
+    useEffect(() => {
+        activeShapesRef.current = shapesOnActivePage;
+    }, [shapesOnActivePage]);
+
+    const pageShapeCounts = useMemo(() => {
+        const counts = new Map();
+        const fallbackPageId = pages[0]?.id || null;
+        shapes.forEach((shape) => {
+            const pageId = shape.pageId || fallbackPageId;
+            if (!pageId) return;
+            counts.set(pageId, (counts.get(pageId) || 0) + 1);
+        });
+        return counts;
+    }, [shapes, pages]);
+
 
     // --- simple geometry utilities (stage space) ---
     const pointInRect = (px, py, cx, cy, w, h) => {
@@ -213,6 +398,43 @@ export default function Canvas({
         t = Math.max(0, Math.min(1, t));
         const qx = x1 + t * vx, qy = y1 + t * vy;
         return distSq(px, py, qx, qy) <= tol * tol;
+    };
+
+    const rectFromPoints = (start, end) => {
+        if (!start || !end) return null;
+        const x = Math.min(start.x, end.x);
+        const y = Math.min(start.y, end.y);
+        const width = Math.abs(end.x - start.x);
+        const height = Math.abs(end.y - start.y);
+        return { x, y, width, height };
+    };
+
+    const rectsIntersect = (a, b) => {
+        if (!a || !b) return false;
+        if (a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0) return false;
+        const ax2 = a.x + a.width;
+        const ay2 = a.y + a.height;
+        const bx2 = b.x + b.width;
+        const by2 = b.y + b.height;
+        return ax2 >= b.x && bx2 >= a.x && ay2 >= b.y && by2 >= a.y;
+    };
+
+    const rectFromClientRect = (clientRect, toStageTransform) => {
+        if (!clientRect) return null;
+        if (!toStageTransform || typeof toStageTransform.point !== 'function') {
+            return {
+                x: clientRect.x,
+                y: clientRect.y,
+                width: clientRect.width,
+                height: clientRect.height,
+            };
+        }
+        const topLeft = toStageTransform.point({ x: clientRect.x, y: clientRect.y });
+        const bottomRight = toStageTransform.point({
+            x: clientRect.x + clientRect.width,
+            y: clientRect.y + clientRect.height,
+        });
+        return rectFromPoints(topLeft, bottomRight);
     };
 
     // hit test against our shape model (axis-aligned containers)
@@ -254,7 +476,7 @@ export default function Canvas({
 
     // pick the topmost child on double-click — 3 passes: strict → visual → fallback
     const pickTopmostChildAtPoint = (container, px, py) => {
-        const source = shapesRef.current;
+        const source = activeShapesRef.current;
         const valid = (s) => s && s.visible !== false && !s.locked && s.id !== container.id;
 
         // 1) true descendants under pointer (top-down)
@@ -429,6 +651,13 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             overrides.parentId !== undefined
                 ? overrides.parentId
                 : getActiveContainerId();
+        const parentShape =
+            parentId != null ? shapesRef.current.find((shape) => shape.id === parentId) : null;
+        const resolvedPageId =
+            overrides.pageId ??
+            (parentShape && parentShape.pageId
+                ? parentShape.pageId
+                : activePageRef.current || pagesRef.current[0]?.id || null);
         const shape = {
             id,
             type,
@@ -442,22 +671,23 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                 1
             ),
             blendMode: overrides.blendMode || 'normal',
+            pageId: resolvedPageId,
             ...overrides,
         };
         return shape;
     };
 
-    const getShapeById = (id, source = shapesRef.current) => {
+    const getShapeById = (id, source = activeShapesRef.current) => {
         if (id == null) return null;
         return source.find((shape) => shape.id === id) || null;
     };
 
-    const getParentShape = (shape, source = shapesRef.current) => {
+    const getParentShape = (shape, source = activeShapesRef.current) => {
         if (!shape || shape.parentId == null) return null;
         return getShapeById(shape.parentId, source);
     };
 
-    const getContainerAncestor = (shape, source = shapesRef.current) => {
+    const getContainerAncestor = (shape, source = activeShapesRef.current) => {
         let current = shape;
         while (current) {
             if (isContainerShape(current)) return current;
@@ -466,7 +696,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         return null;
     };
 
-    const getContainerPathForId = (shapeId, source = shapesRef.current) => {
+    const getContainerPathForId = (shapeId, source = activeShapesRef.current) => {
         const path = [];
         let current = getShapeById(shapeId, source);
         while (current) {
@@ -494,7 +724,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         return result;
     };
 
-    const isDescendantOf = (shapeId, ancestorId, source = shapesRef.current) => {
+    const isDescendantOf = (shapeId, ancestorId, source = activeShapesRef.current) => {
         if (shapeId == null || ancestorId == null) return false;
         let current = getShapeById(shapeId, source);
         while (current) {
@@ -519,7 +749,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         };
     };
 
-    const findContainerAtPoint = (point, excludedIds = new Set(), source = shapesRef.current) => {
+    const findContainerAtPoint = (point, excludedIds = new Set(), source = activeShapesRef.current) => {
         if (!point) return null;
         const localExcluded = excludedIds instanceof Set ? excludedIds : new Set(excludedIds);
         for (let index = source.length - 1; index >= 0; index -= 1) {
@@ -626,8 +856,17 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
     const MIN_STAGE_WIDTH = 120;
     const MIN_STAGE_HEIGHT = 200;
     const [layerPanelWidth, setLayerPanelWidth] = useState(LAYER_PANEL_DEFAULT_WIDTH)
+    const [pagesSectionHeight, setPagesSectionHeight] = useState(PAGES_SECTION_DEFAULT_HEIGHT)
 
     const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
+
+    const marqueeStateRef = useRef({ active: false, start: null, end: null });
+    const [marqueeRect, setMarqueeRect] = useState(null);
+
+    const resetMarquee = useCallback(() => {
+        marqueeStateRef.current = { active: false, start: null, end: null };
+        setMarqueeRect(null);
+    }, []);
 
     useEffect(() => {
         const element = stageContainerRef.current;
@@ -650,6 +889,27 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         return () => observer.disconnect();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        const panel = sidePanelRef.current;
+        if (!panel) return undefined;
+
+        const updateHeightConstraints = () => {
+            const rect = panel.getBoundingClientRect();
+            const maxHeight = rect.height - LAYERS_SECTION_MIN_HEIGHT;
+            const upperBound = Math.max(PAGES_SECTION_MIN_HEIGHT, maxHeight);
+            setPagesSectionHeight((current) =>
+                clampValue(current, PAGES_SECTION_MIN_HEIGHT, upperBound)
+            );
+        };
+
+        updateHeightConstraints();
+        window.addEventListener('resize', updateHeightConstraints);
+
+        return () => {
+            window.removeEventListener('resize', updateHeightConstraints);
+        };
+    }, [sidePanelRef, setPagesSectionHeight]);
 
     const getStageCenter = () => ({ x: stageSize.width / 2, y: stageSize.height / 2 });
 
@@ -760,6 +1020,149 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         setShapes(nextState);
     };
 
+    const generatePageName = useCallback(() => {
+        const base = 'Page';
+        const used = new Set();
+        pagesRef.current.forEach((page) => {
+            const match = /^Page\s+(\d+)$/.exec(page.name);
+            if (match) {
+                used.add(Number.parseInt(match[1], 10));
+            }
+        });
+        let index = 1;
+        while (used.has(index)) {
+            index += 1;
+        }
+        return `${base} ${index}`;
+    }, []);
+
+    const handleAddPage = useCallback(() => {
+        const createdAt = Date.now();
+        const id = `page-${createdAt}-${Math.random().toString(36).slice(2, 8)}`;
+        const name = generatePageName();
+        const newPage = { id, name, createdAt };
+        setPages((prev) => [...prev, newPage]);
+        setActivePageId(newPage.id);
+    }, [generatePageName]);
+
+    const handleActivatePage = useCallback((pageId) => {
+        if (!pageId || pageId === activePageRef.current) return;
+        if (!pagesRef.current.some((page) => page.id === pageId)) return;
+        setActivePageId(pageId);
+    }, []);
+
+    const handleRenamePage = useCallback((pageId, nextName) => {
+        if (!pageId) return;
+        const trimmed = nextName ? nextName.trim() : '';
+        if (!trimmed) return;
+        setPages((prev) => prev.map((page) => (page.id === pageId ? { ...page, name: trimmed } : page)));
+    }, []);
+
+    const handleReorderPages = useCallback((sourceId, targetId, placeAfter) => {
+        if (!sourceId || !targetId || sourceId === targetId) return;
+        setPages((prev) => {
+            const sourceIndex = prev.findIndex((page) => page.id === sourceId);
+            const targetIndex = prev.findIndex((page) => page.id === targetId);
+            if (sourceIndex === -1 || targetIndex === -1) return prev;
+            const updated = [...prev];
+            const [item] = updated.splice(sourceIndex, 1);
+            let insertIndex = updated.findIndex((page) => page.id === targetId);
+            if (insertIndex === -1) {
+                updated.splice(sourceIndex, 0, item);
+                return updated;
+            }
+            if (placeAfter) insertIndex += 1;
+            updated.splice(insertIndex, 0, item);
+            return updated;
+        });
+    }, []);
+
+    const makePageCopyName = useCallback((baseName) => {
+        const existing = new Set(pagesRef.current.map((page) => page.name));
+        let attempt = `${baseName} Copy`;
+        let suffix = 2;
+        while (existing.has(attempt)) {
+            attempt = `${baseName} Copy ${suffix}`;
+            suffix += 1;
+        }
+        return attempt;
+    }, []);
+
+    const handleDuplicatePage = useCallback(
+        (pageId) => {
+            const sourcePage = pagesRef.current.find((page) => page.id === pageId);
+            if (!sourcePage) return;
+            const createdAt = Date.now();
+            const id = `page-${createdAt}-${Math.random().toString(36).slice(2, 8)}`;
+            const name = makePageCopyName(sourcePage.name || 'Page');
+            const newPage = { id, name, createdAt };
+            setPages((prev) => [...prev, newPage]);
+
+            const sourceShapes = shapesRef.current.filter((shape) => (shape.pageId || sourcePage.id) === sourcePage.id);
+            if (sourceShapes.length) {
+                const idMap = new Map();
+                const clones = sourceShapes.map((shape) => {
+                    const newId = allocateShapeId();
+                    idMap.set(shape.id, newId);
+                    return { ...shape, id: newId };
+                });
+                const remapped = clones.map((shape) => ({
+                    ...shape,
+                    parentId: shape.parentId != null ? idMap.get(shape.parentId) ?? null : null,
+                    pageId: id,
+                    name: shape.name ? `${shape.name} Copy` : shape.name,
+                }));
+                applyChange((prev) => [...prev, ...remapped]);
+            }
+
+            setActivePageId(id);
+        },
+        [allocateShapeId, applyChange, makePageCopyName]
+    );
+
+    const handleDeletePage = useCallback(
+        (pageId, { mode = null, targetPageId = null } = {}) => {
+            const currentPages = pagesRef.current;
+            if (!pageId || currentPages.length <= 1) {
+                window.alert('Cannot delete the last remaining page.');
+                return;
+            }
+            const remaining = currentPages.filter((page) => page.id !== pageId);
+            if (!remaining.length) return;
+            let resolvedMode = mode;
+            let destinationId = targetPageId;
+            if (!resolvedMode) {
+                const fallback = destinationId && remaining.some((page) => page.id === destinationId)
+                    ? destinationId
+                    : remaining[0].id;
+                const confirmMove = window.confirm('Move layers to another page?\nOK to move, Cancel to delete layers.');
+                resolvedMode = confirmMove ? 'move' : 'delete';
+                destinationId = fallback;
+            }
+            if (resolvedMode === 'move') {
+                const fallback = destinationId && remaining.some((page) => page.id === destinationId)
+                    ? destinationId
+                    : remaining[0].id;
+                destinationId = fallback;
+                applyChange((prev) =>
+                    prev.map((shape) =>
+                        (shape.pageId === pageId ? { ...shape, pageId: destinationId } : shape)
+                    )
+                );
+            } else {
+                applyChange((prev) => prev.filter((shape) => shape.pageId !== pageId));
+            }
+            setPages((prev) => prev.filter((page) => page.id !== pageId));
+            if (activePageRef.current === pageId) {
+                const nextPageId = destinationId && destinationId !== pageId ? destinationId : remaining[0]?.id;
+                if (nextPageId) {
+                    setActivePageId(nextPageId);
+                }
+            }
+        },
+        [applyChange]
+    );
+
     // expose for debugging / toolbar integration
     useEffect(() => {
         window.kanvas = window.kanvas || {};
@@ -835,7 +1238,42 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                 setSelectedId(null);
                 return;
             }
+            if (e.key === 'Enter') {
+                const primaryId = selectedId != null ? selectedId : selectedIds[selectedIds.length - 1];
+                const primaryShape = getShapeById(primaryId, shapesRef.current);
+                if (primaryShape && isContainerShape(primaryShape) && !primaryShape.locked) {
+                    e.preventDefault();
+                    const path = getContainerPathForId(primaryShape.id, shapesRef.current);
+                    setActiveContainerPath([null, ...path]);
+                    const snapshot = shapesRef.current;
+                    let childId = null;
+                    for (let index = snapshot.length - 1; index >= 0; index -= 1) {
+                        const candidate = snapshot[index];
+                        if (candidate.parentId === primaryShape.id && candidate.visible !== false) {
+                            childId = candidate.id;
+                            break;
+                        }
+                    }
+                    const nextId = childId ?? primaryShape.id;
+                    setSelectedId(nextId);
+                    setSelectedIds([nextId]);
+                    const panelIds = getLayerPanelIds();
+                    const anchorIndex = panelIds.indexOf(nextId);
+                    lastLayerAnchorIndexRef.current = anchorIndex >= 0 ? anchorIndex : null;
+                }
+                return;
+            }
             if (!ctrlOrMeta) return;
+
+            if (e.key === 'g' || e.key === 'G') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    ungroupSelectedLayers();
+                } else {
+                    groupSelectedLayers();
+                }
+                return;
+            }
 
             if (e.key === 'z' || e.key === 'Z') {
                 if (e.shiftKey) {
@@ -854,8 +1292,15 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedId]);
+    }, [
+        getLayerPanelIds,
+        groupSelectedLayers,
+        redo,
+        selectedId,
+        selectedIds,
+        undo,
+        ungroupSelectedLayers,
+    ]);
 
     useEffect(() => {
         const ids = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
@@ -1042,6 +1487,20 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             return Number.isFinite(parsed) ? parsed : null;
         })();
         const clickedOnEmpty = targetNode === stage;
+        const shiftKey = !!(e?.evt?.shiftKey || e?.shiftKey);
+
+        if (selectedTool === 'select' && shiftKey && clickedOnEmpty) {
+            const pointer = getCanvasPointer();
+            if (!pointer) return;
+            marqueeStateRef.current = { active: true, start: pointer, end: pointer };
+            setMarqueeRect({ x: pointer.x, y: pointer.y, width: 0, height: 0 });
+            setStageCursor('crosshair');
+            return;
+        }
+
+        if (!shiftKey) {
+            resetMarquee();
+        }
 
         // PEN tool: begin freehand stroke anywhere
         if (selectedTool === 'pen') {
@@ -1211,6 +1670,14 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
     const handleStageMouseMove = () => {
         const stage = stageRef.current;
         if (!stage) return;
+        if (marqueeStateRef.current.active) {
+            const pointer = getCanvasPointer();
+            if (!pointer) return;
+            marqueeStateRef.current.end = pointer;
+            const rect = rectFromPoints(marqueeStateRef.current.start, pointer);
+            setMarqueeRect(rect);
+            return;
+        }
         // if we are drawing, update the temporary shape
         if (isDrawingRef.current) {
             const pos = getCanvasPointer();
@@ -1318,6 +1785,84 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             return;
         }
 
+        if (marqueeStateRef.current.active) {
+            const { start, end } = marqueeStateRef.current;
+            resetMarquee();
+            if (!start || !end) {
+                if (selectedTool === 'select') setStageCursor('default');
+                return;
+            }
+            const rect = rectFromPoints(start, end);
+            if (!rect || rect.width < 2 || rect.height < 2) {
+                if (selectedTool === 'select') setStageCursor('default');
+                return;
+            }
+
+            const ctrlLike = !!(e?.evt?.metaKey || e?.evt?.ctrlKey || e?.metaKey || e?.ctrlKey);
+            const stageToLocal = (() => {
+                const absolute = stage.getAbsoluteTransform();
+                if (!absolute || typeof absolute.copy !== 'function') return null;
+                const copy = absolute.copy();
+                if (typeof copy.invert === 'function') {
+                    copy.invert();
+                    return copy;
+                }
+                return null;
+            })();
+            const hits = [];
+            const shapesSnapshot = shapesRef.current;
+            const currentPageId = activePageRef.current;
+            for (let i = 0; i < shapesSnapshot.length; i += 1) {
+                const shape = shapesSnapshot[i];
+                if (!shape || shape.visible === false || shape.locked) continue;
+                if (currentPageId && (shape.pageId || currentPageId) !== currentPageId) continue;
+                const node = stage.findOne(`#shape-${shape.id}`);
+                if (!node) continue;
+                const clientRect = node.getClientRect({ skipTransform: false });
+                const shapeRect = rectFromClientRect(clientRect, stageToLocal);
+                if (!shapeRect) continue;
+                if (rectsIntersect(rect, shapeRect)) {
+                    hits.push(shape.id);
+                }
+            }
+
+            if (ctrlLike) {
+                if (hits.length) {
+                    setSelectedIds((prev) => {
+                        const set = new Set(prev);
+                        hits.forEach((id) => {
+                            if (set.has(id)) set.delete(id);
+                            else set.add(id);
+                        });
+                        const next = Array.from(set);
+                        const nextPrimary = next.length ? next[next.length - 1] : null;
+                        setSelectedId(nextPrimary);
+                        if (nextPrimary != null) {
+                            const panelIds = getLayerPanelIds();
+                            const idx = panelIds.indexOf(nextPrimary);
+                            lastLayerAnchorIndexRef.current = idx >= 0 ? idx : null;
+                        } else {
+                            lastLayerAnchorIndexRef.current = null;
+                        }
+                        return next;
+                    });
+                }
+            } else {
+                setSelectedIds(hits);
+                setSelectedId(hits.length ? hits[hits.length - 1] : null);
+                const panelIds = getLayerPanelIds();
+                const primaryId = hits.length ? hits[hits.length - 1] : null;
+                if (primaryId != null) {
+                    const idx = panelIds.indexOf(primaryId);
+                    lastLayerAnchorIndexRef.current = idx >= 0 ? idx : null;
+                } else {
+                    lastLayerAnchorIndexRef.current = null;
+                }
+            }
+            if (selectedTool === 'select') setStageCursor('default');
+            return;
+        }
+
         // otherwise stop panning
         if (selectedTool !== 'hand') return;
         if (!isPanningRef.current) return;
@@ -1383,11 +1928,28 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         }
 
         const node = stage.findOne(`#shape-${selectedId}`);
+        const enabledAnchors = [
+            'top-left',
+            'top-center',
+            'top-right',
+            'middle-right',
+            'bottom-right',
+            'bottom-center',
+            'bottom-left',
+            'middle-left',
+        ];
+        const transformerConfig = {
+            rotationEnabled: false,
+            enabledAnchors,
+            hitStrokeWidth: 24,
+            keepRatio: false,
+            centeredScaling: false,
+        };
         if (node) {
             if (typeof tr.nodes === 'function') {
                 tr.nodes([node]);
                 if (typeof tr.setAttrs === 'function') {
-                    tr.setAttrs({ rotationEnabled: false, enabledAnchors: ['top-left', 'top-right', 'bottom-left', 'bottom-right'] });
+                    tr.setAttrs(transformerConfig);
                 }
             }
         } else if (typeof tr.nodes === 'function') {
@@ -1402,6 +1964,9 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             .filter(Boolean);
 
         tr.nodes(nodes);
+        if (typeof tr.setAttrs === 'function') {
+            tr.setAttrs(transformerConfig);
+        }
         tr.getLayer()?.batchDraw?.();
     }, [selectedIds, selectedId, shapes, selectedTool]);
 
@@ -1462,6 +2027,58 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
     // NEW: multi-select state. We'll still keep selectedId as the "primary".
     const [selectedIds, setSelectedIds] = useState([]);
 
+    useEffect(() => {
+        setSelectedId(null);
+        setSelectedIds([]);
+        setActiveContainerPath([null]);
+        setCollapsedContainers(new Set());
+    }, [activePageId]);
+
+    useEffect(() => {
+        const handlePageShortcuts = (event) => {
+            const target = event.target;
+            if (
+                target &&
+                (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+            ) {
+                return;
+            }
+            const ctrlOrMeta = event.metaKey || event.ctrlKey;
+            if (!ctrlOrMeta) return;
+            const key = event.key.toLowerCase();
+            if (event.shiftKey && key === 'n') {
+                event.preventDefault();
+                handleAddPage();
+                return;
+            }
+            if (key === 'p') {
+                event.preventDefault();
+                const pageList = pagesRef.current;
+                if (!Array.isArray(pageList) || pageList.length === 0) return;
+                const promptLabel = pageList
+                    .map((page, index) => `${index + 1}. ${page.name}`)
+                    .join('\n');
+                const response = window.prompt(`Switch to page:\n${promptLabel}`);
+                if (!response) return;
+                const trimmed = response.trim();
+                if (!trimmed) return;
+                const numeric = Number.parseInt(trimmed, 10);
+                if (!Number.isNaN(numeric) && numeric >= 1 && numeric <= pageList.length) {
+                    handleActivatePage(pageList[numeric - 1].id);
+                    return;
+                }
+                const match = pageList.find(
+                    (page) => page.name && page.name.toLowerCase() === trimmed.toLowerCase()
+                );
+                if (match) {
+                    handleActivatePage(match.id);
+                }
+            }
+        };
+        window.addEventListener('keydown', handlePageShortcuts);
+        return () => window.removeEventListener('keydown', handlePageShortcuts);
+    }, [handleAddPage, handleActivatePage]);
+
     // Helper: make a single selection (resets multi-select)
     const selectSingle = (id) => {
         setSelectedId(id || null);
@@ -1481,6 +2098,152 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             return arr;
         });
     };
+
+    const groupSelectedLayers = useCallback(() => {
+        const ids = selectedIds.length >= 2 ? selectedIds : selectedId != null ? [selectedId] : [];
+        if (ids.length < 2) return;
+        const shapes = shapesRef.current;
+        const idSet = new Set(ids);
+        const selection = shapes.filter((shape) => idSet.has(shape.id));
+        if (selection.length < 2) return;
+        const parentIds = new Set(selection.map((shape) => shape.parentId ?? null));
+        if (parentIds.size !== 1) return;
+        const pageIds = new Set(selection.map((shape) => shape.pageId));
+        if (pageIds.size !== 1) return;
+
+        const bounds = unionBoundingBoxes(selection.map((shape) => getShapeBoundingBox(shape)).filter(Boolean));
+        if (!bounds) return;
+
+        const width = Math.max(1, bounds.right - bounds.left);
+        const height = Math.max(1, bounds.bottom - bounds.top);
+        const x = bounds.left + width / 2;
+        const y = bounds.top + height / 2;
+
+        const parentId = selection[0].parentId ?? null;
+        const pageId = selection[0].pageId;
+        const newGroup = {
+            ...createShape('group', {
+                parentId,
+                pageId,
+                x,
+                y,
+                width,
+                height,
+                clipChildren: false,
+            }),
+        };
+
+        const orderedSelection = shapes.filter((shape) => idSet.has(shape.id));
+        const selectionSet = new Set(orderedSelection.map((shape) => shape.id));
+        const updatedChildren = orderedSelection.map((shape) => ({ ...shape, parentId: newGroup.id }));
+        const baseState = shapes.map((shape) => ({ ...shape }));
+
+        applyChange(
+            (prev) => {
+                const result = [];
+                let inserted = false;
+                let insertionIndex = -1;
+                for (let index = 0; index < prev.length; index += 1) {
+                    const shape = prev[index];
+                    if (selectionSet.has(shape.id) && index > insertionIndex) {
+                        insertionIndex = index;
+                    }
+                }
+
+                prev.forEach((shape, index) => {
+                    if (!inserted && index === insertionIndex) {
+                        inserted = true;
+                        result.push({ ...newGroup });
+                        updatedChildren.forEach((child) => {
+                            result.push({ ...child });
+                        });
+                    }
+                    if (selectionSet.has(shape.id)) {
+                        return;
+                    }
+                    result.push(shape);
+                });
+
+                if (!inserted) {
+                    result.push({ ...newGroup });
+                    updatedChildren.forEach((child) => {
+                        result.push({ ...child });
+                    });
+                }
+
+                return result;
+            },
+            { baseState }
+        );
+
+        setSelectedIds([newGroup.id]);
+        setSelectedId(newGroup.id);
+        lastLayerAnchorIndexRef.current = getLayerPanelIds().indexOf(newGroup.id);
+    }, [applyChange, createShape, getLayerPanelIds, selectedId, selectedIds]);
+
+    const ungroupSelectedLayers = useCallback(() => {
+        const ids = selectedIds.length ? selectedIds : selectedId != null ? [selectedId] : [];
+        if (!ids.length) return;
+        const shapes = shapesRef.current;
+        const groupShapes = ids
+            .map((id) => shapes.find((shape) => shape.id === id && shape.type === 'group'))
+            .filter(Boolean);
+        if (!groupShapes.length) return;
+
+        const groupIds = new Set(groupShapes.map((shape) => shape.id));
+        const parentLookup = new Map(groupShapes.map((shape) => [shape.id, shape.parentId ?? null]));
+        const childIdSet = new Set();
+        shapes.forEach((shape) => {
+            if (shape.parentId != null && parentLookup.has(shape.parentId)) {
+                childIdSet.add(shape.id);
+            }
+        });
+
+        const baseState = shapes.map((shape) => ({ ...shape }));
+        applyChange(
+            (prev) =>
+                prev
+                    .filter((shape) => !groupIds.has(shape.id))
+                    .map((shape) => {
+                        const parentId = shape.parentId ?? null;
+                        if (parentLookup.has(parentId)) {
+                            return { ...shape, parentId: parentLookup.get(parentId) };
+                        }
+                        return shape;
+                    }),
+            { baseState }
+        );
+
+        if (groupIds.size) {
+            setCollapsedContainers((prev) => {
+                if (!prev.size) return prev;
+                const next = new Set(prev);
+                let changed = false;
+                groupIds.forEach((id) => {
+                    if (next.delete(id)) changed = true;
+                });
+                return changed ? next : prev;
+            });
+        }
+
+        const nextSelection = Array.from(childIdSet);
+        if (nextSelection.length) {
+            setSelectedIds(nextSelection);
+            const primary = nextSelection[nextSelection.length - 1];
+            setSelectedId(primary);
+            lastLayerAnchorIndexRef.current = getLayerPanelIds().indexOf(primary);
+        } else {
+            setSelectedIds([]);
+            setSelectedId(null);
+            lastLayerAnchorIndexRef.current = null;
+        }
+
+        setActiveContainerPath((current) => {
+            if (!Array.isArray(current)) return [null];
+            const filtered = current.filter((id) => id == null || !groupIds.has(id));
+            return filtered.length ? filtered : [null];
+        });
+    }, [applyChange, getLayerPanelIds, selectedId, selectedIds]);
 
     // Keep multi-select in sync when something else sets selectedId
     useEffect(() => {
@@ -1826,6 +2589,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
 
     const handleShapeDoubleClick = (shape, event) => {
         if (!shape) return;
+        if (shape.locked) return;
         if (event && typeof event.cancelBubble !== 'undefined') event.cancelBubble = true;
          try { event?.target?.stopDrag?.(); } catch { } // kill any drag that may have started
         if (selectedTool !== 'select') return;
@@ -2691,11 +3455,11 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
     const childrenMap = useMemo(() => {
         const map = new Map();
         map.set(null, []);
-        shapes.forEach((shape) => {
+        shapesOnActivePage.forEach((shape) => {
             map.set(shape.id, []);
         });
-        for (let i = shapes.length - 1; i >= 0; i -= 1) {
-            const shape = shapes[i];
+        for (let i = shapesOnActivePage.length - 1; i >= 0; i -= 1) {
+            const shape = shapesOnActivePage[i];
             const key = shape.parentId ?? null;
             if (!map.has(key)) {
                 map.set(key, []);
@@ -2703,7 +3467,9 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             map.get(key).push(shape);
         }
         return map;
-    }, [shapes]);
+    }, [shapesOnActivePage]);
+
+    const [collapsedContainers, setCollapsedContainers] = useState(() => new Set());
 
     const layerList = useMemo(() => {
         const result = [];
@@ -2711,12 +3477,25 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             const siblings = childrenMap.get(parentId) || [];
             siblings.forEach((shape) => {
                 result.push({ shape, depth });
-                visit(shape.id, depth + 1);
+                if (isContainerShape(shape) && !collapsedContainers.has(shape.id)) {
+                    visit(shape.id, depth + 1);
+                }
             });
         };
         visit(null, 0);
         return result;
-    }, [childrenMap]);
+    }, [childrenMap, collapsedContainers]);
+
+    const getChildrenForRendering = useCallback(
+        (parentId) => {
+            const siblings = childrenMap.get(parentId) || [];
+            if (siblings.length <= 1) {
+                return siblings;
+            }
+            return [...siblings].reverse();
+        },
+        [childrenMap]
+    );
 
     const renderShapeTree = (shape) => {
         if (!shape || shape.visible === false) {
@@ -2726,7 +3505,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         if (!isContainerShape(shape)) {
             return node;
         }
-        const children = childrenMap.get(shape.id) || [];
+        const children = getChildrenForRendering(shape.id);
         const clipContent = shape.type === 'frame' && shape.clipContent;
         const clipProps = {};
         if (clipContent) {
@@ -2751,12 +3530,25 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         );
     };
 
+    const toggleLayerCollapse = useCallback((shapeId) => {
+        if (shapeId == null) return;
+        setCollapsedContainers((prev) => {
+            const next = new Set(prev);
+            if (next.has(shapeId)) {
+                next.delete(shapeId);
+            } else {
+                next.add(shapeId);
+            }
+            return next;
+        });
+    }, []);
+
     const [draggedLayerId, setDraggedLayerId] = useState(null);
     const [dragOverLayerId, setDragOverLayerId] = useState(null);
     const [dragOverZone, setDragOverZone] = useState(null);
     const isDraggingLayer = draggedLayerId != null;
 
-    const reorderLayers = (sourceId, targetId, placeAfter) => {
+    const reorderLayers = (sourceId, targetId, dropType) => {
         if (!sourceId || !targetId || sourceId === targetId) return;
         applyChange((prev) => {
             const sourceIndex = prev.findIndex((shape) => shape.id === sourceId);
@@ -2764,23 +3556,64 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             if (sourceIndex === -1 || targetIndex === -1) return prev;
             const sourceShape = prev[sourceIndex];
             const targetShape = prev[targetIndex];
-            const sourceParent = sourceShape.parentId ?? null;
-            const targetParent = targetShape.parentId ?? null;
-            if (sourceParent !== targetParent) {
+            if (sourceShape.pageId !== targetShape.pageId) {
                 return prev;
             }
-            const updated = [...prev];
-            const [item] = updated.splice(sourceIndex, 1);
-            let insertIndex = updated.findIndex((shape) => shape.id === targetId);
-            if (insertIndex === -1) {
-                updated.splice(sourceIndex, 0, item);
-                return updated;
+            const sourceSubtreeIds = new Set([
+                sourceShape.id,
+                ...collectDescendantIds(prev, sourceShape.id),
+            ]);
+            if (sourceSubtreeIds.has(targetId)) {
+                return prev;
             }
-            if (placeAfter) {
+            const subtree = prev.filter((shape) => sourceSubtreeIds.has(shape.id));
+            const remaining = prev.filter((shape) => !sourceSubtreeIds.has(shape.id));
+            const baseInsertIndex = remaining.findIndex((shape) => shape.id === targetId);
+            if (baseInsertIndex === -1) {
+                return prev;
+            }
+
+            const normalizedDrop = dropType === 'inside' || dropType === 'before' || dropType === 'after'
+                ? dropType
+                : 'after';
+
+            let insertIndex = baseInsertIndex;
+            let nextParentId = sourceShape.parentId ?? null;
+
+            if (normalizedDrop === 'inside') {
+                if (!isContainerShape(targetShape) || targetShape.locked) {
+                    return prev;
+                }
+                nextParentId = targetShape.id;
                 insertIndex += 1;
+            } else if (normalizedDrop === 'after') {
+                nextParentId = targetShape.parentId ?? null;
+                insertIndex += 1;
+                while (insertIndex < remaining.length) {
+                    const candidate = remaining[insertIndex];
+                    if (isDescendantOf(candidate.id, targetId, prev)) {
+                        insertIndex += 1;
+                    } else {
+                        break;
+                    }
+                }
+            } else if (normalizedDrop === 'before') {
+                nextParentId = targetShape.parentId ?? null;
             }
-            updated.splice(insertIndex, 0, item);
-            return updated;
+
+            const updatedSubtree = subtree.map((shape) => {
+                if (shape.id === sourceShape.id) {
+                    return { ...shape, parentId: nextParentId };
+                }
+                return shape;
+            });
+
+            const result = [
+                ...remaining.slice(0, insertIndex),
+                ...updatedSubtree,
+                ...remaining.slice(insertIndex),
+            ];
+            return result;
         });
     };
 
@@ -2789,9 +3622,23 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         if (!draggedLayerId || !targetId) return;
 
         const bounds = event.currentTarget.getBoundingClientRect();
-        const dropY = event.clientY;
-        const placeAfter = dropY > bounds.top + bounds.height / 2;
-        reorderLayers(draggedLayerId, targetId, placeAfter);
+        const relativeY = bounds.height ? (event.clientY - bounds.top) / bounds.height : 0.5;
+        let dropType = 'after';
+        if (relativeY < 0.25) dropType = 'before';
+        else if (relativeY > 0.75) dropType = 'after';
+        else dropType = 'inside';
+        const targetShape = shapesRef.current.find((shape) => shape.id === targetId) || null;
+        if (dropType === 'inside' && (!targetShape || !isContainerShape(targetShape) || targetShape.locked)) {
+            dropType = 'after';
+        }
+        reorderLayers(draggedLayerId, targetId, dropType);
+        if (dropType === 'inside') {
+            setCollapsedContainers((prev) => {
+                const next = new Set(prev);
+                next.delete(targetId);
+                return next;
+            });
+        }
         setDraggedLayerId(null);
         setDragOverLayerId(null);
         setDragOverZone(null);
@@ -2849,6 +3696,71 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         const layer = stage.getLayer ? stage.getLayer() : null;
         if (layer && typeof layer.batchDraw === 'function') layer.batchDraw();
     }, [scale, stagePos, shapes]);
+
+    const handlePagesSectionResizeStart = useCallback(
+        (event) => {
+            if (event.pointerType === 'mouse' && event.button !== 0) {
+                return;
+            }
+            const panelElement = sidePanelRef.current;
+            if (!panelElement) return;
+            if (typeof event.clientY !== 'number') return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const handleElement = event.currentTarget;
+            const pointerId = event.pointerId;
+            const startY = event.clientY;
+            const startHeight = pagesSectionHeight;
+
+            const applyHeight = (clientY) => {
+                if (typeof clientY !== 'number') return;
+                const delta = clientY - startY;
+                const rect = panelElement.getBoundingClientRect();
+                const maxHeight = rect.height - LAYERS_SECTION_MIN_HEIGHT;
+                const minHeight = PAGES_SECTION_MIN_HEIGHT;
+                const nextHeight = clampValue(
+                    startHeight + delta,
+                    minHeight,
+                    Math.max(minHeight, maxHeight)
+                );
+                setPagesSectionHeight((current) =>
+                    Math.abs(current - nextHeight) < 0.5 ? current : nextHeight
+                );
+            };
+
+            const handlePointerMove = (moveEvent) => {
+                applyHeight(moveEvent.clientY);
+            };
+
+            const handlePointerEnd = () => {
+                if (typeof handleElement.releasePointerCapture === 'function') {
+                    try {
+                        handleElement.releasePointerCapture(pointerId);
+                    } catch (error) {
+                        // ignore environments without pointer capture support
+                    }
+                }
+                handleElement.removeEventListener('pointermove', handlePointerMove);
+                handleElement.removeEventListener('pointerup', handlePointerEnd);
+                handleElement.removeEventListener('pointercancel', handlePointerEnd);
+            };
+
+            handleElement.addEventListener('pointermove', handlePointerMove);
+            handleElement.addEventListener('pointerup', handlePointerEnd);
+            handleElement.addEventListener('pointercancel', handlePointerEnd);
+
+            if (typeof handleElement.setPointerCapture === 'function') {
+                try {
+                    handleElement.setPointerCapture(pointerId);
+                } catch (error) {
+                    // ignore environments without pointer capture support
+                }
+            }
+        },
+        [pagesSectionHeight, sidePanelRef]
+    );
 
     const handleLayerResizeStart = useCallback(
         (event) => {
@@ -2910,198 +3822,303 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         [layerPanelWidth]
     );
 
-    const rootShapes = childrenMap.get(null) || [];
-
     return (
         <div style={{ display: 'flex', height: '100%' }}>
-            <aside
-                style={{
-                    flex: '0 0 auto',
-                    width: layerPanelWidth,
-                    minWidth: LAYER_PANEL_MIN_WIDTH,
-                    maxWidth: LAYER_PANEL_MAX_WIDTH,
-                    borderRight: '1px solid #e5e5e5',
-                    background: '#fdfdfd',
-                    padding: '12px 8px',
-                    boxSizing: 'border-box',
-                    overflowY: 'auto',
-                }}
+            <LayersPanel
+                ref={sidePanelRef}
+                width={layerPanelWidth}
+                minWidth={LAYER_PANEL_MIN_WIDTH}
+                maxWidth={LAYER_PANEL_MAX_WIDTH}
             >
-                <div style={{ fontWeight: 600, fontSize: 14, color: '#555', marginBottom: 8 }}>Layers</div>
-                {layerList.length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#888' }}>No shapes yet</div>
-                ) : (
-                    <>
-                        <div
-                            onDragOver={(event) => {
-                                if (!isDraggingLayer) return;
-                                event.preventDefault();
-                                setDragOverLayerId(null);
-                                setDragOverZone('top');
-                            }}
-                            onDragEnter={(event) => {
-                                if (!isDraggingLayer) return;
-                                event.preventDefault();
-                                setDragOverLayerId(null);
-                                setDragOverZone('top');
-                            }}
-                            onDragLeave={() => {
-                                setDragOverZone((zone) => (zone === 'top' ? null : zone));
-                            }}
-                            onDrop={(event) => {
-                                if (!isDraggingLayer || layerList.length === 0) return;
-                                event.preventDefault();
-                                const topShapeId = layerList[0]?.shape?.id;
-                                if (!topShapeId) return;
-                                reorderLayers(draggedLayerId, topShapeId, false);
-                                setDraggedLayerId(null);
-                                setDragOverLayerId(null);
-                                setDragOverZone(null);
-                            }}
-                            style={{
-                                height: isDraggingLayer ? 12 : 0,
-                                margin: isDraggingLayer ? '0 4px 8px' : 0,
-                                borderRadius: 6,
-                                border: isDraggingLayer
-                                    ? `1px dashed ${dragOverZone === 'top' ? '#4d90fe' : '#c7d7ff'}`
-                                    : '1px dashed transparent',
-                                transition: 'all 0.12s ease',
-                                pointerEvents: isDraggingLayer ? 'auto' : 'none',
-                            }}
-                        />
-                            {layerList.map(({ shape, depth }) => {
-                                const fallbackLabel = `${typeLabels[shape.type] || 'Shape'} ${shape.id}`;
-                                const label =
-                                    typeof shape.name === 'string' && shape.name.trim()
-                                        ? shape.name
-                                        : fallbackLabel;
-                                const isSelected = selectedIds.includes(shape.id);
-                            const swatchColor = shape.fill || shape.stroke || '#ccc';
-                            const isDragged = shape.id === draggedLayerId;
-                            const isDragOver =
-                                shape.id === dragOverLayerId && draggedLayerId !== dragOverLayerId;
-
-                            return (
+                <div
+                    style={{
+                        flex: '0 0 auto',
+                        height: pagesSectionHeight,
+                        minHeight: PAGES_SECTION_MIN_HEIGHT,
+                        borderBottom: '1px solid #e5e7eb',
+                        overflow: 'hidden',
+                    }}
+                >
+                    <PagesPanel
+                        pages={pages}
+                        activePageId={activePageId}
+                        counts={pageShapeCounts}
+                        onActivate={handleActivatePage}
+                        onAdd={handleAddPage}
+                        onRename={handleRenamePage}
+                        onDuplicate={handleDuplicatePage}
+                        onDelete={(pageId) => handleDeletePage(pageId)}
+                        onReorder={handleReorderPages}
+                        style={{ height: '100%' }}
+                    />
+                </div>
+                <div
+                    role="separator"
+                    aria-orientation="horizontal"
+                    onPointerDown={handlePagesSectionResizeStart}
+                    style={{
+                        flex: '0 0 auto',
+                        height: 8,
+                        padding: '2px 0',
+                        cursor: 'row-resize',
+                        display: 'flex',
+                        alignItems: 'stretch',
+                        touchAction: 'none',
+                        background: 'transparent',
+                    }}
+                >
+                    <div
+                        style={{
+                            flex: 1,
+                            borderTop: '1px solid #dfe3eb',
+                            borderBottom: '1px solid #dfe3eb',
+                            background: '#f3f5f9',
+                        }}
+                    />
+                </div>
+                <div
+                    style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        background: '#fdfdfd',
+                    }}
+                >
+                    <div
+                        style={{
+                            padding: '12px 12px 8px',
+                            fontWeight: 600,
+                            fontSize: 14,
+                            color: '#555',
+                            borderBottom: '1px solid #eaeaea',
+                        }}
+                    >
+                        Layers
+                    </div>
+                    <div
+                        style={{
+                            flex: 1,
+                            overflowY: 'auto',
+                            padding: '8px 12px 12px',
+                        }}
+                    >
+                        {layerList.length === 0 ? (
+                            <div style={{ fontSize: 12, color: '#888' }}>No shapes yet</div>
+                        ) : (
+                            <>
                                 <div
-                                    key={shape.id}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 4,
-                                        marginBottom: 4,
+                                    onDragOver={(event) => {
+                                        if (!isDraggingLayer) return;
+                                        event.preventDefault();
+                                        setDragOverLayerId(null);
+                                        setDragOverZone('top');
                                     }}
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={(e) => handleLayerSelect(shape.id, e)}
-                                        draggable
-                                        onDragStart={(event) => {
-                                            setDraggedLayerId(shape.id);
-                                            setDragOverLayerId(null);
-                                            if (event.dataTransfer) {
-                                                event.dataTransfer.effectAllowed = 'move';
-                                                try {
-                                                    event.dataTransfer.setData('text/plain', String(shape.id));
-                                                } catch (error) {
-                                                    // ignore if not supported
-                                                }
-                                            }
-                                        }}
-                                        onDragOver={(event) => {
-                                            event.preventDefault();
-                                            setDragOverLayerId(shape.id);
-                                            setDragOverZone(null);
-                                        }}
-                                        onDragEnter={(event) => {
-                                            event.preventDefault();
-                                            setDragOverLayerId(shape.id);
-                                            setDragOverZone(null);
-                                        }}
-                                        onDragLeave={(event) => {
-                                            if (!event.currentTarget.contains(event.relatedTarget)) {
-                                                setDragOverLayerId((current) => (current === shape.id ? null : current));
-                                                setDragOverZone(null);
-                                            }
-                                        }}
-                                        onDrop={(event) => handleLayerDrop(event, shape.id)}
-                                        onDragEnd={handleLayerDragEnd}
-                                        style={{
-                                            flex: 1,
-                                            textAlign: 'left',
-                                            padding: '6px 8px',
-                                            border: 'none',
-                                            background: isDragged
-                                                ? '#dbe9ff'
-                                                : isDragOver
-                                                    ? '#f0f6ff'
-                                                    : isSelected
-                                                        ? '#e8f2ff'
-                                                        : 'transparent',
-                                            borderRadius: 6,
-                                            cursor: isDragged ? 'grabbing' : 'grab',
-                                            color: '#222',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8,
-                                            opacity: isDragged ? 0.8 : 1,
-                                        }}
-                                    >
-                                        <span
-                                            aria-hidden="true"
+                                    onDragEnter={(event) => {
+                                        if (!isDraggingLayer) return;
+                                        event.preventDefault();
+                                        setDragOverLayerId(null);
+                                        setDragOverZone('top');
+                                    }}
+                                    onDragLeave={() => {
+                                        setDragOverZone((zone) => (zone === 'top' ? null : zone));
+                                    }}
+                                    onDrop={(event) => {
+                                        if (!isDraggingLayer || layerList.length === 0) return;
+                                        event.preventDefault();
+                                        const topShapeId = layerList[0]?.shape?.id;
+                                        if (!topShapeId) return;
+                                        reorderLayers(draggedLayerId, topShapeId, 'before');
+                                        setDraggedLayerId(null);
+                                        setDragOverLayerId(null);
+                                        setDragOverZone(null);
+                                    }}
+                                    style={{
+                                        height: isDraggingLayer ? 12 : 0,
+                                        margin: isDraggingLayer ? '0 0 8px' : 0,
+                                        borderRadius: 6,
+                                        border: isDraggingLayer
+                                            ? `1px dashed ${dragOverZone === 'top' ? '#4d90fe' : '#c7d7ff'}`
+                                            : '1px dashed transparent',
+                                        transition: 'all 0.12s ease',
+                                        pointerEvents: isDraggingLayer ? 'auto' : 'none',
+                                    }}
+                                />
+                                {layerList.map(({ shape, depth }) => {
+                                    const fallbackLabel = `${typeLabels[shape.type] || 'Shape'} ${shape.id}`;
+                                    const label =
+                                        typeof shape.name === 'string' && shape.name.trim()
+                                            ? shape.name
+                                            : fallbackLabel;
+                                    const isSelected = selectedIds.includes(shape.id);
+                                    const swatchColor = shape.fill || shape.stroke || '#ccc';
+                                    const isDragged = shape.id === draggedLayerId;
+                                    const isDragOver =
+                                        shape.id === dragOverLayerId && draggedLayerId !== dragOverLayerId;
+                                    const isContainer = isContainerShape(shape);
+                                    const isCollapsed = isContainer && collapsedContainers.has(shape.id);
+                                    const indent = depth * 16;
+
+                                    return (
+                                        <div
+                                            key={shape.id}
                                             style={{
-                                                display: 'inline-block',
-                                                width: 12,
-                                                height: 12,
-                                                borderRadius: 2,
-                                                background: swatchColor,
-                                                border: '1px solid rgba(0,0,0,0.12)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 4,
+                                                marginBottom: 4,
+                                                paddingLeft: indent,
                                             }}
-                                        />
-                                        <span style={{ fontSize: 13, marginLeft: depth * 12 }}>{label}</span>
-                                    </button>
-                                </div>
-                            );
-                        })}
-                        <div
-                            onDragOver={(event) => {
-                                if (!isDraggingLayer) return;
-                                event.preventDefault();
-                                setDragOverLayerId(null);
-                                setDragOverZone('bottom');
-                            }}
-                            onDragEnter={(event) => {
-                                if (!isDraggingLayer) return;
-                                event.preventDefault();
-                                setDragOverLayerId(null);
-                                setDragOverZone('bottom');
-                            }}
-                            onDragLeave={() => {
-                                setDragOverZone((zone) => (zone === 'bottom' ? null : zone));
-                            }}
-                            onDrop={(event) => {
-                                if (!isDraggingLayer || layerList.length === 0) return;
-                                event.preventDefault();
-                                const bottomShapeId = layerList[layerList.length - 1]?.shape?.id;
-                                if (!bottomShapeId) return;
-                                reorderLayers(draggedLayerId, bottomShapeId, true);
-                                setDraggedLayerId(null);
-                                setDragOverLayerId(null);
-                                setDragOverZone(null);
-                            }}
-                            style={{
-                                height: isDraggingLayer ? 12 : 0,
-                                margin: isDraggingLayer ? '8px 4px 0' : 0,
-                                borderRadius: 6,
-                                border: isDraggingLayer
-                                    ? `1px dashed ${dragOverZone === 'bottom' ? '#4d90fe' : '#c7d7ff'}`
-                                    : '1px dashed transparent',
-                                transition: 'all 0.12s ease',
-                                pointerEvents: isDraggingLayer ? 'auto' : 'none',
-                            }}
-                        />
-                    </>
-                )}
-            </aside>
+                                        >
+                                            {isContainer ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        toggleLayerCollapse(shape.id);
+                                                    }}
+                                                    style={{
+                                                        width: 18,
+                                                        height: 18,
+                                                        border: 'none',
+                                                        background: 'transparent',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: '#64748b',
+                                                        fontSize: 10,
+                                                    }}
+                                                    aria-label={isCollapsed ? 'Expand layer' : 'Collapse layer'}
+                                                >
+                                                    <span
+                                                        style={{
+                                                            display: 'inline-block',
+                                                            transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                                                            transition: 'transform 0.12s ease',
+                                                        }}
+                                                    >
+                                                        ▶
+                                                    </span>
+                                                </button>
+                                            ) : (
+                                                <span style={{ width: 18 }} />
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => handleLayerSelect(shape.id, e)}
+                                                draggable
+                                                onDragStart={(event) => {
+                                                    setDraggedLayerId(shape.id);
+                                                    setDragOverLayerId(null);
+                                                    if (event.dataTransfer) {
+                                                        event.dataTransfer.effectAllowed = 'move';
+                                                        try {
+                                                            event.dataTransfer.setData('text/plain', String(shape.id));
+                                                        } catch (error) {
+                                                            // ignore if not supported
+                                                        }
+                                                    }
+                                                }}
+                                                onDragOver={(event) => {
+                                                    event.preventDefault();
+                                                    setDragOverLayerId(shape.id);
+                                                    setDragOverZone(null);
+                                                }}
+                                                onDragEnter={(event) => {
+                                                    event.preventDefault();
+                                                    setDragOverLayerId(shape.id);
+                                                    setDragOverZone(null);
+                                                }}
+                                                onDragLeave={(event) => {
+                                                    if (!event.currentTarget.contains(event.relatedTarget)) {
+                                                        setDragOverLayerId((current) =>
+                                                            current === shape.id ? null : current
+                                                        );
+                                                        setDragOverZone(null);
+                                                    }
+                                                }}
+                                                onDrop={(event) => handleLayerDrop(event, shape.id)}
+                                                onDragEnd={handleLayerDragEnd}
+                                                style={{
+                                                    flex: 1,
+                                                    textAlign: 'left',
+                                                    padding: '6px 8px',
+                                                    border: 'none',
+                                                    background: isDragged
+                                                        ? '#dbe9ff'
+                                                        : isDragOver
+                                                            ? '#f0f6ff'
+                                                            : isSelected
+                                                                ? '#e8f2ff'
+                                                                : 'transparent',
+                                                    borderRadius: 6,
+                                                    cursor: isDragged ? 'grabbing' : 'grab',
+                                                    color: '#222',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 8,
+                                                    opacity: isDragged ? 0.8 : 1,
+                                                }}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    style={{
+                                                        display: 'inline-block',
+                                                        width: 12,
+                                                        height: 12,
+                                                        borderRadius: 2,
+                                                        background: swatchColor,
+                                                        border: '1px solid rgba(0,0,0,0.12)',
+                                                    }}
+                                                />
+                                                <span style={{ fontSize: 13 }}>{label}</span>
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                                <div
+                                    onDragOver={(event) => {
+                                        if (!isDraggingLayer) return;
+                                        event.preventDefault();
+                                        setDragOverLayerId(null);
+                                        setDragOverZone('bottom');
+                                    }}
+                                    onDragEnter={(event) => {
+                                        if (!isDraggingLayer) return;
+                                        event.preventDefault();
+                                        setDragOverLayerId(null);
+                                        setDragOverZone('bottom');
+                                    }}
+                                    onDragLeave={() => {
+                                        setDragOverZone((zone) => (zone === 'bottom' ? null : zone));
+                                    }}
+                                    onDrop={(event) => {
+                                        if (!isDraggingLayer || layerList.length === 0) return;
+                                        event.preventDefault();
+                                        const bottomShapeId = layerList[layerList.length - 1]?.shape?.id;
+                                        if (!bottomShapeId) return;
+                                        reorderLayers(draggedLayerId, bottomShapeId, 'after');
+                                        setDraggedLayerId(null);
+                                        setDragOverLayerId(null);
+                                        setDragOverZone(null);
+                                    }}
+                                    style={{
+                                        height: isDraggingLayer ? 12 : 0,
+                                        margin: isDraggingLayer ? '8px 0 0' : 0,
+                                        borderRadius: 6,
+                                        border: isDraggingLayer
+                                            ? `1px dashed ${dragOverZone === 'bottom' ? '#4d90fe' : '#c7d7ff'}`
+                                            : '1px dashed transparent',
+                                        transition: 'all 0.12s ease',
+                                        pointerEvents: isDraggingLayer ? 'auto' : 'none',
+                                    }}
+                                />
+                            </>
+                        )}
+                    </div>
+                </div>
+            </LayersPanel>
 
             <div
                 role="separator"
@@ -3160,15 +4177,44 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                     onDblClick={(e) => handleStageDoubleClick(e)}
                 >
                     <Layer>
-                        {rootShapes.map((shape) => renderShapeTree(shape))}
+                        {getChildrenForRendering(null).map((shape) => renderShapeTree(shape))}
 
                         <Transformer
                             ref={trRef}
                             rotationEnabled={false}
                             rotateEnabled={false}
                             rotationAnchorOffset={-9999}
-                            enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+                            enabledAnchors={[
+                                'top-left',
+                                'top-center',
+                                'top-right',
+                                'middle-right',
+                                'bottom-right',
+                                'bottom-center',
+                                'bottom-left',
+                                'middle-left',
+                            ]}
+                            hitStrokeWidth={24}
+                            keepRatio={false}
+                            centeredScaling={false}
                         />
+                    </Layer>
+                    <Layer listening={false}>
+                        {marqueeRect && marqueeRect.width > 0 && marqueeRect.height > 0 && (
+                            <Rect
+                                x={marqueeRect.x}
+                                y={marqueeRect.y}
+                                width={marqueeRect.width}
+                                height={marqueeRect.height}
+                                stroke="#4d90fe"
+                                strokeWidth={1}
+                                dash={[6, 4]}
+                                fill="rgba(77, 144, 254, 0.12)"
+                                listening={false}
+                                shadowForStrokeEnabled={false}
+                                perfectDrawEnabled={false}
+                            />
+                        )}
                     </Layer>
                     <Layer listening={selectedTool === 'select'}>{renderGradientHandles()}</Layer>
                 </Stage>
