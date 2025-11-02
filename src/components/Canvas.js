@@ -27,6 +27,30 @@ const LAYER_PANEL_MIN_WIDTH = 240;
 const LAYER_PANEL_MAX_WIDTH = 500;
 const LAYER_PANEL_DEFAULT_WIDTH = 280;
 
+const CONTAINER_TYPES = ['frame', 'group'];
+
+const isContainerShape = (shape) => Boolean(shape && CONTAINER_TYPES.includes(shape.type));
+
+const SHAPE_LABELS = {
+    frame: 'Frame',
+    group: 'Group',
+    rectangle: 'Rectangle',
+    circle: 'Circle',
+    ellipse: 'Ellipse',
+    line: 'Line',
+    pen: 'Pen',
+    text: 'Text',
+};
+
+const BLEND_MODE_TO_COMPOSITE = {
+    normal: 'source-over',
+    multiply: 'multiply',
+    screen: 'screen',
+    overlay: 'overlay',
+    darken: 'darken',
+    lighten: 'lighten',
+};
+
 const getShapeDimensions = (shape) => {
     switch (shape.type) {
         case 'rectangle':
@@ -146,6 +170,16 @@ export default function Canvas({
     const stageRef = useRef(null);
     const trRef = useRef(null);
     const idCounterRef = useRef(1); // stable id generator
+    const shapeCountersRef = useRef({
+        frame: 1,
+        group: 1,
+        rectangle: 1,
+        circle: 1,
+        ellipse: 1,
+        line: 1,
+        pen: 1,
+        text: 1,
+    });
     const stageContainerRef = useRef(null);
     // panning (hand tool)
     const isPanningRef = useRef(false);
@@ -161,7 +195,191 @@ export default function Canvas({
     useEffect(() => {
         shapesRef.current = shapes;
     }, [shapes]);
+    const [activeContainerPath, setActiveContainerPath] = useState([null]);
+    const fillPreviewRef = useRef(null);
     const gradientPatternCacheRef = useRef(new Map());
+    const activeContainerPathRef = useRef(activeContainerPath);
+    useEffect(() => {
+        activeContainerPathRef.current = activeContainerPath;
+    }, [activeContainerPath]);
+
+    const allocateShapeId = () => {
+        const nextId = idCounterRef.current;
+        idCounterRef.current += 1;
+        return nextId;
+    };
+
+    const getNextShapeName = (type) => {
+        const base = SHAPE_LABELS[type] || 'Layer';
+        const counters = shapeCountersRef.current;
+        const next = counters[type] || 1;
+        counters[type] = next + 1;
+        return `${base} ${next}`;
+    };
+
+    const getActiveContainerId = () => {
+        const path = activeContainerPathRef.current;
+        if (!Array.isArray(path) || path.length === 0) return null;
+        const last = path[path.length - 1];
+        return last ?? null;
+    };
+
+    const createShape = (type, overrides = {}) => {
+        const id = overrides.id ?? allocateShapeId();
+        const parentId =
+            overrides.parentId !== undefined
+                ? overrides.parentId
+                : getActiveContainerId();
+        const shape = {
+            id,
+            type,
+            name: overrides.name || getNextShapeName(type),
+            parentId: parentId ?? null,
+            visible: overrides.visible ?? true,
+            locked: overrides.locked ?? false,
+            opacity: clampValue(
+                typeof overrides.opacity === 'number' ? overrides.opacity : 1,
+                0,
+                1
+            ),
+            blendMode: overrides.blendMode || 'normal',
+            ...overrides,
+        };
+        return shape;
+    };
+
+    const getShapeById = (id, source = shapesRef.current) => {
+        if (id == null) return null;
+        return source.find((shape) => shape.id === id) || null;
+    };
+
+    const getParentShape = (shape, source = shapesRef.current) => {
+        if (!shape || shape.parentId == null) return null;
+        return getShapeById(shape.parentId, source);
+    };
+
+    const getContainerAncestor = (shape, source = shapesRef.current) => {
+        let current = shape;
+        while (current) {
+            if (isContainerShape(current)) return current;
+            current = getParentShape(current, source);
+        }
+        return null;
+    };
+
+    const getContainerPathForId = (shapeId, source = shapesRef.current) => {
+        const path = [];
+        let current = getShapeById(shapeId, source);
+        while (current) {
+            if (isContainerShape(current)) {
+                path.unshift(current.id);
+            }
+            current = getParentShape(current, source);
+        }
+        return path;
+    };
+
+    const collectDescendantIds = (source, ancestorId) => {
+        const result = [];
+        if (ancestorId == null) return result;
+        const queue = [ancestorId];
+        while (queue.length) {
+            const currentId = queue.shift();
+            source.forEach((shape) => {
+                if (shape.parentId === currentId) {
+                    result.push(shape.id);
+                    queue.push(shape.id);
+                }
+            });
+        }
+        return result;
+    };
+
+    const isDescendantOf = (shapeId, ancestorId, source = shapesRef.current) => {
+        if (shapeId == null || ancestorId == null) return false;
+        let current = getShapeById(shapeId, source);
+        while (current) {
+            if (current.parentId === ancestorId) return true;
+            current = getParentShape(current, source);
+        }
+        return false;
+    };
+
+    const scaleChildWithinContainer = (
+        shape,
+        prevContainer,
+        nextContainer,
+        scaleX,
+        scaleY
+    ) => {
+        const prevX = prevContainer?.x || 0;
+        const prevY = prevContainer?.y || 0;
+        const nextX = nextContainer?.x || 0;
+        const nextY = nextContainer?.y || 0;
+        const offsetX = (shape.x || 0) - prevX;
+        const offsetY = (shape.y || 0) - prevY;
+        const updated = {
+            ...shape,
+            x: nextX + offsetX * scaleX,
+            y: nextY + offsetY * scaleY,
+        };
+
+        switch (shape.type) {
+            case 'rectangle':
+            case 'frame':
+            case 'group':
+                return {
+                    ...updated,
+                    width: Math.max(1, (shape.width || 0) * scaleX),
+                    height: Math.max(1, (shape.height || 0) * scaleY),
+                };
+            case 'circle': {
+                const radius = shape.radius || 0;
+                const scaledRadius = Math.max(1, radius * Math.max(scaleX, scaleY));
+                return { ...updated, radius: scaledRadius };
+            }
+            case 'ellipse':
+                return {
+                    ...updated,
+                    radiusX: Math.max(1, (shape.radiusX || 0) * scaleX),
+                    radiusY: Math.max(1, (shape.radiusY || 0) * scaleY),
+                };
+            case 'line': {
+                const points = Array.isArray(shape.points) ? [...shape.points] : [];
+                const scaledPoints = points.map((value, index) => {
+                    if (index % 2 === 0) {
+                        const absolute = value - prevX;
+                        return nextX + absolute * scaleX;
+                    }
+                    const absolute = value - prevY;
+                    return nextY + absolute * scaleY;
+                });
+                return { ...updated, points: scaledPoints };
+            }
+            case 'pen': {
+                const points = Array.isArray(shape.points) ? [...shape.points] : [];
+                const scaledPoints = points.map((value, index) => {
+                    if (index % 2 === 0) {
+                        const absolute = value - prevX;
+                        return nextX + absolute * scaleX;
+                    }
+                    const absolute = value - prevY;
+                    return nextY + absolute * scaleY;
+                });
+                return { ...updated, points: scaledPoints };
+            }
+            case 'text': {
+                const averageScale = (scaleX + scaleY) / 2;
+                return {
+                    ...updated,
+                    fontSize: Math.max(1, (shape.fontSize || textFontSize) * averageScale),
+                    lineHeight: Math.max(0.1, (shape.lineHeight || textLineHeight) * scaleY),
+                };
+            }
+            default:
+                return updated;
+        }
+    };
 
     // zoom state
     const [scale, setScale] = useState(1);
@@ -275,16 +493,18 @@ export default function Canvas({
     const HISTORY_LIMIT = 100;
 
     // helper to record history and apply changes
-    const applyChange = (updater) => {
-        const prev = shapesRef.current;
-        const next = typeof updater === 'function' ? updater(prev) : updater;
-        // push prev into past
-        pastRef.current.push(prev);
-        if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
-        // clear future on new change
-        futureRef.current = [];
-        setShapes(next);
-    };
+    const applyChange = useCallback(
+        (updater, options = {}) => {
+            const prev = shapesRef.current;
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            const baseState = options.baseState || prev;
+            pastRef.current.push(baseState);
+            if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
+            futureRef.current = [];
+            setShapes(next);
+        },
+        []
+    );
 
     const undo = () => {
         const past = pastRef.current;
@@ -332,10 +552,15 @@ export default function Canvas({
     }, [selectedTool, selectedId]);
 
     useEffect(() => {
+        if (fillPreviewRef.current?.isPreview) return;
         if (typeof onSelectionChange !== 'function') return;
         const shape = selectedId ? shapes.find((s) => s.id === selectedId) : null;
         onSelectionChange(shape ? { ...shape } : null);
     }, [selectedId, shapes, onSelectionChange]);
+
+    useEffect(() => {
+        fillPreviewRef.current = null;
+    }, [selectedId]);
 
     // keyboard shortcuts
     useEffect(() => {
@@ -355,7 +580,24 @@ export default function Canvas({
             // 🗑 Delete or Backspace key
             if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
                 e.preventDefault();
-                applyChange((prev) => prev.filter((shape) => shape.id !== selectedId));
+                applyChange((prev) => {
+                    const removalIds = new Set([selectedId]);
+                    collectDescendantIds(prev, selectedId).forEach((childId) =>
+                        removalIds.add(childId)
+                    );
+                    return prev.filter((shape) => !removalIds.has(shape.id));
+                });
+                setSelectedId(null);
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setActiveContainerPath((current) => {
+                    if (!Array.isArray(current) || current.length <= 1) {
+                        return [null];
+                    }
+                    return current.slice(0, -1);
+                });
                 setSelectedId(null);
                 return;
             }
@@ -386,40 +628,122 @@ export default function Canvas({
         const shape = shapesRef.current.find((s) => s.id === selectedId);
         if (!shape) return;
         if (!['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type)) return;
-        const currentType = typeof shape.fillType === 'string' ? shape.fillType : 'solid';
 
-        if (resolvedFillType === 'gradient' && resolvedFillGradient) {
-            const currentGradient =
-                currentType === 'gradient' ? normalizeGradient(shape.fillGradient) : null;
-            if (currentType === 'gradient' && currentGradient && gradientStopsEqual(currentGradient, resolvedFillGradient)) {
-                return;
+        const meta = fillStyle?.meta;
+        const interactionId =
+            meta && (typeof meta.interactionId === 'number' || typeof meta.interactionId === 'string')
+                ? meta.interactionId
+                : null;
+        const isPreview = Boolean(meta && meta.isPreview === true && interactionId != null);
+        const isFinalizing = Boolean(
+            meta &&
+                meta.isPreview === false &&
+                interactionId != null &&
+                fillPreviewRef.current &&
+                fillPreviewRef.current.interactionId === interactionId
+        );
+
+        const currentType = typeof shape.fillType === 'string' ? shape.fillType : 'solid';
+        const currentFill = typeof shape.fill === 'string' ? shape.fill : '';
+        const targetGradient =
+            resolvedFillType === 'gradient' && resolvedFillGradient
+                ? normalizeGradient(resolvedFillGradient)
+                : null;
+        const currentGradient =
+            currentType === 'gradient' && shape.fillGradient
+                ? normalizeGradient(shape.fillGradient)
+                : null;
+
+        const updater = (source) =>
+            source.map((s) => {
+                if (s.id !== selectedId) return s;
+                if (targetGradient) {
+                    return {
+                        ...s,
+                        fill: getGradientFirstColor(targetGradient, resolvedFillColor),
+                        fillType: 'gradient',
+                        fillGradient: targetGradient,
+                    };
+                }
+                return {
+                    ...s,
+                    fill: resolvedFillColor,
+                    fillType: resolvedFillType,
+                    fillGradient: null,
+                };
+            });
+
+        const needsUpdate = targetGradient
+            ? currentType !== 'gradient' ||
+              !currentGradient ||
+              !gradientStopsEqual(currentGradient, targetGradient)
+            : currentType !== resolvedFillType ||
+              (currentType === 'gradient' && resolvedFillType !== 'gradient') ||
+              currentFill !== resolvedFillColor;
+
+        if (isPreview) {
+            const previewState = fillPreviewRef.current;
+            if (!previewState || previewState.interactionId !== interactionId) {
+                fillPreviewRef.current = {
+                    interactionId,
+                    baseState: shapesRef.current,
+                    isPreview: true,
+                };
+            } else {
+                previewState.isPreview = true;
             }
-            applyChange((prev) =>
-                prev.map((s) =>
-                    s.id === selectedId
-                        ? {
-                              ...s,
-                              fill: getGradientFirstColor(resolvedFillGradient, resolvedFillColor),
-                              fillType: 'gradient',
-                              fillGradient: resolvedFillGradient,
-                          }
-                        : s
-                )
-            );
+            if (needsUpdate) {
+                setShapes((prevShapes) => updater(prevShapes));
+            }
             return;
         }
 
-        const currentFill = typeof shape.fill === 'string' ? shape.fill : '';
-        if (currentFill === resolvedFillColor && currentType === resolvedFillType) return;
-        applyChange((prev) =>
-            prev.map((s) =>
-                s.id === selectedId
-                    ? { ...s, fill: resolvedFillColor, fillType: resolvedFillType, fillGradient: null }
-                    : s
-            )
-        );
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [resolvedFillColor, resolvedFillType, resolvedFillGradient]);
+        const previewState = fillPreviewRef.current;
+        if (isFinalizing) {
+            fillPreviewRef.current = null;
+            const baseState = previewState?.baseState || shapesRef.current;
+            const baseShape = previewState?.baseState?.find((s) => s.id === selectedId);
+            let changedFromBase = true;
+            if (baseShape) {
+                const baseType = typeof baseShape.fillType === 'string' ? baseShape.fillType : 'solid';
+                const baseColor = typeof baseShape.fill === 'string' ? baseShape.fill : '';
+                const baseGradient =
+                    baseType === 'gradient' && baseShape.fillGradient
+                        ? normalizeGradient(baseShape.fillGradient)
+                        : null;
+                if (targetGradient) {
+                    if (baseType === 'gradient' && baseGradient) {
+                        changedFromBase = !gradientStopsEqual(baseGradient, targetGradient);
+                    } else {
+                        changedFromBase = true;
+                    }
+                } else if (baseGradient) {
+                    changedFromBase = true;
+                } else {
+                    changedFromBase =
+                        baseType !== resolvedFillType || baseColor !== resolvedFillColor;
+                }
+            }
+            if (!changedFromBase) {
+                return;
+            }
+            applyChange(updater, { baseState });
+            return;
+        }
+
+        fillPreviewRef.current = null;
+        if (!needsUpdate) {
+            return;
+        }
+        applyChange(updater);
+    }, [
+        applyChange,
+        fillStyle?.meta,
+        resolvedFillColor,
+        resolvedFillGradient,
+        resolvedFillType,
+        selectedId,
+    ]);
 
     useEffect(() => {
         if (!selectedId) return;
@@ -483,35 +807,43 @@ export default function Canvas({
     const handleStageMouseDown = (e) => {
         const stage = stageRef.current;
         if (!stage) return;
-        const clickedOnEmpty = e.target === stage;
+        const targetNode = e.target;
+        const targetName =
+            targetNode && typeof targetNode.name === 'function' ? targetNode.name() : '';
+        const containerIdFromTarget = (() => {
+            if (!['frame', 'group'].includes(targetName)) return null;
+            if (!targetNode || typeof targetNode.id !== 'function') return null;
+            const idValue = targetNode.id();
+            const match = /^shape-(\d+)$/.exec(idValue || '');
+            if (!match) return null;
+            const parsed = Number(match[1]);
+            return Number.isFinite(parsed) ? parsed : null;
+        })();
+        const clickedOnEmpty = targetNode === stage || containerIdFromTarget != null;
 
         // PEN tool: begin freehand stroke anywhere
         if (selectedTool === 'pen') {
             const effectiveStrokeWidth = typeof strokeWidth === 'number' && strokeWidth > 0 ? strokeWidth : 1;
             const pos = getCanvasPointer();
             if (!pos) return;
-            const newId = idCounterRef.current++;
+            const newShape = createShape('pen', {
+                parentId: containerIdFromTarget ?? undefined,
+                x: 0,
+                y: 0,
+                points: [pos.x, pos.y],
+                stroke: resolvedStrokeColor,
+                strokeType: resolvedStrokeType,
+                strokeWidth: effectiveStrokeWidth,
+                lineCap: 'round',
+                lineJoin: 'round',
+                tension: 0.4,
+                rotation: 0,
+            });
             isDrawingRef.current = true;
-            currentDrawingIdRef.current = newId;
+            currentDrawingIdRef.current = newShape.id;
             drawingStartRef.current = pos;
             setSelectedId(null);
-            applyChange((prev) => [
-                ...prev,
-                {
-                    id: newId,
-                    type: 'pen',
-                    x: 0,
-                    y: 0,
-                    points: [pos.x, pos.y],
-                    stroke: resolvedStrokeColor,
-                    strokeType: resolvedStrokeType,
-                    strokeWidth: effectiveStrokeWidth,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                    tension: 0.4,
-                    rotation: 0,
-                },
-            ]);
+            applyChange((prev) => [...prev, newShape]);
             return;
         }
 
@@ -530,21 +862,20 @@ export default function Canvas({
         if (clickedOnEmpty) setSelectedId(null);
 
         // start drag-create for supported tools
-        const dragTools = ['rectangle', 'circle', 'ellipse', 'line'];
+        const dragTools = ['rectangle', 'circle', 'ellipse', 'line', 'frame', 'group'];
         if (clickedOnEmpty && dragTools.includes(selectedTool)) {
             const pos = getCanvasPointer();
             if (!pos) return;
-            const newId = idCounterRef.current++;
-            currentDrawingIdRef.current = newId;
-            drawingStartRef.current = pos;
-            isDrawingRef.current = true;
+            const baseProps = {
+                x: pos.x,
+                y: pos.y,
+                rotation: 0,
+                parentId: containerIdFromTarget ?? undefined,
+            };
             let newShape = null;
             if (selectedTool === 'rectangle') {
-                newShape = {
-                    id: newId,
-                    type: 'rectangle',
-                    x: pos.x,
-                    y: pos.y,
+                newShape = createShape('rectangle', {
+                    ...baseProps,
                     width: 1,
                     height: 1,
                     fill: resolvedFillColor,
@@ -553,14 +884,10 @@ export default function Canvas({
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
-                    rotation: 0,
-                };
+                });
             } else if (selectedTool === 'circle') {
-                newShape = {
-                    id: newId,
-                    type: 'circle',
-                    x: pos.x,
-                    y: pos.y,
+                newShape = createShape('circle', {
+                    ...baseProps,
                     radius: 1,
                     fill: resolvedFillColor,
                     fillType: resolvedFillType,
@@ -568,14 +895,10 @@ export default function Canvas({
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
-                    rotation: 0,
-                };
+                });
             } else if (selectedTool === 'ellipse') {
-                newShape = {
-                    id: newId,
-                    type: 'ellipse',
-                    x: pos.x,
-                    y: pos.y,
+                newShape = createShape('ellipse', {
+                    ...baseProps,
                     radiusX: 1,
                     radiusY: 1,
                     fill: resolvedFillColor,
@@ -584,23 +907,43 @@ export default function Canvas({
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
-                    rotation: 0,
-                };
+                });
             } else if (selectedTool === 'line') {
                 const effectiveStrokeWidth = typeof strokeWidth === 'number' && strokeWidth > 0 ? strokeWidth : 1;
-                newShape = {
-                    id: newId,
-                    type: 'line',
+                newShape = createShape('line', {
                     points: [pos.x, pos.y, pos.x, pos.y],
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: effectiveStrokeWidth,
                     rotation: 0,
-                };
+                    parentId: containerIdFromTarget ?? undefined,
+                });
+            } else if (selectedTool === 'frame') {
+                newShape = createShape('frame', {
+                    ...baseProps,
+                    width: 1,
+                    height: 1,
+                    clipContent: true,
+                    fill: resolvedFillColor,
+                    fillType: resolvedFillType,
+                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
+                    stroke: resolvedStrokeColor,
+                    strokeType: resolvedStrokeType,
+                    strokeWidth: strokeWidth || 0,
+                });
+            } else if (selectedTool === 'group') {
+                newShape = createShape('group', {
+                    ...baseProps,
+                    width: 1,
+                    height: 1,
+                });
             }
             if (!newShape) return;
+            currentDrawingIdRef.current = newShape.id;
+            drawingStartRef.current = pos;
+            isDrawingRef.current = true;
             applyChange((prev) => [...prev, newShape]);
-            setSelectedId(newId);
+            setSelectedId(newShape.id);
             return;
         }
 
@@ -609,36 +952,31 @@ export default function Canvas({
         if (!clickedOnEmpty) return;
         const pointerPos = getCanvasPointer();
         if (!pointerPos) return;
-        const newId = idCounterRef.current++;
-
         if (selectedTool === 'text') {
-            applyChange((prev) => [
-                ...prev,
-                {
-                    id: newId,
-                    type: 'text',
-                    x: pointerPos.x,
-                    y: pointerPos.y,
-                    text: 'Text',
-                    fill: resolvedFillColor,
-                    fillType: resolvedFillType,
-                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
-                    stroke: resolvedStrokeColor,
-                    strokeType: resolvedStrokeType,
-                    strokeWidth: strokeWidth || 0,
-                    rotation: 0,
-                    fontFamily: resolvedTextOptions.fontFamily,
-                    fontStyle: resolvedTextOptions.fontStyle,
-                    fontSize: resolvedTextOptions.fontSize,
-                    lineHeight: resolvedTextOptions.lineHeight,
-                    letterSpacing: resolvedTextOptions.letterSpacing,
-                    align: resolvedTextOptions.align,
-                    verticalAlign: resolvedTextOptions.verticalAlign,
-                    textDecoration: resolvedTextOptions.textDecoration,
-                },
-            ]);
-            pendingTextEditRef.current = newId;
-            setSelectedId(newId);
+            const newShape = createShape('text', {
+                x: pointerPos.x,
+                y: pointerPos.y,
+                text: 'Text',
+                parentId: containerIdFromTarget ?? undefined,
+                fill: resolvedFillColor,
+                fillType: resolvedFillType,
+                fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
+                stroke: resolvedStrokeColor,
+                strokeType: resolvedStrokeType,
+                strokeWidth: strokeWidth || 0,
+                rotation: 0,
+                fontFamily: resolvedTextOptions.fontFamily,
+                fontStyle: resolvedTextOptions.fontStyle,
+                fontSize: resolvedTextOptions.fontSize,
+                lineHeight: resolvedTextOptions.lineHeight,
+                letterSpacing: resolvedTextOptions.letterSpacing,
+                align: resolvedTextOptions.align,
+                verticalAlign: resolvedTextOptions.verticalAlign,
+                textDecoration: resolvedTextOptions.textDecoration,
+            });
+            applyChange((prev) => [...prev, newShape]);
+            pendingTextEditRef.current = newShape.id;
+            setSelectedId(newShape.id);
             if (typeof onToolChange === 'function') onToolChange('select');
         }
     };
@@ -669,6 +1007,15 @@ export default function Canvas({
                 prev.map((s) => {
                     if (s.id !== id) return s;
                     if (s.type === 'rectangle') {
+                        const dx = pos.x - start.x;
+                        const dy = pos.y - start.y;
+                        const width = Math.max(2, Math.abs(dx));
+                        const height = Math.max(2, Math.abs(dy));
+                        const cx = start.x + dx / 2;
+                        const cy = start.y + dy / 2;
+                        return { ...s, x: cx, y: cy, width, height };
+                    }
+                    if (s.type === 'frame' || s.type === 'group') {
                         const dx = pos.x - start.x;
                         const dy = pos.y - start.y;
                         const width = Math.max(2, Math.abs(dx));
@@ -729,6 +1076,7 @@ export default function Canvas({
                     if (s.id !== id) return true;
                     let keep = true;
                     if (s.type === 'rectangle') keep = s.width >= 5 && s.height >= 5;
+                    else if (s.type === 'frame' || s.type === 'group') keep = s.width >= 5 && s.height >= 5;
                     else if (s.type === 'circle') keep = s.radius >= 3;
                     else if (s.type === 'ellipse') keep = s.radiusX >= 3 && s.radiusY >= 3;
                     else if (s.type === 'line') keep = !(Math.abs(s.points[0] - s.points[2]) < 2 && Math.abs(s.points[1] - s.points[3]) < 2);
@@ -750,6 +1098,16 @@ export default function Canvas({
         isPanningRef.current = false;
         const container = stage.container();
         if (container) container.style.cursor = 'grab';
+    };
+
+    const handleStageDoubleClick = () => {
+        setActiveContainerPath((current) => {
+            if (!Array.isArray(current) || current.length <= 1) {
+                return [null];
+            }
+            return current.slice(0, -1);
+        });
+        setSelectedId(null);
     };
 
     // update cursor when selectedTool changes
@@ -809,18 +1167,76 @@ export default function Canvas({
     const handleDragMove = (id, e) => {
         const x = e.target.x();
         const y = e.target.y();
-        setShapes((prev) => prev.map((s) => (s.id === id ? { ...s, x, y } : s)));
+        const current = shapesRef.current.find((shape) => shape.id === id);
+        const deltaX = current ? x - (current.x || 0) : 0;
+        const deltaY = current ? y - (current.y || 0) : 0;
+        setShapes((prev) =>
+            prev.map((s) => {
+                if (s.id === id) {
+                    return { ...s, x, y };
+                }
+                if (current && isContainerShape(current) && isDescendantOf(s.id, id, prev)) {
+                    return { ...s, x: (s.x || 0) + deltaX, y: (s.y || 0) + deltaY };
+                }
+                return s;
+            })
+        );
     };
 
     const handleDragEnd = (id, e) => {
         const x = e.target.x();
         const y = e.target.y();
-        applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, x, y } : s)));
+        const current = shapesRef.current.find((shape) => shape.id === id);
+        const deltaX = current ? x - (current.x || 0) : 0;
+        const deltaY = current ? y - (current.y || 0) : 0;
+        applyChange((prev) =>
+            prev.map((s) => {
+                if (s.id === id) {
+                    return { ...s, x, y };
+                }
+                if (current && isContainerShape(current) && isDescendantOf(s.id, id, prev)) {
+                    return { ...s, x: (s.x || 0) + deltaX, y: (s.y || 0) + deltaY };
+                }
+                return s;
+            })
+        );
     };
 
     const handleTransformEnd = (shape, node) => {
         const id = shape.id;
-        if (shape.type === 'rectangle') {
+        if (shape.type === 'frame' || shape.type === 'group') {
+            const scaleX = node.scaleX();
+            const scaleY = node.scaleY();
+            const newWidth = Math.max(5, node.width() * scaleX);
+            const newHeight = Math.max(5, node.height() * scaleY);
+            node.scaleX(1);
+            node.scaleY(1);
+            const nextX = node.x();
+            const nextY = node.y();
+            const prevShape = shapesRef.current.find((s) => s.id === id);
+            const prevWidth = prevShape?.width || 1;
+            const prevHeight = prevShape?.height || 1;
+            const scaleFactorX = prevWidth ? newWidth / prevWidth : 1;
+            const scaleFactorY = prevHeight ? newHeight / prevHeight : 1;
+            const nextContainer = { x: nextX, y: nextY };
+            applyChange((prev) =>
+                prev.map((s) => {
+                    if (s.id === id) {
+                        return { ...s, x: nextX, y: nextY, width: newWidth, height: newHeight };
+                    }
+                    if (isDescendantOf(s.id, id, prev) && prevShape) {
+                        return scaleChildWithinContainer(
+                            s,
+                            prevShape,
+                            { ...nextContainer },
+                            scaleFactorX,
+                            scaleFactorY
+                        );
+                    }
+                    return s;
+                })
+            );
+        } else if (shape.type === 'rectangle') {
             const scaleX = node.scaleX();
             const scaleY = node.scaleY();
             const newWidth = Math.max(5, node.width() * scaleX);
@@ -1072,6 +1488,45 @@ export default function Canvas({
         } else {
             setStageCursor('crosshair');
         }
+    };
+
+    const handleShapeClick = (shape, event) => {
+        if (!shape) return;
+        if (event && typeof event.cancelBubble !== 'undefined') {
+            event.cancelBubble = true;
+        }
+        if (selectedTool !== 'select') return;
+        if (shape?.locked) return;
+        if (isContainerShape(shape)) {
+            setSelectedId(shape.id);
+            return;
+        }
+        const containerAncestor = getContainerAncestor(shape);
+        if (containerAncestor) {
+            setSelectedId(containerAncestor.id);
+            return;
+        }
+        setSelectedId(shape.id);
+    };
+
+    const handleShapeDoubleClick = (shape, event) => {
+        if (!shape) return;
+        if (event && typeof event.cancelBubble !== 'undefined') {
+            event.cancelBubble = true;
+        }
+        if (selectedTool !== 'select') return;
+        if (isContainerShape(shape)) {
+            const path = getContainerPathForId(shape.id);
+            setActiveContainerPath([null, ...path]);
+            setSelectedId(shape.id);
+            return;
+        }
+        const containerAncestor = getContainerAncestor(shape);
+        if (containerAncestor) {
+            const path = getContainerPathForId(containerAncestor.id);
+            setActiveContainerPath([null, ...path]);
+        }
+        setSelectedId(shape.id);
     };
 
     const handleShapeMouseDown = (shape, e) => {
@@ -1493,28 +1948,70 @@ export default function Canvas({
     };
 
     const renderShape = (shape) => {
+        if (shape.visible === false) {
+            return null;
+        }
+        const opacity = clampValue(
+            typeof shape.opacity === 'number' ? shape.opacity : 1,
+            0,
+            1
+        );
+        const blendMode = BLEND_MODE_TO_COMPOSITE[shape.blendMode] || 'source-over';
+        const isLocked = Boolean(shape.locked);
+        const isSelectable = selectedTool === 'select';
         const commonProps = {
             key: shape.id,
             id: `shape-${shape.id}`,
             name: 'shape',
-            draggable: selectedTool === 'select',
-            listening: selectedTool === 'select',
-            onClick: (e) => {
-                if (selectedTool !== 'select') return;
-                // prevent stage from handling the click
-                e.cancelBubble = true;
-                setSelectedId(shape.id);
-            },
+            draggable: isSelectable && !isLocked,
+            listening: true,
+            onClick: (e) => handleShapeClick(shape, e),
+            onTap: (e) => handleShapeClick(shape, e),
+            onDblClick: (e) => handleShapeDoubleClick(shape, e),
+            onDblTap: (e) => handleShapeDoubleClick(shape, e),
             onDragMove: (e) => handleDragMove(shape.id, e),
             onDragEnd: (e) => handleDragEnd(shape.id, e),
             onTransformEnd: (e) => handleTransformEnd(shape, e.target),
             onMouseMove: (e) => handleShapeMouseMove(shape, e),
             onMouseLeave: (e) => handleShapeMouseLeave(e),
             onMouseDown: (e) => handleShapeMouseDown(shape, e),
+            opacity,
+            globalCompositeOperation: blendMode,
         };
         const fillProps = getFillPropsForShape(shape);
 
         switch (shape.type) {
+            case 'frame':
+                return (
+                    <Rect
+                        {...commonProps}
+                        name="frame"
+                        x={shape.x}
+                        y={shape.y}
+                        width={shape.width || 0}
+                        height={shape.height || 0}
+                        offset={{ x: (shape.width || 0) / 2, y: (shape.height || 0) / 2 }}
+                        {...fillProps}
+                        stroke={shape.stroke || '#1f2937'}
+                        strokeWidth={shape.strokeWidth || 1}
+                    />
+                );
+            case 'group':
+                return (
+                    <Rect
+                        {...commonProps}
+                        name="group"
+                        x={shape.x}
+                        y={shape.y}
+                        width={shape.width || 0}
+                        height={shape.height || 0}
+                        offset={{ x: (shape.width || 0) / 2, y: (shape.height || 0) / 2 }}
+                        stroke={shape.stroke || 'rgba(100,116,139,0.9)'}
+                        strokeWidth={shape.strokeWidth || 1}
+                        dash={[6, 4]}
+                        fillEnabled={false}
+                    />
+                );
             case 'rectangle':
                 return (
                     <Rect
@@ -1850,6 +2347,8 @@ export default function Canvas({
     };
 
     const typeLabels = {
+        frame: 'Frame',
+        group: 'Group',
         rectangle: 'Rectangle',
         circle: 'Circle',
         ellipse: 'Ellipse',
@@ -1858,7 +2357,35 @@ export default function Canvas({
         text: 'Text',
     };
 
-    const sortedShapes = [...shapes].slice().reverse();
+    const childrenMap = useMemo(() => {
+        const map = new Map();
+        map.set(null, []);
+        shapes.forEach((shape) => {
+            map.set(shape.id, []);
+        });
+        for (let i = shapes.length - 1; i >= 0; i -= 1) {
+            const shape = shapes[i];
+            const key = shape.parentId ?? null;
+            if (!map.has(key)) {
+                map.set(key, []);
+            }
+            map.get(key).push(shape);
+        }
+        return map;
+    }, [shapes]);
+
+    const layerList = useMemo(() => {
+        const result = [];
+        const visit = (parentId, depth) => {
+            const siblings = childrenMap.get(parentId) || [];
+            siblings.forEach((shape) => {
+                result.push({ shape, depth });
+                visit(shape.id, depth + 1);
+            });
+        };
+        visit(null, 0);
+        return result;
+    }, [childrenMap]);
 
     const [draggedLayerId, setDraggedLayerId] = useState(null);
     const [dragOverLayerId, setDragOverLayerId] = useState(null);
@@ -1868,18 +2395,28 @@ export default function Canvas({
     const reorderLayers = (sourceId, targetId, placeAfter) => {
         if (!sourceId || !targetId || sourceId === targetId) return;
         applyChange((prev) => {
-            const topOrder = [...prev].reverse();
-            const sourceIndex = topOrder.findIndex((shape) => shape.id === sourceId);
-            const targetIndex = topOrder.findIndex((shape) => shape.id === targetId);
+            const sourceIndex = prev.findIndex((shape) => shape.id === sourceId);
+            const targetIndex = prev.findIndex((shape) => shape.id === targetId);
             if (sourceIndex === -1 || targetIndex === -1) return prev;
-            const updated = [...topOrder];
+            const sourceShape = prev[sourceIndex];
+            const targetShape = prev[targetIndex];
+            const sourceParent = sourceShape.parentId ?? null;
+            const targetParent = targetShape.parentId ?? null;
+            if (sourceParent !== targetParent) {
+                return prev;
+            }
+            const updated = [...prev];
             const [item] = updated.splice(sourceIndex, 1);
-            const adjustedTargetIndex = updated.findIndex((shape) => shape.id === targetId);
-            const insertIndex = adjustedTargetIndex === -1
-                ? updated.length
-                : adjustedTargetIndex + (placeAfter ? 1 : 0);
+            let insertIndex = updated.findIndex((shape) => shape.id === targetId);
+            if (insertIndex === -1) {
+                updated.splice(sourceIndex, 0, item);
+                return updated;
+            }
+            if (placeAfter) {
+                insertIndex += 1;
+            }
             updated.splice(insertIndex, 0, item);
-            return updated.reverse();
+            return updated;
         });
     };
 
@@ -1904,6 +2441,11 @@ export default function Canvas({
 
 
     const handleLayerSelect = (shapeId) => {
+        const shape = shapesRef.current.find((s) => s.id === shapeId);
+        if (shape && isContainerShape(shape)) {
+            const path = getContainerPathForId(shape.id, shapesRef.current);
+            setActiveContainerPath([null, ...path]);
+        }
         setSelectedId(shapeId);
         if (typeof onToolChange === 'function') onToolChange('select');
     };
@@ -1997,7 +2539,7 @@ export default function Canvas({
                 }}
             >
                 <div style={{ fontWeight: 600, fontSize: 14, color: '#555', marginBottom: 8 }}>Layers</div>
-                {sortedShapes.length === 0 ? (
+                {layerList.length === 0 ? (
                     <div style={{ fontSize: 12, color: '#888' }}>No shapes yet</div>
                 ) : (
                     <>
@@ -2018,9 +2560,11 @@ export default function Canvas({
                                 setDragOverZone((zone) => (zone === 'top' ? null : zone));
                             }}
                             onDrop={(event) => {
-                                if (!isDraggingLayer || sortedShapes.length === 0) return;
+                                if (!isDraggingLayer || layerList.length === 0) return;
                                 event.preventDefault();
-                                reorderLayers(draggedLayerId, sortedShapes[0].id, false);
+                                const topShapeId = layerList[0]?.shape?.id;
+                                if (!topShapeId) return;
+                                reorderLayers(draggedLayerId, topShapeId, false);
                                 setDraggedLayerId(null);
                                 setDragOverLayerId(null);
                                 setDragOverZone(null);
@@ -2036,8 +2580,12 @@ export default function Canvas({
                                 pointerEvents: isDraggingLayer ? 'auto' : 'none',
                             }}
                         />
-                        {sortedShapes.map((shape) => {
-                            const label = `${typeLabels[shape.type] || 'Shape'} ${shape.id}`;
+                        {layerList.map(({ shape, depth }) => {
+                            const fallbackLabel = `${typeLabels[shape.type] || 'Shape'} ${shape.id}`;
+                            const label =
+                                typeof shape.name === 'string' && shape.name.trim()
+                                    ? shape.name
+                                    : fallbackLabel;
                             const isSelected = shape.id === selectedId;
                             const swatchColor = shape.fill || shape.stroke || '#ccc';
                             const isDragged = shape.id === draggedLayerId;
@@ -2120,7 +2668,7 @@ export default function Canvas({
                                                 border: '1px solid rgba(0,0,0,0.12)',
                                             }}
                                         />
-                                        <span style={{ fontSize: 13 }}>{label}</span>
+                                        <span style={{ fontSize: 13, marginLeft: depth * 12 }}>{label}</span>
                                     </button>
                                 </div>
                             );
@@ -2142,13 +2690,11 @@ export default function Canvas({
                                 setDragOverZone((zone) => (zone === 'bottom' ? null : zone));
                             }}
                             onDrop={(event) => {
-                                if (!isDraggingLayer || sortedShapes.length === 0) return;
+                                if (!isDraggingLayer || layerList.length === 0) return;
                                 event.preventDefault();
-                                reorderLayers(
-                                    draggedLayerId,
-                                    sortedShapes[sortedShapes.length - 1].id,
-                                    true
-                                );
+                                const bottomShapeId = layerList[layerList.length - 1]?.shape?.id;
+                                if (!bottomShapeId) return;
+                                reorderLayers(draggedLayerId, bottomShapeId, true);
                                 setDraggedLayerId(null);
                                 setDragOverLayerId(null);
                                 setDragOverZone(null);
@@ -2221,6 +2767,7 @@ export default function Canvas({
                     onWheel={handleWheel}
                     onMouseMove={handleStageMouseMove}
                     onMouseUp={handleStageMouseUp}
+                    onDblClick={handleStageDoubleClick}
                 >
                     <Layer>
                         {shapes.map((shape) => renderShape(shape))}

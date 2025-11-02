@@ -59,8 +59,13 @@ const Icon = {
 };
 
 export default function Toolbar({ selectedTool, onSelect }) {
+    const selectionOptions = [
+        { value: 'frame', label: 'Frame' },
+        { value: 'group', label: 'Group' },
+        { value: 'select', label: 'Select' },
+    ];
+
     const tools = [
-        { id: 'select', icon: Icon.select, label: 'Select' },
         { id: 'hand', icon: Icon.hand, label: 'Hand' },
         { id: 'pen', icon: Icon.pen, label: 'Pen' },
         { id: 'rectangle', icon: Icon.rectangle, label: 'Rectangle' },
@@ -69,6 +74,10 @@ export default function Toolbar({ selectedTool, onSelect }) {
         { id: 'line', icon: Icon.line, label: 'Line' },
         { id: 'text', icon: Icon.text, label: 'Text' },
     ];
+
+    const selectionValue = selectionOptions.some((option) => option.value === selectedTool)
+        ? selectedTool
+        : 'frame';
 
     const ToolButton = ({ tool }) => (
         <button
@@ -107,11 +116,54 @@ export default function Toolbar({ selectedTool, onSelect }) {
                 zIndex: 20,
             }}
         >
-            {/* Tool icons */}
-            <div style={{ display: 'flex', gap: 6 }}>
-                {tools.map((tool) => (
-                    <ToolButton key={tool.id} tool={tool} />
-                ))}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div
+                        style={{
+                            width: 36,
+                            height: 36,
+                            display: 'grid',
+                            placeItems: 'center',
+                            borderRadius: 8,
+                            border:
+                                selectionValue === 'select'
+                                    ? '1px solid #4f83ff'
+                                    : '1px solid #cdd5e0',
+                            background:
+                                selectionValue === 'select' ? '#e5efff' : '#fff',
+                            color: '#1f2a37',
+                        }}
+                        aria-hidden="true"
+                    >
+                        {Icon.select}
+                    </div>
+                    <select
+                        value={selectionValue}
+                        onChange={(event) => onSelect(event.target.value)}
+                        style={{
+                            height: 36,
+                            borderRadius: 8,
+                            border: '1px solid #cdd5e0',
+                            background: '#fff',
+                            padding: '0 12px',
+                            fontSize: 13,
+                            color: '#1f2a37',
+                        }}
+                        aria-label="Selection Mode"
+                    >
+                        {selectionOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: 6 }}>
+                    {tools.map((tool) => (
+                        <ToolButton key={tool.id} tool={tool} />
+                    ))}
+                </div>
             </div>
 
 

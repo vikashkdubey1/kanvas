@@ -31,7 +31,7 @@ const DEFAULT_TEXT_PROPS = {
  */
 export default function App() {
     // Track which tool is currently selected.  Default is 'select'.
-    const [selectedTool, setSelectedTool] = useState('select');
+    const [selectedTool, setSelectedTool] = useState('frame');
     const [fillStyle, setFillStyle] = useState(DEFAULT_FILL_STYLE);
     const [strokeStyle, setStrokeStyle] = useState(DEFAULT_STROKE_STYLE);
     const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
@@ -74,6 +74,8 @@ export default function App() {
                 p: 'pen',
                 o: 'ellipse',
                 h: 'hand',
+                f: 'frame',
+                g: 'group',
             };
 
             const nextTool = shortcutMap[key];
