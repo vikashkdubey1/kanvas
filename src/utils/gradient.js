@@ -3,6 +3,52 @@ const HEX_REGEX = /^#([0-9a-f]{6})$/i;
 const SUPPORTED_TYPES = ['linear', 'radial', 'angular', 'diamond'];
 export const GRADIENT_TYPES = [...SUPPORTED_TYPES];
 
+const DEFAULT_GRADIENT_HANDLES = {
+    linear: {
+        start: { x: 0.5, y: 1 },
+        end: { x: 1.5, y: 1 },
+    },
+    radial: {
+        start: { x: 1, y: 1 },
+        end: { x: 1, y: 1.5 },
+    },
+    angular: {
+        start: { x: 1, y: 1 },
+        end: { x: 1, y: 1.5 },
+    },
+    diamond: {
+        start: { x: 1, y: 1 },
+        end: { x: 1.5, y: 1.5 },
+    },
+};
+
+export const getDefaultGradientHandles = (type) => {
+    const safeType = SUPPORTED_TYPES.includes(type) ? type : 'linear';
+    const defaults = DEFAULT_GRADIENT_HANDLES[safeType] || DEFAULT_GRADIENT_HANDLES.linear;
+    return {
+        start: { ...defaults.start },
+        end: { ...defaults.end },
+    };
+};
+
+const normalizeHandlePoint = (point, fallback) => {
+    const fx = typeof fallback?.x === 'number' ? fallback.x : 0.5;
+    const fy = typeof fallback?.y === 'number' ? fallback.y : 0.5;
+    const x = Number.isFinite(point?.x) ? point.x : fx;
+    const y = Number.isFinite(point?.y) ? point.y : fy;
+    return { x, y };
+};
+
+const normalizeHandlesForType = (type, handles) => {
+    const defaults = getDefaultGradientHandles(type);
+    if (!handles) {
+        return defaults;
+    }
+    const start = normalizeHandlePoint(handles.start, defaults.start);
+    const end = normalizeHandlePoint(handles.end, defaults.end);
+    return { start, end };
+};
+
 const clamp = (value, min, max) => {
     if (Number.isNaN(value)) return min;
     return Math.min(Math.max(value, min), max);
@@ -90,7 +136,8 @@ const buildStopCssColor = (stop) => {
 
 export const DEFAULT_GRADIENT = {
     type: 'linear',
-    angle: 135,
+    angle: 0,
+    handles: getDefaultGradientHandles('linear'),
     stops: [
         { position: 0, color: '#6366f1', opacity: 1 },
         { position: 1, color: '#f97316', opacity: 1 },
@@ -102,6 +149,10 @@ export const normalizeGradient = (value, fallback = DEFAULT_GRADIENT) => {
         return {
             type: fallback.type,
             angle: fallback.angle,
+            handles: {
+                start: { ...fallback.handles.start },
+                end: { ...fallback.handles.end },
+            },
             stops: fallback.stops.map((stop) => ({ ...stop })),
         };
     }
@@ -111,9 +162,10 @@ export const normalizeGradient = (value, fallback = DEFAULT_GRADIENT) => {
 
     const angleSource = typeof value.angle === 'number' ? value.angle : fallback.angle;
     const angle = ((angleSource % 360) + 360) % 360;
+    const handles = normalizeHandlesForType(type, value.handles || value);
     const stops = normalizeStops(value.stops, fallback.stops);
 
-    return { type, angle, stops };
+    return { type, angle, handles, stops };
 };
 
 const stopsToCss = (stops) =>
@@ -121,19 +173,136 @@ const stopsToCss = (stops) =>
         .map((stop) => `${buildStopCssColor(stop)} ${Math.round(stop.position * 100)}%`)
         .join(', ');
 
+const toCssPosition = (point) => `${Math.round(point.x * 1000) / 10}% ${Math.round(point.y * 1000) / 10}%`;
+
+const getVectorAngle = (start, end) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (dx === 0 && dy === 0) return 0;
+    const radians = Math.atan2(dy, dx);
+    const degrees = (radians * 180) / Math.PI;
+    return ((degrees % 360) + 360) % 360;
+};
+
+const getVectorMagnitude = (start, end) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    return Math.sqrt(dx * dx + dy * dy);
+};
+
+const rotatePointAround = (point, pivot, angle) => {
+    const radians = (angle * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const translatedX = point.x - pivot.x;
+    const translatedY = point.y - pivot.y;
+    const rotatedX = translatedX * cos - translatedY * sin;
+    const rotatedY = translatedX * sin + translatedY * cos;
+    return {
+        x: pivot.x + rotatedX,
+        y: pivot.y + rotatedY,
+    };
+};
+
+const orientLinearHandles = (handles, nextAngle) => {
+    const center = {
+        x: (handles.start.x + handles.end.x) / 2,
+        y: (handles.start.y + handles.end.y) / 2,
+    };
+    const halfLength = getVectorMagnitude(handles.start, handles.end) / 2 || 0.25;
+    const radians = (nextAngle * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    return {
+        start: {
+            x: center.x - cos * halfLength,
+            y: center.y - sin * halfLength,
+        },
+        end: {
+            x: center.x + cos * halfLength,
+            y: center.y + sin * halfLength,
+        },
+    };
+};
+
+const orientRadialHandles = (handles, nextAngle) => {
+    const distance = getVectorMagnitude(handles.start, handles.end) || 0.35;
+    const radians = (nextAngle * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    return {
+        start: { ...handles.start },
+        end: {
+            x: handles.start.x + cos * distance,
+            y: handles.start.y + sin * distance,
+        },
+    };
+};
+
+export const getHandlesAngle = (handles) => getVectorAngle(handles.start, handles.end);
+
+export const rotateHandlesForType = (type, handles, deltaAngle) => {
+    if (!Number.isFinite(deltaAngle) || deltaAngle === 0) {
+        return {
+            start: { ...handles.start },
+            end: { ...handles.end },
+        };
+    }
+    const safeType = SUPPORTED_TYPES.includes(type) ? type : 'linear';
+    if (safeType === 'linear') {
+        const center = {
+            x: (handles.start.x + handles.end.x) / 2,
+            y: (handles.start.y + handles.end.y) / 2,
+        };
+        return {
+            start: rotatePointAround(handles.start, center, deltaAngle),
+            end: rotatePointAround(handles.end, center, deltaAngle),
+        };
+    }
+    return {
+        start: { ...handles.start },
+        end: rotatePointAround(handles.end, handles.start, deltaAngle),
+    };
+};
+
+export const applyAngleToHandles = (type, handles, nextAngle) => {
+    if (!Number.isFinite(nextAngle)) {
+        return {
+            start: { ...handles.start },
+            end: { ...handles.end },
+        };
+    }
+    const safeType = SUPPORTED_TYPES.includes(type) ? type : 'linear';
+    if (safeType === 'linear') {
+        return orientLinearHandles(handles, nextAngle);
+    }
+    return orientRadialHandles(handles, nextAngle);
+};
+
+export const swapHandles = (handles) => ({
+    start: { ...handles.end },
+    end: { ...handles.start },
+});
+
 export const gradientToCss = (gradient) => {
     const normalized = normalizeGradient(gradient, DEFAULT_GRADIENT);
     const stops = stopsToCss(normalized.stops);
+    const { start, end } = normalized.handles;
+    const angle = Number.isFinite(normalized.angle)
+        ? normalized.angle
+        : getVectorAngle(start, end);
     switch (normalized.type) {
         case 'radial':
-            return `radial-gradient(circle, ${stops})`;
+            return `radial-gradient(circle ${Math.round(getVectorMagnitude(start, end) * 100)}% at ${toCssPosition(
+                start
+            )}, ${stops})`;
         case 'angular':
-            return `conic-gradient(from ${normalized.angle}deg at 50% 50%, ${stops})`;
+            return `conic-gradient(from ${angle}deg at ${toCssPosition(start)}, ${stops})`;
         case 'diamond':
-            return `conic-gradient(from ${normalized.angle + 45}deg at 50% 50%, ${stops})`;
+            return `conic-gradient(from ${angle + 45}deg at ${toCssPosition(start)}, ${stops})`;
         case 'linear':
         default:
-            return `linear-gradient(${normalized.angle}deg, ${stops})`;
+            return `linear-gradient(${angle}deg, ${stops})`;
     }
 };
 
@@ -143,6 +312,14 @@ export const gradientStopsEqual = (a, b) => {
     if (first.type !== second.type) return false;
     if (first.stops.length !== second.stops.length) return false;
     if (first.angle !== second.angle) return false;
+    if (
+        first.handles.start.x !== second.handles.start.x ||
+        first.handles.start.y !== second.handles.start.y ||
+        first.handles.end.x !== second.handles.end.x ||
+        first.handles.end.y !== second.handles.end.y
+    ) {
+        return false;
+    }
     return first.stops.every((stop, index) => {
         const other = second.stops[index];
         return (

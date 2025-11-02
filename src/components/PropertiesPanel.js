@@ -3,10 +3,19 @@ import { createPortal } from 'react-dom';
 import {
     DEFAULT_GRADIENT,
     GRADIENT_TYPES,
+    applyAngleToHandles,
+    getDefaultGradientHandles,
+    getHandlesAngle,
     gradientToCss,
     interpolateGradientColor,
     normalizeGradient,
+    rotateHandlesForType,
+    swapHandles,
 } from '../utils/gradient';
+
+export const PROPERTIES_PANEL_MIN_WIDTH = 240;
+export const PROPERTIES_PANEL_MAX_WIDTH = 500;
+export const PROPERTIES_PANEL_DEFAULT_WIDTH = 320;
 
 const DEFAULT_FONT_VARIATIONS = [
     { value: 'normal', label: 'Regular' },
@@ -47,11 +56,14 @@ const FONT_LIBRARY = [
     { value: 'monospace', label: 'Monospace', variations: DEFAULT_FONT_VARIATIONS },
 ];
 
+const DEFAULT_GRADIENT_ANGLES = {
+    linear: 0,
+    radial: 0,
+    angular: 0,
+    diamond: 0,
+};
 
-const panelStyle = {
-    flex: '0 0 320px',
-    minWidth: 280,
-    maxWidth: 360,
+const basePanelStyle = {
     borderLeft: '1px solid #d9dee7',
     background: '#f7f8fb',
     display: 'flex',
@@ -116,92 +128,93 @@ const activeSubtitleStyle = {
     color: '#6b7280',
 };
 
+const contentStyle = {
+    padding: '20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16,
+    overflowY: 'auto',
+};
 
-    const contentStyle = {
-        padding: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 16,
-        overflowY: 'auto',
-    };
+const sectionCardStyle = {
+    background: '#ffffff',
+    borderRadius: 12,
+    padding: '18px 16px',
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+};
 
-    const sectionCardStyle = {
-        background: '#ffffff',
-        borderRadius: 12,
-        padding: '18px 16px',
-        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
-    };
+const sectionHeaderStyle = {
+    marginBottom: 14,
+};
 
-    const sectionHeaderStyle = {
-        marginBottom: 14,
-    };
+const sectionTitleStyle = {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+    color: '#64748b',
+};
 
-    const sectionTitleStyle = {
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: 0.7,
-        textTransform: 'uppercase',
-        color: '#64748b',
-    };
+const sectionBodyStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 14,
+};
 
-    const sectionBodyStyle = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-    };
+const fieldStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+};
 
-    const fieldStyle = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-    };
+const fieldLabelStyle = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#1f2937',
+};
 
-    const fieldLabelStyle = {
-        fontSize: 12,
-        fontWeight: 600,
-        color: '#1f2937',
-    };
-
-    const selectStyle = {
-        height: 36,
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        fontSize: 13,
-        color: '#1f2937',
-        padding: '0 12px',
-    };
-
-    const numberInputWrapperStyle = {
-        display: 'flex',
-        alignItems: 'center',
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        padding: '0 10px',
-        height: 36,
-        gap: 6,
-    };
-
-    const numberInputStyle = {
-        width: 64,
-        border: 'none',
-        background: 'transparent',
+const selectStyle = {
+    height: 36,
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
     fontSize: 13,
-        color: '#111827',
-        textAlign: 'right',
-        outline: 'none',
-    };
+    color: '#1f2937',
+    padding: '0 12px',
+};
 
-    const suffixStyle = {
-        fontSize: 12,
-        color: '#64748b',
+const numberInputWrapperStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    padding: '0 10px',
+    height: 36,
+    gap: 6,
+};
+
+const numberInputStyle = {
+    width: 64,
+    border: 'none',
+    background: 'transparent',
+    fontSize: 13,
+    color: '#111827',
+    textAlign: 'right',
+    outline: 'none',
+};
+
+const suffixStyle = {
+    fontSize: 12,
+    color: '#64748b',
 };
 
 const toggleButtonBase = {
     flex: 1,
-    minWidth: 36,
-    padding: '6px 0',
+    width: 24,
+    maxWidth: 24,
+    height: 24,
+    padding: '6px 8px',
     borderRadius: 8,
     border: '1px solid #cdd5e0',
     background: '#ffffff',
@@ -209,10 +222,20 @@ const toggleButtonBase = {
     fontWeight: 600,
     color: '#1f2937',
     cursor: 'pointer',
-    transition: 'all 0.15s ease'
+    transition: 'all 0.15s ease',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
 };
 
-const ToggleButton = ({ active, onClick, children, title }) => (
+const toggleButtonIconStyle = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+};
+
+const ToggleButton = ({ active, onClick, children, title, icon }) => (
     <button
         type="button"
         onClick={onClick}
@@ -224,6 +247,7 @@ const ToggleButton = ({ active, onClick, children, title }) => (
             color: active ? '#1d4ed8' : toggleButtonBase.color,
         }}
     >
+        {icon ? <span style={toggleButtonIconStyle}>{icon}</span> : null}
         {children}
     </button>
 );
@@ -232,21 +256,21 @@ const ToggleGroup = ({ children }) => (
     <div style={{ display: 'flex', gap: 6 }}>{children}</div>
 );
 
-    const hiddenColorInputStyle = {
-        position: 'absolute',
-        inset: 0,
-        opacity: 0,
-        cursor: 'pointer',
-    };
+const hiddenColorInputStyle = {
+    position: 'absolute',
+    inset: 0,
+    opacity: 0,
+    cursor: 'pointer',
+};
 
-    const colorSwatchStyle = {
-        position: 'relative',
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        border: '1px solid #cdd5e0',
-        overflow: 'hidden',
-        boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)',
+const colorSwatchStyle = {
+    position: 'relative',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    border: '1px solid #cdd5e0',
+    overflow: 'hidden',
+    boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)',
 };
 
 const colorPickerButtonStyle = {
@@ -333,8 +357,7 @@ const colorPopoverBodyStyle = {
 };
 
 const colorModeGridStyle = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+    display: 'flex',
     gap: 6,
 };
 
@@ -553,23 +576,23 @@ const gradientAngleSuffixStyle = {
     fontWeight: 600,
 };
 
-    const hexInputStyle = {
-        width: 80,
-        height: 36,
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        fontSize: 13,
-        color: '#111827',
-        padding: '0 10px',
-        textTransform: 'uppercase',
-        outline: 'none',
-    };
+const hexInputStyle = {
+    width: 80,
+    height: 36,
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    fontSize: 13,
+    color: '#111827',
+    padding: '0 10px',
+    textTransform: 'uppercase',
+    outline: 'none',
+};
 
-    const disabledValueStyle = {
-        fontSize: 12,
-        color: '#94a3b8',
-    };
+const disabledValueStyle = {
+    fontSize: 12,
+    color: '#94a3b8',
+};
 
 const HEX_REGEX = /^#([0-9a-f]{6})$/i;
 
@@ -580,6 +603,115 @@ const COLOR_STYLE_OPTIONS = [
     { value: 'image', label: 'Image' },
     { value: 'video', label: 'Video' },
 ];
+
+const colorStyleIconBase = {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    border: '1px solid rgba(15, 23, 42, 0.12)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+};
+
+const FillOptionIcon = ({ type }) => {
+    switch (type) {
+        case 'solid':
+            return (
+                <span
+                    aria-hidden="true"
+                    style={{
+                        ...colorStyleIconBase,
+                        backgroundColor: '#2563eb',
+                        boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)',
+                    }}
+                />
+            );
+        case 'gradient':
+            return (
+                <span
+                    aria-hidden="true"
+                    style={{
+                        ...colorStyleIconBase,
+                        backgroundImage:
+                            'linear-gradient(135deg, #6366f1 0%, #ec4899 50%, #f97316 100%)',
+                    }}
+                />
+            );
+        case 'pattern':
+            return (
+                <span
+                    aria-hidden="true"
+                    style={{
+                        ...colorStyleIconBase,
+                        backgroundColor: '#e2e8f0',
+                        backgroundImage:
+                            'linear-gradient(45deg, rgba(148, 163, 184, 0.7) 25%, transparent 25%, transparent 50%, rgba(148, 163, 184, 0.7) 50%, rgba(148, 163, 184, 0.7) 75%, transparent 75%, transparent 100%)',
+                        backgroundSize: '6px 6px',
+                    }}
+                />
+            );
+        case 'image':
+            return (
+                <span
+                    aria-hidden="true"
+                    style={{
+                        ...colorStyleIconBase,
+                        backgroundColor: '#eff6ff',
+                    }}
+                >
+                    <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <rect x="1" y="1" width="10" height="10" rx="2" fill="#bfdbfe" />
+                        <path
+                            d="M2.5 8.5L4.8 5.7c.18-.21.5-.21.68 0l1.74 2 1.1-1.32c.18-.21.5-.21.68 0L9.5 8.5"
+                            stroke="#1d4ed8"
+                            strokeWidth="0.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                        <circle cx="4.25" cy="4" r="0.9" fill="#1d4ed8" />
+                    </svg>
+                </span>
+            );
+        case 'video':
+            return (
+                <span
+                    aria-hidden="true"
+                    style={{
+                        ...colorStyleIconBase,
+                        backgroundColor: '#fee2e2',
+                    }}
+                >
+                    <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <rect x="1" y="2" width="7" height="8" rx="1.5" fill="#f87171" />
+                        <path d="M4.5 5.2V8L6.6 6.6 4.5 5.2Z" fill="#fff" />
+                        <path
+                            d="M8 4.2l2.2-1.2v5.9L8 7.7V4.2Z"
+                            fill="#fca5a5"
+                            stroke="#ef4444"
+                            strokeWidth="0.6"
+                            strokeLinejoin="round"
+                        />
+                    </svg>
+                </span>
+            );
+        default:
+            return null;
+    }
+};
 
 const COLOR_TYPE_DESCRIPTIONS = {
     gradient: 'Blend multiple colours or angles to create a smooth transition.',
@@ -625,29 +757,36 @@ const colorTypePlaceholderStyle = {
     textAlign: 'center',
 };
 
-    const Section = ({ title, children, disabled = false }) => (
-        <section
-            style={{
-                ...sectionCardStyle,
-                opacity: disabled ? 0.55 : 1,
-                pointerEvents: disabled ? 'none' : 'auto',
-            }}
-        >
-            <div style={sectionHeaderStyle}>
-                <div style={sectionTitleStyle}>{title}</div>
-            </div>
-            <div style={sectionBodyStyle}>{children}</div>
-        </section>
-    );
+const Section = ({ title, children, disabled = false }) => (
+    <section
+        style={{
+            ...sectionCardStyle,
+            opacity: disabled ? 0.55 : 1,
+            pointerEvents: disabled ? 'none' : 'auto',
+        }}
+    >
+        <div style={sectionHeaderStyle}>
+            <div style={sectionTitleStyle}>{title}</div>
+        </div>
+        <div style={sectionBodyStyle}>{children}</div>
+    </section>
+);
 
-    const normalizeHex = (value, fallback = '#000000') => {
-        if (typeof value === 'string' && HEX_REGEX.test(value)) {
-            return value.toLowerCase();
-        }
-        return fallback;
-    };
+const normalizeHex = (value, fallback = '#000000') => {
+    if (typeof value === 'string' && HEX_REGEX.test(value)) {
+        return value.toLowerCase();
+    }
+    return fallback;
+};
 
-const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
+const ColorControl = ({
+    label,
+    style,
+    onStyleChange,
+    disabled = false,
+    onGradientPopoverToggle,
+    gradientInteractionRef,
+}) => {
     const activeType = style?.type || 'solid';
     const normalized = normalizeHex(style?.value, '#000000');
     const [draft, setDraft] = useState(normalized.toUpperCase());
@@ -685,19 +824,24 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         });
     }, [gradientValue]);
 
-    const gradientValue = useMemo(() => normalizeGradient(style?.value, DEFAULT_GRADIENT), [style?.value]);
-    const [gradientDrafts, setGradientDrafts] = useState(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
-    const gradientCss = useMemo(() => gradientToCss(gradientValue), [gradientValue]);
-
-    useEffect(() => {
-        setGradientDrafts(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
-    }, [gradientValue]);
-
     useEffect(() => {
         if (activeType === 'solid') {
             setDraft(normalized.toUpperCase());
         }
     }, [normalized, activeType]);
+
+    useEffect(() => {
+        if (typeof onGradientPopoverToggle === 'function') {
+            onGradientPopoverToggle(isOpen && activeType === 'gradient');
+        }
+    }, [activeType, isOpen, onGradientPopoverToggle]);
+
+    useEffect(() => {
+        if (typeof onGradientPopoverToggle !== 'function') return undefined;
+        return () => {
+            onGradientPopoverToggle(false);
+        };
+    }, [onGradientPopoverToggle]);
 
     useEffect(() => {
         if (!isOpen) return undefined;
@@ -713,6 +857,10 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
                 (popoverNode && popoverNode.contains(target)) ||
                 (triggerNode && triggerNode.contains(target))
             ) {
+                return;
+            }
+
+            if (gradientInteractionRef?.current?.active) {
                 return;
             }
 
@@ -939,6 +1087,10 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
             const draft = {
                 type: base.type,
                 angle: base.angle,
+                handles: {
+                    start: { ...base.handles.start },
+                    end: { ...base.handles.end },
+                },
                 stops: base.stops.map((stop) => ({ ...stop })),
             };
             const updated = typeof updater === 'function' ? updater(draft) || draft : draft;
@@ -970,6 +1122,12 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         if (!GRADIENT_TYPES.includes(nextType)) return;
         commitGradientUpdate((current) => {
             current.type = nextType;
+            current.handles = getDefaultGradientHandles(nextType);
+            const nextAngle =
+                typeof DEFAULT_GRADIENT_ANGLES[nextType] === 'number'
+                    ? DEFAULT_GRADIENT_ANGLES[nextType]
+                    : getHandlesAngle(current.handles);
+            current.angle = nextAngle;
             return current;
         });
     };
@@ -981,6 +1139,10 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
                 current.stops = current.stops
                     .map((stop) => ({ ...stop, position: 1 - stop.position }))
                     .reverse();
+                if (current.type === 'linear') {
+                    current.handles = swapHandles(current.handles);
+                    current.angle = getHandlesAngle(current.handles);
+                }
                 return current;
             },
             { focusIndex: stopsCount - 1 - activeStopIndex }
@@ -989,8 +1151,9 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
 
     const handleGradientRotate = () => {
         commitGradientUpdate((current) => {
-            const nextAngle = ((current.angle + 90) % 360 + 360) % 360;
-            current.angle = nextAngle;
+            const rotated = rotateHandlesForType(current.type, current.handles, 90);
+            current.handles = rotated;
+            current.angle = getHandlesAngle(rotated);
             return current;
         });
     };
@@ -999,6 +1162,7 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
         const normalizedAngle = Number.isNaN(nextAngle) ? gradientValue.angle : nextAngle;
         commitGradientUpdate((current) => {
             current.angle = normalizedAngle;
+            current.handles = applyAngleToHandles(current.type, current.handles, normalizedAngle);
             return current;
         });
     };
@@ -1485,14 +1649,13 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
                       <div style={colorPopoverBodyStyle}>
                           <div style={colorModeGridStyle}>
                               {COLOR_STYLE_OPTIONS.map((option) => (
-                                  <ToggleButton
-                                      key={option.value}
-                                      active={option.value === activeType}
-                                      onClick={() => handleTypeSelect(option.value)}
-                                      title={option.label}
-                                  >
-                                      {option.label}
-                                  </ToggleButton>
+                                <ToggleButton
+                                    key={option.value}
+                                    active={option.value === activeType}
+                                    onClick={() => handleTypeSelect(option.value)}
+                                    title={option.label}
+                                    icon={<FillOptionIcon type={option.value} />}
+                                />
                               ))}
                           </div>
                           {activeType === 'solid' ? (
@@ -1593,35 +1756,35 @@ const ColorControl = ({ label, style, onStyleChange, disabled = false }) => {
 };
 
 const NumberControl = ({
-        label,
-        value,
-        onChange,
-        min = 0,
-        max = 128,
-        step = 1,
-        suffix = 'px',
-    }) => (
-        <div style={fieldStyle}>
-            <span style={fieldLabelStyle}>{label}</span>
-            <div style={numberInputWrapperStyle}>
-                <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    step={step}
-                    value={typeof value === 'number' && !Number.isNaN(value) ? value : 0}
-                    onChange={(event) => {
-                        const numeric = Number(event.target.value);
-                        if (typeof onChange === 'function') {
-                            onChange(Number.isNaN(numeric) ? 0 : numeric);
-                        }
-                    }}
-                    style={numberInputStyle}
-                />
-                <span style={suffixStyle}>{suffix}</span>
-            </div>
+    label,
+    value,
+    onChange,
+    min = 0,
+    max = 128,
+    step = 1,
+    suffix = 'px',
+}) => (
+    <div style={fieldStyle}>
+        <span style={fieldLabelStyle}>{label}</span>
+        <div style={numberInputWrapperStyle}>
+            <input
+                type="number"
+                min={min}
+                max={max}
+                step={step}
+                value={typeof value === 'number' && !Number.isNaN(value) ? value : 0}
+                onChange={(event) => {
+                    const numeric = Number(event.target.value);
+                    if (typeof onChange === 'function') {
+                        onChange(Number.isNaN(numeric) ? 0 : numeric);
+                    }
+                }}
+                style={numberInputStyle}
+            />
+            <span style={suffixStyle}>{suffix}</span>
         </div>
-    );
+    </div>
+);
 
 const SelectControl = ({ label, value, onChange, options }) => {
     const normalizedOptions = options.map((option) =>
@@ -1642,17 +1805,20 @@ const SelectControl = ({ label, value, onChange, options }) => {
     );
 };
 
-    const ToggleField = ({ label, children }) => (
-        <div style={fieldStyle}>
-            <span style={fieldLabelStyle}>{label}</span>
-            {children}
-        </div>
+const ToggleField = ({ label, children }) => (
+    <div style={fieldStyle}>
+        <span style={fieldLabelStyle}>{label}</span>
+        {children}
+    </div>
 );
 
 export default function PropertiesPanel({
+    panelWidth,
     shape,
     fillStyle,
     onFillStyleChange,
+    onGradientPickerToggle,
+    gradientInteractionRef,
     strokeStyle,
     onStrokeStyleChange,
     strokeWidth,
@@ -1674,8 +1840,8 @@ export default function PropertiesPanel({
     textDecoration,
     onTextDecorationChange,
 }) {
-        const isTextShape = shape?.type === 'text';
-const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type);
+    const isTextShape = shape?.type === 'text';
+    const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type);
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 
@@ -1813,8 +1979,25 @@ const subtitle = shape
     ? 'Adjust layer appearance and typography.'
     : 'Select a layer on the canvas to edit its properties.';
 
+    const resolvedPanelWidth = Math.min(
+        Math.max(
+            typeof panelWidth === 'number' ? panelWidth : PROPERTIES_PANEL_DEFAULT_WIDTH,
+            PROPERTIES_PANEL_MIN_WIDTH
+        ),
+        PROPERTIES_PANEL_MAX_WIDTH
+    );
+
+    const asideStyle = {
+        ...basePanelStyle,
+        flex: '0 0 auto',
+        width: resolvedPanelWidth,
+        minWidth: PROPERTIES_PANEL_MIN_WIDTH,
+        maxWidth: PROPERTIES_PANEL_MAX_WIDTH,
+        height: '100%',
+    };
+
     return (
-        <aside style={panelStyle}>
+        <aside style={asideStyle}>
             <div style={headerStyle}>
                 <div style={tabsRowStyle}>
                     <button type="button" style={{ ...tabButtonStyle, ...activeTabStyle }}>Design</button>
@@ -1838,6 +2021,8 @@ const subtitle = shape
                         style={supportsFill ? fillStyle : { type: 'solid', value: '#000000' }}
                         onStyleChange={supportsFill ? onFillStyleChange : undefined}
                         disabled={!supportsFill}
+                        onGradientPopoverToggle={supportsFill ? onGradientPickerToggle : undefined}
+                        gradientInteractionRef={gradientInteractionRef}
                     />
                     <ColorControl
                         label="Stroke"
@@ -1886,67 +2071,64 @@ const subtitle = shape
                         step={1}
                     />
                     <div style={{ display: 'flex', height: '100%', gap: '12px' }}>
+                        <NumberControl
+                            label="Line Height"
+                            value={textLineHeight}
+                            onChange={(value) =>
+                                typeof onTextLineHeightChange === 'function' && onTextLineHeightChange(value)
+                            }
+                            min={0.5}
+                            max={4}
+                            step={0.1}
+                            suffix=""
+                        />
 
-                    <NumberControl
-                        label="Line Height"
-                        value={textLineHeight}
-                        onChange={(value) =>
-                            typeof onTextLineHeightChange === 'function' && onTextLineHeightChange(value)
-                        }
-                        min={0.5}
-                        max={4}
-                        step={0.1}
-                        suffix=""
-                        
-                    />
-
-                    <NumberControl
-                        label="Letter Spacing"
-                        value={textLetterSpacing}
-                        onChange={(value) =>
-                            typeof onTextLetterSpacingChange === 'function' && onTextLetterSpacingChange(value)
-                        }
-                        min={-10}
-                        max={50}
-                        step={0.5}
+                        <NumberControl
+                            label="Letter Spacing"
+                            value={textLetterSpacing}
+                            onChange={(value) =>
+                                typeof onTextLetterSpacingChange === 'function' && onTextLetterSpacingChange(value)
+                            }
+                            min={-10}
+                            max={50}
+                            step={0.5}
                         />
                     </div>
 
                     <div style={{ display: 'flex', height: '100%', gap: '12px' }}>
-
-                    <ToggleField label="Alignment">
-                        <ToggleGroup>
-                            {alignOptions.map((option) => (
-                                <ToggleButton
-                                    key={option}
-                                    title={`Align ${option}`}
-                                    active={textAlign === option}
-                                    onClick={() =>
-                                        typeof onTextAlignChange === 'function' && onTextAlignChange(option)
-                                    }
-                                >
-                                    {option.charAt(0).toUpperCase()}
-                                </ToggleButton>
-                            ))}
-                        </ToggleGroup>
+                        <ToggleField label="Alignment">
+                            <ToggleGroup>
+                                {alignOptions.map((option) => (
+                                    <ToggleButton
+                                        key={option}
+                                        title={`Align ${option}`}
+                                        active={textAlign === option}
+                                        onClick={() =>
+                                            typeof onTextAlignChange === 'function' && onTextAlignChange(option)
+                                        }
+                                    >
+                                        {option.charAt(0).toUpperCase()}
+                                    </ToggleButton>
+                                ))}
+                            </ToggleGroup>
                         </ToggleField>
 
-                    <ToggleField label="Vertical">
-                        <ToggleGroup>
-                            {verticalAlignOptions.map((option) => (
-                                <ToggleButton
-                                    key={option.id}
-                                    title={`Vertical align ${option.label}`}
-                                    active={textVerticalAlign === option.id}
-                                    onClick={() =>
-                                        typeof onTextVerticalAlignChange === 'function' &&
-                                        onTextVerticalAlignChange(option.id)
-                                    }
-                                >
-                                    {option.label.charAt(0)}
-                                </ToggleButton>
-                            ))}
-                        </ToggleGroup>
+                        <ToggleField label="Vertical">
+                            <ToggleGroup>
+                                {verticalAlignOptions.map((option) => (
+                                    <ToggleButton
+                                        key={option.id}
+                                        title={`Vertical align ${option.label}`}
+                                        active={textVerticalAlign === option.id}
+                                        onClick={() =>
+                                            typeof onTextVerticalAlignChange === 'function' &&
+                                            onTextVerticalAlignChange(option.id)
+                                        }
+                                    >
+                                        {option.label.charAt(0)}
+                                    </ToggleButton>
+                                ))}
+                            </ToggleGroup>
                         </ToggleField>
                     </div>
 

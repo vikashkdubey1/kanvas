@@ -1,9 +1,11 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Stage, Layer, Rect, Circle, Ellipse, Line, Text, Transformer } from 'react-konva';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer } from 'react-konva';
 import {
     buildGradientColorStops,
     getGradientFirstColor,
+    getHandlesAngle,
     gradientStopsEqual,
+    interpolateGradientColor,
     normalizeGradient,
 } from '../utils/gradient';
 
@@ -19,25 +21,28 @@ const normalizeColor = (value, fallback) => (typeof value === 'string' ? value :
 
 const toRadians = (value) => (value * Math.PI) / 180;
 
-const computeLinearGradientPoints = (shape, angle) => {
-    const rad = toRadians(angle || 0);
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-    let halfWidth = 0;
-    let halfHeight = 0;
+const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
 
+const LAYER_PANEL_MIN_WIDTH = 240;
+const LAYER_PANEL_MAX_WIDTH = 500;
+const LAYER_PANEL_DEFAULT_WIDTH = 280;
+
+const getShapeDimensions = (shape) => {
     switch (shape.type) {
         case 'rectangle':
-            halfWidth = (shape.width || 0) / 2;
-            halfHeight = (shape.height || 0) / 2;
-            break;
-        case 'circle':
-            halfWidth = halfHeight = shape.radius || 0;
-            break;
+            return {
+                width: Math.max(0, shape.width || 0),
+                height: Math.max(0, shape.height || 0),
+            };
+        case 'circle': {
+            const radius = Math.max(0, shape.radius || 0);
+            return { width: radius * 2, height: radius * 2 };
+        }
         case 'ellipse':
-            halfWidth = shape.radiusX || 0;
-            halfHeight = shape.radiusY || 0;
-            break;
+            return {
+                width: Math.max(0, (shape.radiusX || 0) * 2),
+                height: Math.max(0, (shape.radiusY || 0) * 2),
+            };
         case 'text': {
             const estimatedWidth =
                 typeof shape.width === 'number' && shape.width > 0
@@ -47,12 +52,62 @@ const computeLinearGradientPoints = (shape, angle) => {
                 typeof shape.height === 'number' && shape.height > 0
                     ? shape.height
                     : (shape.fontSize || 24) * (shape.lineHeight || 1.2);
-            halfWidth = estimatedWidth / 2;
-            halfHeight = estimatedHeight / 2;
-            break;
+            return { width: estimatedWidth, height: estimatedHeight };
         }
         default:
-            return null;
+            return { width: 0, height: 0 };
+    }
+};
+
+const convertNormalizedPointToLocal = (point, dimensions) => ({
+    x: (point.x - 0.5) * dimensions.width,
+    y: (point.y - 0.5) * dimensions.height,
+});
+
+const convertLocalPointToNormalized = (point, dimensions) => ({
+    x: dimensions.width ? point.x / dimensions.width + 0.5 : 0.5,
+    y: dimensions.height ? point.y / dimensions.height + 0.5 : 0.5,
+});
+
+const HEX_COLOR_RE = /^#([0-9a-f]{6})$/i;
+
+const parseHexColor = (hex, fallback = { r: 0, g: 0, b: 0 }) => {
+    if (typeof hex !== 'string') return fallback;
+    const match = HEX_COLOR_RE.exec(hex);
+    if (!match) return fallback;
+    const int = parseInt(match[1], 16);
+    return {
+        r: (int >> 16) & 255,
+        g: (int >> 8) & 255,
+        b: int & 255,
+    };
+};
+
+const roundForKey = (value) => Math.round(value * 1000) / 1000;
+
+const getLocalHandlePoints = (shape, handles) => {
+    if (!handles) return null;
+    const dimensions = getShapeDimensions(shape);
+    if (!dimensions.width && !dimensions.height) {
+        return null;
+    }
+    return {
+        dimensions,
+        start: convertNormalizedPointToLocal(handles.start, dimensions),
+        end: convertNormalizedPointToLocal(handles.end, dimensions),
+    };
+};
+
+const computeLinearGradientPoints = (shape, angle) => {
+    const rad = toRadians(angle || 0);
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const { width, height } = getShapeDimensions(shape);
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
+
+    if (!halfWidth && !halfHeight) {
+        return null;
     }
 
     const halfDiagonal = Math.sqrt(halfWidth * halfWidth + halfHeight * halfHeight);
@@ -74,6 +129,8 @@ export default function Canvas({
     strokeWidth = 0,
     textOptions = {},
     onSelectionChange,
+    showGradientHandles = false,
+    gradientInteractionRef = null,
 }) {
     const resolvedFillType = fillStyle?.type || 'solid';
     const resolvedFillGradient = useMemo(
@@ -104,15 +161,16 @@ export default function Canvas({
     useEffect(() => {
         shapesRef.current = shapes;
     }, [shapes]);
+    const gradientPatternCacheRef = useRef(new Map());
 
     // zoom state
     const [scale, setScale] = useState(1);
     const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
     const MIN_SCALE = 0.2;
     const MAX_SCALE = 4;
-    const LAYER_PANEL_WIDTH = 220;
     const MIN_STAGE_WIDTH = 120;
     const MIN_STAGE_HEIGHT = 200;
+    const [layerPanelWidth, setLayerPanelWidth] = useState(LAYER_PANEL_DEFAULT_WIDTH);
 
     const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
 
@@ -748,6 +806,12 @@ export default function Canvas({
         if (trLayer && typeof trLayer.batchDraw === 'function') trLayer.batchDraw();
     }, [selectedId, shapes, selectedTool]);
 
+    const handleDragMove = (id, e) => {
+        const x = e.target.x();
+        const y = e.target.y();
+        setShapes((prev) => prev.map((s) => (s.id === id ? { ...s, x, y } : s)));
+    };
+
     const handleDragEnd = (id, e) => {
         const x = e.target.x();
         const y = e.target.y();
@@ -917,6 +981,49 @@ export default function Canvas({
     const rotateCenterRef = useRef({ x: 0, y: 0 });
     const rotationStartRef = useRef(null);
 
+    const gradientDragRef = useRef({ active: false, shapeId: null, type: null, stopIndex: null, before: null });
+
+    const setGradientHandleInteraction = useCallback(
+        (active) => {
+            if (!gradientInteractionRef) return;
+            const store = gradientInteractionRef.current || {};
+            if (store.active === active && gradientInteractionRef.current) {
+                return;
+            }
+            store.active = active;
+            gradientInteractionRef.current = store;
+        },
+        [gradientInteractionRef]
+    );
+
+    const markTransientGradientInteraction = useCallback(() => {
+        if (!gradientInteractionRef) return;
+        setGradientHandleInteraction(true);
+        const release = () => {
+            if (!gradientDragRef.current.active) {
+                setGradientHandleInteraction(false);
+            }
+        };
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(release);
+        } else {
+            setTimeout(release, 0);
+        }
+    }, [gradientInteractionRef, setGradientHandleInteraction]);
+
+    useEffect(() => {
+        if (!showGradientHandles) {
+            setGradientHandleInteraction(false);
+        }
+    }, [showGradientHandles, setGradientHandleInteraction]);
+
+    useEffect(
+        () => () => {
+            setGradientHandleInteraction(false);
+        },
+        [setGradientHandleInteraction]
+    );
+
     const handleShapeMouseMove = (shape, e) => {
         const stage = stageRef.current;
         if (!stage) return;
@@ -1001,6 +1108,147 @@ export default function Canvas({
         }
     };
 
+    const beginGradientHandleDrag = (shapeId, type, stopIndex = null) => {
+        setGradientHandleInteraction(true);
+        gradientDragRef.current = {
+            active: true,
+            shapeId,
+            type,
+            stopIndex,
+            before: shapesRef.current.map((shape) => ({ ...shape })),
+        };
+    };
+
+    const finishGradientHandleDrag = () => {
+        const dragState = gradientDragRef.current;
+        if (!dragState.active || !dragState.before) {
+            gradientDragRef.current = { active: false, shapeId: null, type: null, stopIndex: null, before: null };
+            setGradientHandleInteraction(false);
+            return;
+        }
+        const currentShape = shapesRef.current.find((shape) => shape.id === dragState.shapeId);
+        const previousShape = dragState.before.find((shape) => shape.id === dragState.shapeId);
+        if (currentShape && previousShape) {
+            const currentGradient =
+                currentShape.fillType === 'gradient' && currentShape.fillGradient
+                    ? normalizeGradient(currentShape.fillGradient)
+                    : null;
+            const previousGradient =
+                previousShape.fillType === 'gradient' && previousShape.fillGradient
+                    ? normalizeGradient(previousShape.fillGradient)
+                    : null;
+            if (currentGradient && previousGradient && !gradientStopsEqual(currentGradient, previousGradient)) {
+                pastRef.current.push(dragState.before);
+                if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
+                futureRef.current = [];
+            }
+        }
+        gradientDragRef.current = { active: false, shapeId: null, type: null, stopIndex: null, before: null };
+        setGradientHandleInteraction(false);
+    };
+
+    const updateGradientHandleFromStage = (shapeId, type, stopIndex, stagePoint) => {
+        const shape = shapesRef.current.find((s) => s.id === shapeId);
+        if (!shape || shape.fillType !== 'gradient' || !shape.fillGradient) {
+            return null;
+        }
+        const gradient = normalizeGradient(shape.fillGradient);
+        const stage = stageRef.current;
+        if (!stage) return null;
+        const stageAbsoluteTransform = stage.getAbsoluteTransform().copy();
+        const stageToAbsolute = (point) => stageAbsoluteTransform.point(point);
+        const stageInverseTransform = stageAbsoluteTransform.copy();
+        stageInverseTransform.invert();
+        const absoluteToStage = (point) => stageInverseTransform.point(point);
+        const node = stage.findOne(`#shape-${shape.id}`);
+        if (!node) return null;
+        const nodeAbsoluteTransform = node.getAbsoluteTransform().copy();
+        const inverted = nodeAbsoluteTransform.copy();
+        inverted.invert();
+        if (type === 'stop') {
+            const handlePoints = getLocalHandlePoints(shape, gradient.handles);
+            if (!handlePoints) return null;
+            const stagePointAbsolute = stageToAbsolute(stagePoint);
+            const localPoint = inverted.point(stagePointAbsolute);
+            const axis = {
+                x: handlePoints.end.x - handlePoints.start.x,
+                y: handlePoints.end.y - handlePoints.start.y,
+            };
+            const lengthSq = axis.x * axis.x + axis.y * axis.y;
+            if (!lengthSq) return null;
+            const dot =
+                (localPoint.x - handlePoints.start.x) * axis.x +
+                (localPoint.y - handlePoints.start.y) * axis.y;
+            const ratio = clampValue(dot / lengthSq, 0, 1);
+            const projectedLocal = {
+                x: handlePoints.start.x + axis.x * ratio,
+                y: handlePoints.start.y + axis.y * ratio,
+            };
+            const projectedAbsolute = nodeAbsoluteTransform.point(projectedLocal);
+            const projectedStage = absoluteToStage(projectedAbsolute);
+            const nextGradient = normalizeGradient(
+                {
+                    ...gradient,
+                    stops: gradient.stops.map((stop, index) =>
+                        index === stopIndex ? { ...stop, position: ratio } : stop
+                    ),
+                },
+                gradient
+            );
+            setShapes((prev) =>
+                prev.map((s) => (s.id === shapeId ? { ...s, fillGradient: nextGradient } : s))
+            );
+            return projectedStage;
+        }
+
+        const stagePointAbsolute = stageToAbsolute(stagePoint);
+        const localPoint = inverted.point(stagePointAbsolute);
+        const dimensions = getShapeDimensions(shape);
+        const normalizedPoint = convertLocalPointToNormalized(localPoint, dimensions);
+        const nextHandles = {
+            start: type === 'start' ? normalizedPoint : gradient.handles.start,
+            end: type === 'end' ? normalizedPoint : gradient.handles.end,
+        };
+        const nextGradient = normalizeGradient(
+            {
+                ...gradient,
+                handles: nextHandles,
+                angle: getHandlesAngle(nextHandles),
+            },
+            gradient
+        );
+        setShapes((prev) => prev.map((s) => (s.id === shapeId ? { ...s, fillGradient: nextGradient } : s)));
+        return null;
+    };
+
+    const addGradientStopAtRatio = (shapeId, ratio) => {
+        const shape = shapesRef.current.find((s) => s.id === shapeId);
+        if (!shape || shape.fillType !== 'gradient' || !shape.fillGradient) return;
+        const gradient = normalizeGradient(shape.fillGradient);
+        if (!gradient || !Array.isArray(gradient.stops)) return;
+        if (gradient.stops.length >= 8) return;
+        const clampedRatio = clampValue(ratio, 0, 1);
+        if (gradient.stops.some((stop) => Math.abs(stop.position - clampedRatio) < 0.002)) {
+            return;
+        }
+        const sample = interpolateGradientColor(gradient.stops, clampedRatio);
+        const newStop = {
+            position: Math.round(clampedRatio * 1000) / 1000,
+            color: sample.color,
+            opacity: clampValue(sample.opacity ?? 1, 0, 1),
+        };
+        const nextGradient = normalizeGradient(
+            {
+                ...gradient,
+                stops: [...gradient.stops, newStop].sort((a, b) => a.position - b.position),
+            },
+            gradient
+        );
+        applyChange((prev) =>
+            prev.map((s) => (s.id === shapeId ? { ...s, fillGradient: nextGradient } : s))
+        );
+    };
+
     // update rotation while dragging from corner
     useEffect(() => {
         const onMove = (e) => {
@@ -1056,6 +1304,110 @@ export default function Canvas({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedTool]);
 
+    const getAdvancedGradientPattern = (shape, gradient) => {
+        if (typeof document === 'undefined') return null;
+        if (!gradient || !gradient.handles || !Array.isArray(gradient.stops)) return null;
+        const dimensions = getShapeDimensions(shape);
+        const width = Math.max(1, Math.round(dimensions.width || 0));
+        const height = Math.max(1, Math.round(dimensions.height || 0));
+        if (!width || !height) return null;
+
+        const keyParts = [
+            gradient.type,
+            width,
+            height,
+            roundForKey(gradient.handles.start.x),
+            roundForKey(gradient.handles.start.y),
+            roundForKey(gradient.handles.end.x),
+            roundForKey(gradient.handles.end.y),
+            roundForKey(gradient.angle || 0),
+            gradient.stops
+                .map(
+                    (stop) =>
+                        `${roundForKey(stop.position)}:${stop.color}:${roundForKey(stop.opacity ?? 1)}`
+                )
+                .join('|'),
+        ];
+        const cacheKey = keyParts.join(';');
+        const cache = gradientPatternCacheRef.current;
+        if (cache.has(cacheKey)) {
+            return cache.get(cacheKey);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        const handlePoints =
+            getLocalHandlePoints(shape, gradient.handles) ||
+            {
+                start: convertNormalizedPointToLocal(gradient.handles.start, dimensions),
+                end: convertNormalizedPointToLocal(gradient.handles.end, dimensions),
+            };
+        const startPoint = handlePoints.start;
+        const endPoint = handlePoints.end;
+        const axis = { x: endPoint.x - startPoint.x, y: endPoint.y - startPoint.y };
+        const axisLength = Math.sqrt(axis.x * axis.x + axis.y * axis.y);
+        const fallbackLength = Math.max(dimensions.width, dimensions.height) / 2 || 1;
+        const effectiveAxisLength = axisLength > 0.0001 ? axisLength : fallbackLength;
+        const dir =
+            axisLength > 0.0001
+                ? { x: axis.x / axisLength, y: axis.y / axisLength }
+                : { x: 1, y: 0 };
+        const perp = { x: -dir.y, y: dir.x };
+        const startAngle = Math.atan2(axis.y, axis.x);
+        const twoPi = Math.PI * 2;
+
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+        const defaultRgb = parseHexColor(gradient.stops[0]?.color || '#000000');
+
+        for (let y = 0; y < height; y += 1) {
+            const localY = y - height / 2;
+            for (let x = 0; x < width; x += 1) {
+                const localX = x - width / 2;
+                const vector = { x: localX - startPoint.x, y: localY - startPoint.y };
+                let ratio;
+                if (gradient.type === 'angular') {
+                    const angle = Math.atan2(vector.y, vector.x);
+                    let delta = angle - startAngle;
+                    if (!Number.isFinite(delta)) delta = 0;
+                    delta %= twoPi;
+                    if (delta < 0) delta += twoPi;
+                    ratio = delta / twoPi;
+                } else if (gradient.type === 'diamond') {
+                    const projX = vector.x * dir.x + vector.y * dir.y;
+                    const projY = vector.x * perp.x + vector.y * perp.y;
+                    ratio = (Math.abs(projX) + Math.abs(projY)) / effectiveAxisLength;
+                } else {
+                    const distance = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
+                    ratio = distance / effectiveAxisLength;
+                }
+                const clamped = clampValue(ratio, 0, 1);
+                const sample = interpolateGradientColor(gradient.stops, clamped);
+                const rgb = parseHexColor(sample.color, defaultRgb);
+                const opacity = clampValue(sample.opacity ?? 1, 0, 1);
+                const index = (y * width + x) * 4;
+                data[index] = rgb.r;
+                data[index + 1] = rgb.g;
+                data[index + 2] = rgb.b;
+                data[index + 3] = Math.round(opacity * 255);
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        cache.set(cacheKey, canvas);
+        if (cache.size > 32) {
+            const oldestKey = cache.keys().next().value;
+            if (oldestKey) {
+                cache.delete(oldestKey);
+            }
+        }
+        return canvas;
+    };
+
     const getFillPropsForShape = (shape) => {
         if (!shape || shape.fillType !== 'gradient' || !shape.fillGradient) {
             return { fill: shape?.fill, fillPriority: 'color' };
@@ -1065,55 +1417,78 @@ export default function Canvas({
             return { fill: shape.fill, fillPriority: 'color' };
         }
 
-        if (gradient.type !== 'linear' && gradient.type !== 'radial') {
-            return { fill: gradient.stops[0]?.color || shape.fill, fillPriority: 'color' };
-        }
+        const fallbackFill = gradient.stops[0]?.color || shape.fill;
 
-        const colorStops = buildGradientColorStops(gradient);
-        if (colorStops.length < 4) {
-            return { fill: shape.fill, fillPriority: 'color' };
-        }
-        if (gradient.type === 'linear') {
-            const points = computeLinearGradientPoints(shape, gradient.angle);
-            if (!points) {
+        if (gradient.type === 'linear' || gradient.type === 'radial') {
+            const colorStops = buildGradientColorStops(gradient);
+            if (colorStops.length < 4) {
                 return { fill: shape.fill, fillPriority: 'color' };
             }
+            if (gradient.type === 'linear') {
+                const handlePoints = getLocalHandlePoints(shape, gradient.handles);
+                let startPoint = handlePoints?.start;
+                let endPoint = handlePoints?.end;
+                if (
+                    !startPoint ||
+                    !endPoint ||
+                    (Math.abs(startPoint.x - endPoint.x) < 0.001 &&
+                        Math.abs(startPoint.y - endPoint.y) < 0.001)
+                ) {
+                    const fallback = computeLinearGradientPoints(shape, gradient.angle);
+                    if (!fallback) {
+                        return { fill: shape.fill, fillPriority: 'color' };
+                    }
+                    startPoint = fallback.startPoint;
+                    endPoint = fallback.endPoint;
+                }
+                return {
+                    fill: shape.fill || fallbackFill,
+                    fillPriority: 'linear-gradient',
+                    fillLinearGradientStartPoint: startPoint,
+                    fillLinearGradientEndPoint: endPoint,
+                    fillLinearGradientColorStops: colorStops,
+                };
+            }
+
+            const handlePoints = getLocalHandlePoints(shape, gradient.handles);
+            const centerPoint = handlePoints?.start || { x: 0, y: 0 };
+            const radiusVector = handlePoints
+                ? {
+                      x: handlePoints.end.x - handlePoints.start.x,
+                      y: handlePoints.end.y - handlePoints.start.y,
+                  }
+                : { x: 0, y: 0 };
+            const radiusMagnitude = Math.sqrt(
+                radiusVector.x * radiusVector.x + radiusVector.y * radiusVector.y
+            );
+            const fallbackDimensions = handlePoints?.dimensions || getShapeDimensions(shape);
+            const fallbackRadius = Math.max(fallbackDimensions.width, fallbackDimensions.height) / 2 || 0;
+            const endRadius = radiusMagnitude > 1 ? radiusMagnitude : fallbackRadius;
+            if (!endRadius) {
+                return { fill: fallbackFill, fillPriority: 'color' };
+            }
+
             return {
-                fill: shape.fill || gradient.stops[0]?.color,
-                fillPriority: 'linear-gradient',
-                fillLinearGradientStartPoint: points.startPoint,
-                fillLinearGradientEndPoint: points.endPoint,
-                fillLinearGradientColorStops: colorStops,
+                fill: shape.fill || fallbackFill,
+                fillPriority: 'radial-gradient',
+                fillRadialGradientStartPoint: centerPoint,
+                fillRadialGradientEndPoint: centerPoint,
+                fillRadialGradientStartRadius: 0,
+                fillRadialGradientEndRadius: endRadius,
+                fillRadialGradientColorStops: colorStops,
             };
         }
 
-        // radial fallback
-        const getRadius = () => {
-            switch (shape.type) {
-                case 'rectangle':
-                    return Math.max(shape.width || 0, shape.height || 0) / 2;
-                case 'circle':
-                    return shape.radius || 0;
-                case 'ellipse':
-                    return Math.max(shape.radiusX || 0, shape.radiusY || 0);
-                default:
-                    return 0;
-            }
-        };
-
-        const endRadius = getRadius();
-        if (!endRadius) {
-            return { fill: gradient.stops[0]?.color || shape.fill, fillPriority: 'color' };
+        const patternCanvas = getAdvancedGradientPattern(shape, gradient);
+        if (!patternCanvas) {
+            return { fill: fallbackFill, fillPriority: 'color' };
         }
-
         return {
-            fill: shape.fill || gradient.stops[0]?.color,
-            fillPriority: 'radial-gradient',
-            fillRadialGradientStartPoint: { x: 0, y: 0 },
-            fillRadialGradientEndPoint: { x: 0, y: 0 },
-            fillRadialGradientStartRadius: 0,
-            fillRadialGradientEndRadius: endRadius,
-            fillRadialGradientColorStops: colorStops,
+            fillPriority: 'pattern',
+            fillPatternImage: patternCanvas,
+            fillPatternOffsetX: patternCanvas.width / 2,
+            fillPatternOffsetY: patternCanvas.height / 2,
+            fillPatternRepeat: 'no-repeat',
         };
     };
 
@@ -1130,6 +1505,7 @@ export default function Canvas({
                 e.cancelBubble = true;
                 setSelectedId(shape.id);
             },
+            onDragMove: (e) => handleDragMove(shape.id, e),
             onDragEnd: (e) => handleDragEnd(shape.id, e),
             onTransformEnd: (e) => handleTransformEnd(shape, e.target),
             onMouseMove: (e) => handleShapeMouseMove(shape, e),
@@ -1233,6 +1609,218 @@ export default function Canvas({
         }
     };
 
+    const renderGradientHandles = () => {
+        if (!showGradientHandles) return null;
+        if (!selectedId) return null;
+        const allowHandleVisibility = selectedTool === 'select' || selectedTool === 'hand';
+        if (!allowHandleVisibility) return null;
+        const canEditGradientHandles = selectedTool === 'select';
+        const shape = shapes.find((s) => s.id === selectedId);
+        if (!shape || shape.fillType !== 'gradient' || !shape.fillGradient) return null;
+        const stage = stageRef.current;
+        if (!stage) return null;
+        const node = stage.findOne(`#shape-${shape.id}`);
+        if (!node) return null;
+        const gradient = normalizeGradient(shape.fillGradient);
+        if (!gradient || gradient.stops.length < 2) return null;
+        const handlePoints = getLocalHandlePoints(shape, gradient.handles);
+        if (!handlePoints) return null;
+
+        const stageAbsoluteTransform = stage.getAbsoluteTransform().copy();
+        const stageToAbsolute = (point) => stageAbsoluteTransform.point(point);
+        const stageInverseTransform = stageAbsoluteTransform.copy();
+        stageInverseTransform.invert();
+        const absoluteToStage = (point) => stageInverseTransform.point(point);
+
+        const absoluteTransform = node.getAbsoluteTransform().copy();
+        const toStage = (point) => absoluteToStage(absoluteTransform.point(point));
+        const inverseTransform = absoluteTransform.copy();
+        inverseTransform.invert();
+
+        const startStage = toStage(handlePoints.start);
+        const endStage = toStage(handlePoints.end);
+
+        const axisVector = {
+            x: handlePoints.end.x - handlePoints.start.x,
+            y: handlePoints.end.y - handlePoints.start.y,
+        };
+        const axisLengthSq = axisVector.x * axisVector.x + axisVector.y * axisVector.y;
+
+        const handleAxisPointerDown = (event) => {
+            if (!canEditGradientHandles) return;
+            if (!axisLengthSq) return;
+            markTransientGradientInteraction();
+            event.cancelBubble = true;
+            const stageNode = event.target.getStage();
+            if (!stageNode) return;
+            const pointer = stageNode.getPointerPosition();
+            if (!pointer) return;
+            const pointerAbsolute = stageToAbsolute(pointer);
+            const localPoint = inverseTransform.point(pointerAbsolute);
+            const dot =
+                (localPoint.x - handlePoints.start.x) * axisVector.x +
+                (localPoint.y - handlePoints.start.y) * axisVector.y;
+            const ratio = axisLengthSq ? dot / axisLengthSq : 0;
+            addGradientStopAtRatio(shape.id, ratio);
+        };
+
+        const stopHandles = gradient.stops.map((stop, index) => {
+            const localPoint = {
+                x: handlePoints.start.x + (handlePoints.end.x - handlePoints.start.x) * stop.position,
+                y: handlePoints.start.y + (handlePoints.end.y - handlePoints.start.y) * stop.position,
+            };
+            return {
+                index,
+                stop,
+                stagePoint: toStage(localPoint),
+            };
+        });
+
+        const baseHandleRadius = gradient.type === 'linear' ? 9 : 14;
+        const endHandleRadius = gradient.type === 'linear' ? 9 : 14;
+        const stopHandleRadius = gradient.type === 'linear' ? 7 : 10;
+
+        return (
+            <Group listening={canEditGradientHandles}>
+                <Line
+                    points={[startStage.x, startStage.y, endStage.x, endStage.y]}
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    dash={[6, 4]}
+                    listening={canEditGradientHandles}
+                    hitStrokeWidth={24}
+                    onMouseDown={handleAxisPointerDown}
+                    onTouchStart={handleAxisPointerDown}
+                />
+                <Circle
+                    x={startStage.x}
+                    y={startStage.y}
+                    radius={baseHandleRadius}
+                    fill="#1d4ed8"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    draggable={canEditGradientHandles}
+                    onMouseDown={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        markTransientGradientInteraction();
+                    }}
+                    onTouchStart={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        markTransientGradientInteraction();
+                    }}
+                    onDragStart={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        beginGradientHandleDrag(shape.id, 'start');
+                    }}
+                    onDragMove={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        const pos = event.target.getAbsolutePosition();
+                        updateGradientHandleFromStage(shape.id, 'start', null, pos);
+                    }}
+                    onDragEnd={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        const pos = event.target.getAbsolutePosition();
+                        updateGradientHandleFromStage(shape.id, 'start', null, pos);
+                        finishGradientHandleDrag();
+                    }}
+                    opacity={0.95}
+                />
+                <Circle
+                    x={endStage.x}
+                    y={endStage.y}
+                    radius={endHandleRadius}
+                    fill="#f97316"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    draggable={canEditGradientHandles}
+                    onMouseDown={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        markTransientGradientInteraction();
+                    }}
+                    onTouchStart={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        markTransientGradientInteraction();
+                    }}
+                    onDragStart={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        beginGradientHandleDrag(shape.id, 'end');
+                    }}
+                    onDragMove={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        const pos = event.target.getAbsolutePosition();
+                        updateGradientHandleFromStage(shape.id, 'end', null, pos);
+                    }}
+                    onDragEnd={(event) => {
+                        if (!canEditGradientHandles) return;
+                        event.cancelBubble = true;
+                        const pos = event.target.getAbsolutePosition();
+                        updateGradientHandleFromStage(shape.id, 'end', null, pos);
+                        finishGradientHandleDrag();
+                    }}
+                    opacity={0.95}
+                />
+                {stopHandles.map(({ index, stop, stagePoint }) => (
+                    <Circle
+                        key={`gradient-stop-${index}`}
+                        x={stagePoint.x}
+                        y={stagePoint.y}
+                        radius={stopHandleRadius}
+                        fill={stop.color}
+                        stroke="#0f172a"
+                        strokeWidth={2}
+                        opacity={clampValue(stop.opacity ?? 1, 0.2, 1)}
+                        draggable={canEditGradientHandles}
+                        onMouseDown={(event) => {
+                            if (!canEditGradientHandles) return;
+                            event.cancelBubble = true;
+                            markTransientGradientInteraction();
+                        }}
+                        onTouchStart={(event) => {
+                            if (!canEditGradientHandles) return;
+                            event.cancelBubble = true;
+                            markTransientGradientInteraction();
+                        }}
+                        onDragStart={(event) => {
+                            if (!canEditGradientHandles) return;
+                            event.cancelBubble = true;
+                            beginGradientHandleDrag(shape.id, 'stop', index);
+                        }}
+                        onDragMove={(event) => {
+                            if (!canEditGradientHandles) return;
+                            event.cancelBubble = true;
+                            const pos = event.target.getAbsolutePosition();
+                            const projected = updateGradientHandleFromStage(shape.id, 'stop', index, pos);
+                            if (projected) {
+                                event.target.absolutePosition(projected);
+                            }
+                        }}
+                        onDragEnd={(event) => {
+                            if (!canEditGradientHandles) return;
+                            event.cancelBubble = true;
+                            const pos = event.target.getAbsolutePosition();
+                            const projected = updateGradientHandleFromStage(shape.id, 'stop', index, pos);
+                            if (projected) {
+                                event.target.absolutePosition(projected);
+                            }
+                            finishGradientHandleDrag();
+                        }}
+                        shadowBlur={4}
+                        shadowColor="rgba(15, 23, 42, 0.18)"
+                    />
+                ))}
+            </Group>
+        );
+    };
+
 
     // handle wheel to zoom
     const handleWheel = (e) => {
@@ -1333,11 +1921,74 @@ export default function Canvas({
         if (layer && typeof layer.batchDraw === 'function') layer.batchDraw();
     }, [scale, stagePos, shapes]);
 
+    const handleLayerResizeStart = useCallback(
+        (event) => {
+            if (event.pointerType === 'mouse' && event.button !== 0) {
+                return;
+            }
+            if (typeof event.clientX !== 'number') return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const handleElement = event.currentTarget;
+            const pointerId = event.pointerId;
+            const startX = event.clientX;
+            const startWidth = layerPanelWidth;
+
+            const applyWidth = (clientX) => {
+                if (typeof clientX !== 'number') return;
+                const delta = clientX - startX;
+                const nextWidth = clampValue(
+                    startWidth + delta,
+                    LAYER_PANEL_MIN_WIDTH,
+                    LAYER_PANEL_MAX_WIDTH
+                );
+                setLayerPanelWidth((current) =>
+                    Math.abs(current - nextWidth) < 0.5 ? current : nextWidth
+                );
+            };
+
+            const handlePointerMove = (moveEvent) => {
+                applyWidth(moveEvent.clientX);
+            };
+
+            const handlePointerEnd = () => {
+                if (typeof handleElement.releasePointerCapture === 'function') {
+                    try {
+                        handleElement.releasePointerCapture(pointerId);
+                    } catch (error) {
+                        // ignore environments without pointer capture support
+                    }
+                }
+                handleElement.removeEventListener('pointermove', handlePointerMove);
+                handleElement.removeEventListener('pointerup', handlePointerEnd);
+                handleElement.removeEventListener('pointercancel', handlePointerEnd);
+            };
+
+            handleElement.addEventListener('pointermove', handlePointerMove);
+            handleElement.addEventListener('pointerup', handlePointerEnd);
+            handleElement.addEventListener('pointercancel', handlePointerEnd);
+
+            if (typeof handleElement.setPointerCapture === 'function') {
+                try {
+                    handleElement.setPointerCapture(pointerId);
+                } catch (error) {
+                    // ignore environments without pointer capture support
+                }
+            }
+        },
+        [layerPanelWidth]
+    );
+
     return (
         <div style={{ display: 'flex', height: '100%' }}>
             <aside
                 style={{
-                    width: LAYER_PANEL_WIDTH,
+                    flex: '0 0 auto',
+                    width: layerPanelWidth,
+                    minWidth: LAYER_PANEL_MIN_WIDTH,
+                    maxWidth: LAYER_PANEL_MAX_WIDTH,
                     borderRight: '1px solid #e5e5e5',
                     background: '#fdfdfd',
                     padding: '12px 8px',
@@ -1518,6 +2169,31 @@ export default function Canvas({
             </aside>
 
             <div
+                role="separator"
+                aria-orientation="vertical"
+                onPointerDown={handleLayerResizeStart}
+                style={{
+                    flex: '0 0 auto',
+                    width: 8,
+                    padding: '0 2px',
+                    cursor: 'col-resize',
+                    display: 'flex',
+                    alignItems: 'stretch',
+                    touchAction: 'none',
+                    background: 'transparent',
+                }}
+            >
+                <div
+                    style={{
+                        flex: 1,
+                        borderLeft: '1px solid #dfe3eb',
+                        borderRight: '1px solid #dfe3eb',
+                        background: '#f3f5f9',
+                    }}
+                />
+            </div>
+
+            <div
                 ref={stageContainerRef}
                 style={{ position: 'relative', flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}
             >
@@ -1557,6 +2233,7 @@ export default function Canvas({
                             enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
                         />
                     </Layer>
+                    <Layer listening={selectedTool === 'select'}>{renderGradientHandles()}</Layer>
                 </Stage>
             </div>
 
