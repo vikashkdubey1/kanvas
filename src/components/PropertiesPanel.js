@@ -2460,34 +2460,36 @@ const ColorControl = ({
 
 const NumberControl = ({
     label,
-        value,
-        onChange,
-        min = 0,
-        max = 128,
-        step = 1,
-        suffix = 'px',
-    }) => (
-        <div style={fieldStyle}>
-            <span style={fieldLabelStyle}>{label}</span>
-            <div style={numberInputWrapperStyle}>
-                <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    step={step}
-                    value={typeof value === 'number' && !Number.isNaN(value) ? value : 0}
-                    onChange={(event) => {
-                        const numeric = Number(event.target.value);
-                        if (typeof onChange === 'function') {
-                            onChange(Number.isNaN(numeric) ? 0 : numeric);
-                        }
-                    }}
-                    style={numberInputStyle}
-                />
-                <span style={suffixStyle}>{suffix}</span>
-            </div>
+    value,
+    onChange,
+    min = 0,
+    max = 128,
+    step = 1,
+    suffix = 'px',
+    disabled = false,
+}) => (
+    <div style={{ ...fieldStyle, opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
+        <span style={fieldLabelStyle}>{label}</span>
+        <div style={numberInputWrapperStyle}>
+            <input
+                type="number"
+                min={min}
+                max={max}
+                step={step}
+                value={typeof value === 'number' && !Number.isNaN(value) ? value : 0}
+                onChange={(event) => {
+                    const numeric = Number(event.target.value);
+                    if (typeof onChange === 'function') {
+                        onChange(Number.isNaN(numeric) ? 0 : numeric);
+                    }
+                }}
+                style={numberInputStyle}
+                disabled={disabled}
+            />
+            <span style={suffixStyle}>{suffix}</span>
         </div>
-    );
+    </div>
+);
 
 const SelectControl = ({ label, value, onChange, options }) => {
     const normalizedOptions = options.map((option) =>
@@ -2545,6 +2547,7 @@ export default function PropertiesPanel({
 }) {
         const isTextShape = shape?.type === 'text';
     const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
+    const disableStrokeControls = shape?.type === 'group';
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 
@@ -2730,15 +2733,17 @@ const subtitle = shape
                     <ColorControl
                         label="Stroke"
                         style={strokeStyle}
-                        onStyleChange={onStrokeStyleChange}
+                        onStyleChange={disableStrokeControls ? undefined : onStrokeStyleChange}
+                        disabled={disableStrokeControls}
                     />
                     <NumberControl
                         label="Stroke Width"
                         value={strokeWidth}
-                        onChange={onStrokeWidthChange}
+                        onChange={disableStrokeControls ? undefined : onStrokeWidthChange}
                         min={0}
                         max={64}
                         step={1}
+                        disabled={disableStrokeControls}
                     />
                 </Section>
 
