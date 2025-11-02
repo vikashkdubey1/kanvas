@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 // simple SVG icons
 const Icon = {
@@ -59,6 +59,11 @@ const Icon = {
 };
 
 export default function Toolbar({ selectedTool, onSelect }) {
+    const containerOptions = [
+        { value: 'frame', label: 'Frame' },
+        { value: 'group', label: 'Group' },
+    ];
+
     const tools = [
         { id: 'select', icon: Icon.select, label: 'Select' },
         { id: 'hand', icon: Icon.hand, label: 'Hand' },
@@ -69,6 +74,14 @@ export default function Toolbar({ selectedTool, onSelect }) {
         { id: 'line', icon: Icon.line, label: 'Line' },
         { id: 'text', icon: Icon.text, label: 'Text' },
     ];
+
+    const [containerTool, setContainerTool] = useState('frame');
+
+    useEffect(() => {
+        if (containerOptions.some((option) => option.value === selectedTool)) {
+            setContainerTool(selectedTool);
+        }
+    }, [selectedTool]);
 
     const ToolButton = ({ tool }) => (
         <button
@@ -107,11 +120,40 @@ export default function Toolbar({ selectedTool, onSelect }) {
                 zIndex: 20,
             }}
         >
-            {/* Tool icons */}
-            <div style={{ display: 'flex', gap: 6 }}>
-                {tools.map((tool) => (
-                    <ToolButton key={tool.id} tool={tool} />
-                ))}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Container</span>
+                    <select
+                        value={containerTool}
+                        onChange={(event) => {
+                            const nextTool = event.target.value;
+                            setContainerTool(nextTool);
+                            onSelect(nextTool);
+                        }}
+                        style={{
+                            height: 36,
+                            borderRadius: 8,
+                            border: '1px solid #cdd5e0',
+                            background: '#fff',
+                            padding: '0 12px',
+                            fontSize: 13,
+                            color: '#1f2a37',
+                        }}
+                        aria-label="Container Tool"
+                    >
+                        {containerOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+
+                <div style={{ display: 'flex', gap: 6 }}>
+                    {tools.map((tool) => (
+                        <ToolButton key={tool.id} tool={tool} />
+                    ))}
+                </div>
             </div>
 
 

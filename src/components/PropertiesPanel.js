@@ -1154,6 +1154,8 @@ const ColorControl = ({
     const saturationPointerIdRef = useRef(null);
     const huePointerIdRef = useRef(null);
     const alphaPointerIdRef = useRef(null);
+    const solidInteractionIdCounterRef = useRef(0);
+    const activeSolidInteractionIdRef = useRef(null);
 
     useEffect(() => {
         solidHsvaRef.current = solidHsva;
@@ -1388,10 +1390,12 @@ const ColorControl = ({
     }, [handlePopoverDragEnd, handlePopoverDragMove]);
 
     const commitStyle = useCallback(
-        (updates) => {
+        (updates = {}) => {
             if (typeof onStyleChange !== 'function') return;
             const nextType = updates.type ?? activeType;
             let nextValue = updates.value ?? style?.value;
+            const nextMeta =
+                updates.meta && typeof updates.meta === 'object' ? { ...updates.meta } : null;
 
             if (nextType === 'solid') {
                 if (typeof nextValue !== 'string') {
@@ -1404,7 +1408,12 @@ const ColorControl = ({
                 nextValue = rgbaToCss(hsvaToRgba(solidHsvaRef.current));
             }
 
-            onStyleChange({ type: nextType, value: nextValue });
+            const payload = { type: nextType, value: nextValue };
+            if (nextMeta && Object.keys(nextMeta).length > 0) {
+                payload.meta = nextMeta;
+            }
+
+            onStyleChange(payload);
         },
         [activeType, onStyleChange, style?.value]
     );
@@ -1414,46 +1423,78 @@ const ColorControl = ({
     useEffect(() => {
         commitStyleRef.current = commitStyle;
     }, [commitStyle]);
-    const applySolidColor = useCallback((nextHsva) => {
-        const normalized = normalizeHsva(nextHsva);
-        solidHsvaRef.current = normalized;
-        setSolidHsva(normalized);
-        const rgba = hsvaToRgba(normalized);
-        setSolidHexDraft(rgbaToHex(rgba).toUpperCase());
-        setSolidAlphaDraft(Math.round(rgba.a * 100));
-        commitStyleRef.current({ type: 'solid', value: rgbaToCss(rgba) });
+
+    const beginSolidInteraction = useCallback(() => {
+        solidInteractionIdCounterRef.current += 1;
+        const nextId = solidInteractionIdCounterRef.current;
+        activeSolidInteractionIdRef.current = nextId;
+        return nextId;
     }, []);
 
+    const finalizeSolidInteraction = useCallback(() => {
+        const interactionId = activeSolidInteractionIdRef.current;
+        if (interactionId == null) return;
+        activeSolidInteractionIdRef.current = null;
+        const rgba = hsvaToRgba(solidHsvaRef.current);
+        commitStyleRef.current({
+            type: 'solid',
+            value: rgbaToCss(rgba),
+            meta: { interactionId, isPreview: false },
+        });
+    }, []);
+
+    const applySolidColor = useCallback(
+        (nextHsva, options = {}) => {
+            const normalized = normalizeHsva(nextHsva);
+            solidHsvaRef.current = normalized;
+            setSolidHsva(normalized);
+            const rgba = hsvaToRgba(normalized);
+            setSolidHexDraft(rgbaToHex(rgba).toUpperCase());
+            setSolidAlphaDraft(Math.round(rgba.a * 100));
+            let meta = null;
+            if (options.preview) {
+                const interactionId = activeSolidInteractionIdRef.current;
+                if (interactionId != null) {
+                    meta = { interactionId, isPreview: true };
+                }
+            } else if (options.meta && typeof options.meta === 'object') {
+                meta = { ...options.meta };
+            }
+            commitStyleRef.current({ type: 'solid', value: rgbaToCss(rgba), meta });
+        },
+        []
+    );
+
     const updateSaturationFromPoint = useCallback(
-        (clientX, clientY) => {
+        (clientX, clientY, options = {}) => {
             const rect = solidSaturationRef.current?.getBoundingClientRect();
             if (!rect || rect.width === 0 || rect.height === 0) return;
             const saturation = clamp01((clientX - rect.left) / rect.width);
             const value = clamp01(1 - (clientY - rect.top) / rect.height);
             const current = solidHsvaRef.current;
-            applySolidColor({ ...current, s: saturation, v: value });
+            applySolidColor({ ...current, s: saturation, v: value }, options);
         },
         [applySolidColor]
     );
 
     const updateHueFromPoint = useCallback(
-        (clientX) => {
+        (clientX, options = {}) => {
             const rect = hueTrackRef.current?.getBoundingClientRect();
             if (!rect || rect.width === 0) return;
             const ratio = clamp01((clientX - rect.left) / rect.width);
             const current = solidHsvaRef.current;
-            applySolidColor({ ...current, h: ratio * 360 });
+            applySolidColor({ ...current, h: ratio * 360 }, options);
         },
         [applySolidColor]
     );
 
     const updateAlphaFromPoint = useCallback(
-        (clientX) => {
+        (clientX, options = {}) => {
             const rect = alphaTrackRef.current?.getBoundingClientRect();
             if (!rect || rect.width === 0) return;
             const ratio = clamp01((clientX - rect.left) / rect.width);
             const current = solidHsvaRef.current;
-            applySolidColor({ ...current, a: ratio });
+            applySolidColor({ ...current, a: ratio }, options);
         },
         [applySolidColor]
     );
@@ -1462,7 +1503,7 @@ const ColorControl = ({
         (event) => {
             if (event.pointerId !== saturationPointerIdRef.current) return;
             if (typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
-            updateSaturationFromPoint(event.clientX, event.clientY);
+            updateSaturationFromPoint(event.clientX, event.clientY, { preview: true });
         },
         [updateSaturationFromPoint]
     );
@@ -1474,15 +1515,16 @@ const ColorControl = ({
             window.removeEventListener('pointermove', handleSaturationPointerMove);
             window.removeEventListener('pointerup', handleSaturationPointerUp);
             window.removeEventListener('pointercancel', handleSaturationPointerUp);
+            finalizeSolidInteraction();
         },
-        [handleSaturationPointerMove]
+        [finalizeSolidInteraction, handleSaturationPointerMove]
     );
 
     const handleHuePointerMove = useCallback(
         (event) => {
             if (event.pointerId !== huePointerIdRef.current) return;
             if (typeof event.clientX !== 'number') return;
-            updateHueFromPoint(event.clientX);
+            updateHueFromPoint(event.clientX, { preview: true });
         },
         [updateHueFromPoint]
     );
@@ -1494,15 +1536,16 @@ const ColorControl = ({
             window.removeEventListener('pointermove', handleHuePointerMove);
             window.removeEventListener('pointerup', handleHuePointerUp);
             window.removeEventListener('pointercancel', handleHuePointerUp);
+            finalizeSolidInteraction();
         },
-        [handleHuePointerMove]
+        [finalizeSolidInteraction, handleHuePointerMove]
     );
 
     const handleAlphaPointerMove = useCallback(
         (event) => {
             if (event.pointerId !== alphaPointerIdRef.current) return;
             if (typeof event.clientX !== 'number') return;
-            updateAlphaFromPoint(event.clientX);
+            updateAlphaFromPoint(event.clientX, { preview: true });
         },
         [updateAlphaFromPoint]
     );
@@ -1514,15 +1557,17 @@ const ColorControl = ({
             window.removeEventListener('pointermove', handleAlphaPointerMove);
             window.removeEventListener('pointerup', handleAlphaPointerUp);
             window.removeEventListener('pointercancel', handleAlphaPointerUp);
+            finalizeSolidInteraction();
         },
-        [handleAlphaPointerMove]
+        [finalizeSolidInteraction, handleAlphaPointerMove]
     );
 
     const handleSaturationPointerDown = (event) => {
         event.preventDefault();
         if (typeof event.clientX !== 'number' || typeof event.clientY !== 'number') return;
+        beginSolidInteraction();
         saturationPointerIdRef.current = event.pointerId;
-        updateSaturationFromPoint(event.clientX, event.clientY);
+        updateSaturationFromPoint(event.clientX, event.clientY, { preview: true });
         window.addEventListener('pointermove', handleSaturationPointerMove);
         window.addEventListener('pointerup', handleSaturationPointerUp);
         window.addEventListener('pointercancel', handleSaturationPointerUp);
@@ -1531,8 +1576,9 @@ const ColorControl = ({
     const handleHuePointerDown = (event) => {
         event.preventDefault();
         if (typeof event.clientX !== 'number') return;
+        beginSolidInteraction();
         huePointerIdRef.current = event.pointerId;
-        updateHueFromPoint(event.clientX);
+        updateHueFromPoint(event.clientX, { preview: true });
         window.addEventListener('pointermove', handleHuePointerMove);
         window.addEventListener('pointerup', handleHuePointerUp);
         window.addEventListener('pointercancel', handleHuePointerUp);
@@ -1541,8 +1587,9 @@ const ColorControl = ({
     const handleAlphaPointerDown = (event) => {
         event.preventDefault();
         if (typeof event.clientX !== 'number') return;
+        beginSolidInteraction();
         alphaPointerIdRef.current = event.pointerId;
-        updateAlphaFromPoint(event.clientX);
+        updateAlphaFromPoint(event.clientX, { preview: true });
         window.addEventListener('pointermove', handleAlphaPointerMove);
         window.addEventListener('pointerup', handleAlphaPointerUp);
         window.addEventListener('pointercancel', handleAlphaPointerUp);
@@ -2333,7 +2380,6 @@ const ColorControl = ({
                         </button>
                     </div>
                     <div style={colorPopoverBodyStyle}>
-                        {activeType === 'solid' ? renderSolidEditor() : null}
                         <div style={colorModeGridStyle}>
                             {COLOR_STYLE_OPTIONS.map((option) => (
                                 <ToggleButton
@@ -2348,7 +2394,7 @@ const ColorControl = ({
                             ))}
                         </div>
                         {activeType === 'solid'
-                            ? null
+                            ? renderSolidEditor()
                             : activeType === 'gradient'
                                 ? renderGradientEditor()
                                 : renderNonSolidPlaceholder()}
@@ -2498,7 +2544,7 @@ export default function PropertiesPanel({
     onTextDecorationChange,
 }) {
         const isTextShape = shape?.type === 'text';
-const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type);
+const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 

@@ -74,6 +74,8 @@ export default function App() {
                 p: 'pen',
                 o: 'ellipse',
                 h: 'hand',
+                f: 'frame',
+                g: 'group',
             };
 
             const nextTool = shortcutMap[key];
@@ -102,7 +104,7 @@ export default function App() {
             const nextValue =
                 typeof shape.fill === 'string'
                     ? shape.fill
-                    : ['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type)
+                    : ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type)
                         ? DEFAULT_FILL_STYLE.value
                         : prev.value;
             return { type: nextType, value: nextValue };
