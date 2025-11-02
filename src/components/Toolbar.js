@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 // simple SVG icons
 const Icon = {
@@ -59,13 +59,13 @@ const Icon = {
 };
 
 export default function Toolbar({ selectedTool, onSelect }) {
-    const selectionOptions = [
+    const containerOptions = [
         { value: 'frame', label: 'Frame' },
         { value: 'group', label: 'Group' },
-        { value: 'select', label: 'Select' },
     ];
 
     const tools = [
+        { id: 'select', icon: Icon.select, label: 'Select' },
         { id: 'hand', icon: Icon.hand, label: 'Hand' },
         { id: 'pen', icon: Icon.pen, label: 'Pen' },
         { id: 'rectangle', icon: Icon.rectangle, label: 'Rectangle' },
@@ -75,9 +75,13 @@ export default function Toolbar({ selectedTool, onSelect }) {
         { id: 'text', icon: Icon.text, label: 'Text' },
     ];
 
-    const selectionValue = selectionOptions.some((option) => option.value === selectedTool)
-        ? selectedTool
-        : 'frame';
+    const [containerTool, setContainerTool] = useState('frame');
+
+    useEffect(() => {
+        if (containerOptions.some((option) => option.value === selectedTool)) {
+            setContainerTool(selectedTool);
+        }
+    }, [selectedTool]);
 
     const ToolButton = ({ tool }) => (
         <button
@@ -117,29 +121,15 @@ export default function Toolbar({ selectedTool, onSelect }) {
             }}
         >
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div
-                        style={{
-                            width: 36,
-                            height: 36,
-                            display: 'grid',
-                            placeItems: 'center',
-                            borderRadius: 8,
-                            border:
-                                selectionValue === 'select'
-                                    ? '1px solid #4f83ff'
-                                    : '1px solid #cdd5e0',
-                            background:
-                                selectionValue === 'select' ? '#e5efff' : '#fff',
-                            color: '#1f2a37',
-                        }}
-                        aria-hidden="true"
-                    >
-                        {Icon.select}
-                    </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Container</span>
                     <select
-                        value={selectionValue}
-                        onChange={(event) => onSelect(event.target.value)}
+                        value={containerTool}
+                        onChange={(event) => {
+                            const nextTool = event.target.value;
+                            setContainerTool(nextTool);
+                            onSelect(nextTool);
+                        }}
                         style={{
                             height: 36,
                             borderRadius: 8,
@@ -149,15 +139,15 @@ export default function Toolbar({ selectedTool, onSelect }) {
                             fontSize: 13,
                             color: '#1f2a37',
                         }}
-                        aria-label="Selection Mode"
+                        aria-label="Container Tool"
                     >
-                        {selectionOptions.map((option) => (
+                        {containerOptions.map((option) => (
                             <option key={option.value} value={option.value}>
                                 {option.label}
                             </option>
                         ))}
                     </select>
-                </div>
+                </label>
 
                 <div style={{ display: 'flex', gap: 6 }}>
                     {tools.map((tool) => (

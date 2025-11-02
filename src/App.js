@@ -31,7 +31,7 @@ const DEFAULT_TEXT_PROPS = {
  */
 export default function App() {
     // Track which tool is currently selected.  Default is 'select'.
-    const [selectedTool, setSelectedTool] = useState('frame');
+    const [selectedTool, setSelectedTool] = useState('select');
     const [fillStyle, setFillStyle] = useState(DEFAULT_FILL_STYLE);
     const [strokeStyle, setStrokeStyle] = useState(DEFAULT_STROKE_STYLE);
     const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
@@ -104,7 +104,7 @@ export default function App() {
             const nextValue =
                 typeof shape.fill === 'string'
                     ? shape.fill
-                    : ['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type)
+                    : ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type)
                         ? DEFAULT_FILL_STYLE.value
                         : prev.value;
             return { type: nextType, value: nextValue };

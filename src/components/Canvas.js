@@ -305,6 +305,44 @@ export default function Canvas({
         return false;
     };
 
+    const getContainerBounds = (shape) => {
+        if (!shape || !isContainerShape(shape)) return null;
+        const width = Math.max(0, shape.width || 0);
+        const height = Math.max(0, shape.height || 0);
+        if (!width || !height) return null;
+        const centerX = shape.x || 0;
+        const centerY = shape.y || 0;
+        return {
+            left: centerX - width / 2,
+            right: centerX + width / 2,
+            top: centerY - height / 2,
+            bottom: centerY + height / 2,
+        };
+    };
+
+    const findContainerAtPoint = (point, excludedIds = new Set(), source = shapesRef.current) => {
+        if (!point) return null;
+        const localExcluded = excludedIds instanceof Set ? excludedIds : new Set(excludedIds);
+        for (let index = source.length - 1; index >= 0; index -= 1) {
+            const candidate = source[index];
+            if (!isContainerShape(candidate)) continue;
+            if (localExcluded.has(candidate.id)) continue;
+            if (candidate.visible === false) continue;
+            if (candidate.locked) continue;
+            const bounds = getContainerBounds(candidate);
+            if (!bounds) continue;
+            if (
+                point.x >= bounds.left &&
+                point.x <= bounds.right &&
+                point.y >= bounds.top &&
+                point.y <= bounds.bottom
+            ) {
+                return candidate;
+            }
+        }
+        return null;
+    };
+
     const scaleChildWithinContainer = (
         shape,
         prevContainer,
@@ -627,7 +665,7 @@ export default function Canvas({
         if (!selectedId) return;
         const shape = shapesRef.current.find((s) => s.id === selectedId);
         if (!shape) return;
-        if (!['rectangle', 'circle', 'ellipse', 'text'].includes(shape.type)) return;
+        if (!['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type)) return;
 
         const meta = fillStyle?.meta;
         const interactionId =
@@ -749,7 +787,7 @@ export default function Canvas({
         if (!selectedId) return;
         const shape = shapesRef.current.find((s) => s.id === selectedId);
         if (!shape) return;
-        if (!['rectangle', 'circle', 'ellipse', 'line', 'pen', 'text'].includes(shape.type)) return;
+        if (!['rectangle', 'circle', 'ellipse', 'line', 'pen', 'text', 'frame'].includes(shape.type)) return;
         const desiredStrokeWidth = typeof strokeWidth === 'number' ? strokeWidth : 0;
         const currentWidth = typeof shape.strokeWidth === 'number' ? shape.strokeWidth : 0;
         const currentStroke = typeof shape.stroke === 'string' ? shape.stroke : null;
@@ -1186,11 +1224,22 @@ export default function Canvas({
     const handleDragEnd = (id, e) => {
         const x = e.target.x();
         const y = e.target.y();
-        const current = shapesRef.current.find((shape) => shape.id === id);
+        const snapshot = shapesRef.current;
+        const current = snapshot.find((shape) => shape.id === id) || null;
         const deltaX = current ? x - (current.x || 0) : 0;
         const deltaY = current ? y - (current.y || 0) : 0;
-        applyChange((prev) =>
-            prev.map((s) => {
+        const pointer = getCanvasPointer();
+        const dropPoint = pointer || { x, y };
+        const excludedIds = new Set([id]);
+        if (current) {
+            collectDescendantIds(snapshot, id).forEach((childId) => excludedIds.add(childId));
+        }
+        const dropTarget = findContainerAtPoint(dropPoint, excludedIds, snapshot);
+        const nextParentId = dropTarget ? dropTarget.id : null;
+        const previousParentId = current?.parentId ?? null;
+
+        applyChange((prev) => {
+            let updated = prev.map((s) => {
                 if (s.id === id) {
                     return { ...s, x, y };
                 }
@@ -1198,8 +1247,16 @@ export default function Canvas({
                     return { ...s, x: (s.x || 0) + deltaX, y: (s.y || 0) + deltaY };
                 }
                 return s;
-            })
-        );
+            });
+
+            if (current && nextParentId !== previousParentId) {
+                updated = updated.map((shape) =>
+                    shape.id === id ? { ...shape, parentId: nextParentId } : shape
+                );
+            }
+
+            return updated;
+        });
     };
 
     const handleTransformEnd = (shape, node) => {
@@ -1947,7 +2004,7 @@ export default function Canvas({
         };
     };
 
-    const renderShape = (shape) => {
+    const renderShapeNode = (shape) => {
         if (shape.visible === false) {
             return null;
         }
@@ -2387,6 +2444,39 @@ export default function Canvas({
         return result;
     }, [childrenMap]);
 
+    const renderShapeTree = (shape) => {
+        if (!shape || shape.visible === false) {
+            return null;
+        }
+        const node = renderShapeNode(shape);
+        if (!isContainerShape(shape)) {
+            return node;
+        }
+        const children = childrenMap.get(shape.id) || [];
+        const clipContent = shape.type === 'frame' && shape.clipContent;
+        const clipProps = {};
+        if (clipContent) {
+            const bounds = getContainerBounds(shape);
+            if (bounds) {
+                clipProps.clipFunc = (ctx) => {
+                    ctx.beginPath();
+                    ctx.rect(
+                        bounds.left,
+                        bounds.top,
+                        Math.max(0, bounds.right - bounds.left),
+                        Math.max(0, bounds.bottom - bounds.top)
+                    );
+                };
+            }
+        }
+        return (
+            <Group key={`container-${shape.id}`} {...clipProps}>
+                {node}
+                {children.map((child) => renderShapeTree(child))}
+            </Group>
+        );
+    };
+
     const [draggedLayerId, setDraggedLayerId] = useState(null);
     const [dragOverLayerId, setDragOverLayerId] = useState(null);
     const [dragOverZone, setDragOverZone] = useState(null);
@@ -2522,6 +2612,8 @@ export default function Canvas({
         },
         [layerPanelWidth]
     );
+
+    const rootShapes = childrenMap.get(null) || [];
 
     return (
         <div style={{ display: 'flex', height: '100%' }}>
@@ -2770,7 +2862,7 @@ export default function Canvas({
                     onDblClick={handleStageDoubleClick}
                 >
                     <Layer>
-                        {shapes.map((shape) => renderShape(shape))}
+                        {rootShapes.map((shape) => renderShapeTree(shape))}
 
                         <Transformer
                             ref={trRef}
