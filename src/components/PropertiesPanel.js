@@ -1395,7 +1395,9 @@ const ColorControl = ({
             const nextType = updates.type ?? activeType;
             let nextValue = updates.value ?? style?.value;
             const nextMeta =
-                updates.meta && typeof updates.meta === 'object' ? { ...updates.meta } : null;
+                      updates.meta && typeof updates.meta === 'object'
+                            ? { ...updates.meta }
+                        : { source: 'colorControl' }; // ✅ default meta so Canvas knows it's user-initiated
 
             if (nextType === 'solid') {
                 if (typeof nextValue !== 'string') {
@@ -1483,18 +1485,18 @@ const ColorControl = ({
             if (!rect || rect.width === 0) return;
             const ratio = clamp01((clientX - rect.left) / rect.width);
             const current = solidHsvaRef.current;
-            applySolidColor({ ...current, h: ratio * 360 }, options);
+            applySolidColor({ ...current, a: ratio }, options);
         },
         [applySolidColor]
     );
 
     const updateAlphaFromPoint = useCallback(
-        (clientX, options = {}) => {
+        (clientX) => {
             const rect = alphaTrackRef.current?.getBoundingClientRect();
             if (!rect || rect.width === 0) return;
             const ratio = clamp01((clientX - rect.left) / rect.width);
             const current = solidHsvaRef.current;
-            applySolidColor({ ...current, a: ratio }, options);
+            applySolidColor({ ...current, a: ratio });
         },
         [applySolidColor]
     );
@@ -1536,7 +1538,6 @@ const ColorControl = ({
             window.removeEventListener('pointermove', handleHuePointerMove);
             window.removeEventListener('pointerup', handleHuePointerUp);
             window.removeEventListener('pointercancel', handleHuePointerUp);
-            finalizeSolidInteraction();
         },
         [finalizeSolidInteraction, handleHuePointerMove]
     );
@@ -1587,9 +1588,8 @@ const ColorControl = ({
     const handleAlphaPointerDown = (event) => {
         event.preventDefault();
         if (typeof event.clientX !== 'number') return;
-        beginSolidInteraction();
         alphaPointerIdRef.current = event.pointerId;
-        updateAlphaFromPoint(event.clientX, { preview: true });
+        updateAlphaFromPoint(event.clientX);
         window.addEventListener('pointermove', handleAlphaPointerMove);
         window.addEventListener('pointerup', handleAlphaPointerUp);
         window.addEventListener('pointercancel', handleAlphaPointerUp);
@@ -2544,7 +2544,7 @@ export default function PropertiesPanel({
     onTextDecorationChange,
 }) {
         const isTextShape = shape?.type === 'text';
-const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
+    const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 
