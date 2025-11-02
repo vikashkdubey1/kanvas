@@ -1,7 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Canvas from './components/Canvas';
 import Toolbar from './components/Toolbar';
-import PropertiesPanel from './components/PropertiesPanel';
+import PropertiesPanel, {
+    PROPERTIES_PANEL_DEFAULT_WIDTH,
+    PROPERTIES_PANEL_MIN_WIDTH,
+    PROPERTIES_PANEL_MAX_WIDTH,
+} from './components/PropertiesPanel';
+import { DEFAULT_GRADIENT, normalizeGradient } from './utils/gradient';
 
 const DEFAULT_FILL_STYLE = { type: 'solid', value: '#d9d9d9' };
 const DEFAULT_STROKE_STYLE = { type: 'solid', value: '#000000' };
@@ -30,6 +35,11 @@ export default function App() {
     const [fillStyle, setFillStyle] = useState(DEFAULT_FILL_STYLE);
     const [strokeStyle, setStrokeStyle] = useState(DEFAULT_STROKE_STYLE);
     const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
+    const [isGradientPickerOpen, setGradientPickerOpen] = useState(false);
+    const gradientInteractionRef = useRef({ active: false });
+    const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(
+        PROPERTIES_PANEL_DEFAULT_WIDTH
+    );
 
     const [textFontFamily, setTextFontFamily] = useState(DEFAULT_TEXT_PROPS.fontFamily);
     const [textFontStyle, setTextFontStyle] = useState(DEFAULT_TEXT_PROPS.fontStyle);
@@ -85,6 +95,10 @@ export default function App() {
 
         setFillStyle((prev) => {
             const nextType = typeof shape.fillType === 'string' ? shape.fillType : prev.type;
+            if (nextType === 'gradient') {
+                const gradientValue = normalizeGradient(shape.fillGradient || prev.value || DEFAULT_GRADIENT);
+                return { type: 'gradient', value: gradientValue };
+            }
             const nextValue =
                 typeof shape.fill === 'string'
                     ? shape.fill
@@ -145,6 +159,65 @@ export default function App() {
         ]
     );
 
+    const handlePropertiesResizeStart = useCallback(
+        (event) => {
+            if (event.pointerType === 'mouse' && event.button !== 0) {
+                return;
+            }
+            if (typeof event.clientX !== 'number') return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const handleElement = event.currentTarget;
+            const pointerId = event.pointerId;
+            const startX = event.clientX;
+            const startWidth = propertiesPanelWidth;
+
+            const applyWidth = (clientX) => {
+                if (typeof clientX !== 'number') return;
+                const delta = startX - clientX;
+                const nextWidth = Math.min(
+                    Math.max(startWidth + delta, PROPERTIES_PANEL_MIN_WIDTH),
+                    PROPERTIES_PANEL_MAX_WIDTH
+                );
+                setPropertiesPanelWidth((current) =>
+                    Math.abs(current - nextWidth) < 0.5 ? current : nextWidth
+                );
+            };
+
+            const handlePointerMove = (moveEvent) => {
+                applyWidth(moveEvent.clientX);
+            };
+
+            const handlePointerEnd = () => {
+                if (typeof handleElement.releasePointerCapture === 'function') {
+                    try {
+                        handleElement.releasePointerCapture(pointerId);
+                    } catch (error) {
+                        // ignore environments without pointer capture support
+                    }
+                }
+                handleElement.removeEventListener('pointermove', handlePointerMove);
+                handleElement.removeEventListener('pointerup', handlePointerEnd);
+                handleElement.removeEventListener('pointercancel', handlePointerEnd);
+            };
+
+            handleElement.addEventListener('pointermove', handlePointerMove);
+            handleElement.addEventListener('pointerup', handlePointerEnd);
+            handleElement.addEventListener('pointercancel', handlePointerEnd);
+
+            if (typeof handleElement.setPointerCapture === 'function') {
+                try {
+                    handleElement.setPointerCapture(pointerId);
+                } catch (error) {
+                    // ignore environments without pointer capture support
+                }
+            }
+        },
+        [propertiesPanelWidth]
+    );
+
     return (
         <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
             <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
@@ -159,13 +232,43 @@ export default function App() {
                         strokeWidth={strokeWidth}
                         textOptions={textOptions}
                         onSelectionChange={handleSelectionChange}
+                        showGradientHandles={isGradientPickerOpen}
+                        gradientInteractionRef={gradientInteractionRef}
+                    />
+                </div>
+
+                <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    onPointerDown={handlePropertiesResizeStart}
+                    style={{
+                        flex: '0 0 auto',
+                        width: 8,
+                        padding: '0 2px',
+                        cursor: 'col-resize',
+                        display: 'flex',
+                        alignItems: 'stretch',
+                        touchAction: 'none',
+                        background: 'transparent',
+                    }}
+                >
+                    <div
+                        style={{
+                            flex: 1,
+                            borderLeft: '1px solid #dfe3eb',
+                            borderRight: '1px solid #dfe3eb',
+                            background: '#f3f5f9',
+                        }}
                     />
                 </div>
 
                 <PropertiesPanel
+                    panelWidth={propertiesPanelWidth}
                     shape={activeShape}
                     fillStyle={fillStyle}
                     onFillStyleChange={setFillStyle}
+                    onGradientPickerToggle={setGradientPickerOpen}
+                    gradientInteractionRef={gradientInteractionRef}
                     strokeStyle={strokeStyle}
                     onStrokeStyleChange={setStrokeStyle}
                     strokeWidth={strokeWidth}
