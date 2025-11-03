@@ -36,4 +36,5 @@ module.exports = {
   port: process.env.PORT || 3000, // Render dynamically assigns a port
   allowedHosts: 'all',            // allow Render’s hostname
   historyApiFallback: true,       // for React Router / SPA support
+  }
 };
