@@ -30,8 +30,10 @@ module.exports = {
     }),
   ],
   devServer: {
-    static: './public',
-    hot: true,
-    port: 3000,
-  },
+  static: './public',
+  hot: true,
+  host: '0.0.0.0',                // accept all network connections
+  port: process.env.PORT || 3000, // Render dynamically assigns a port
+  allowedHosts: 'all',            // allow Render’s hostname
+  historyApiFallback: true,       // for React Router / SPA support
 };
