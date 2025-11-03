@@ -146,6 +146,16 @@ const activeSubtitleStyle = {
 
     const sectionHeaderStyle = {
         marginBottom: 14,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+    };
+
+    const sectionHeaderActionsStyle = {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
     };
 
     const sectionTitleStyle = {
@@ -161,6 +171,356 @@ const activeSubtitleStyle = {
         flexDirection: 'column',
         gap: 14,
     };
+
+    const sectionSubheadingStyle = {
+        fontSize: 12,
+        fontWeight: 700,
+        letterSpacing: 0.6,
+        textTransform: 'uppercase',
+        color: '#475569',
+    };
+
+    const iconButtonStyle = {
+        width: 36,
+        height: 36,
+        borderRadius: 8,
+        border: '1px solid #cbd5f5',
+        background: '#f8fafc',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        transition: 'all 0.18s ease',
+        color: '#1f2937',
+    };
+
+    const iconButtonActiveStyle = {
+        background: '#1d4ed8',
+        borderColor: '#1d4ed8',
+        color: '#ffffff',
+        boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
+    };
+
+    const iconButtonDisabledStyle = {
+        opacity: 0.45,
+        cursor: 'not-allowed',
+    };
+
+    const alignmentGridStyle = {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 36px)',
+        gap: 8,
+    };
+
+    const distributeRowStyle = {
+        display: 'flex',
+        gap: 8,
+    };
+
+    const rotationRowStyle = {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 36px)',
+        gap: 8,
+        alignItems: 'end',
+    };
+
+    const dimensionRowStyle = {
+        display: 'flex',
+        gap: 12,
+        alignItems: 'flex-end',
+    };
+
+    const cornerDetailsGridStyle = {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 12,
+    };
+
+    const appearanceRowStyle = {
+        display: 'flex',
+        gap: 12,
+        alignItems: 'flex-end',
+        flexWrap: 'wrap',
+    };
+
+    const blendActionsWrapperStyle = {
+        display: 'flex',
+        gap: 6,
+        alignItems: 'center',
+    };
+
+    const numericRowStyle = {
+        display: 'flex',
+        gap: 12,
+        alignItems: 'center',
+    };
+
+    const numericFieldStyle = {
+        flex: '1 1 0',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+    };
+
+    const numericInputWrapperInlineStyle = {
+        display: 'flex',
+        alignItems: 'center',
+        borderRadius: 8,
+        border: '1px solid #cdd5e0',
+        background: '#f8fafc',
+        padding: '0 10px',
+        height: 36,
+        gap: 6,
+    };
+
+    const numericInputFieldStyle = {
+        flex: 1,
+        border: 'none',
+        outline: 'none',
+        background: 'transparent',
+        fontSize: 13,
+        color: '#0f172a',
+        minWidth: 0,
+    };
+
+    const unitSuffixStyle = {
+        fontSize: 11,
+        color: '#64748b',
+        fontWeight: 600,
+    };
+
+    const dividerStyle = {
+        height: 1,
+        background: '#e2e8f0',
+        margin: '4px 0',
+    };
+
+    const toggleButtonStyle = {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        border: '1px solid #cdd5e0',
+        background: '#f8fafc',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        transition: 'all 0.18s ease',
+        color: '#1f2937',
+    };
+
+    const toggleButtonActiveStyle = {
+        background: '#1d4ed8',
+        borderColor: '#1d4ed8',
+        color: '#ffffff',
+        boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
+    };
+
+    const blendButtonStyle = {
+        minWidth: 44,
+        height: 28,
+        borderRadius: 6,
+        border: '1px solid #cdd5e0',
+        background: '#f8fafc',
+        fontSize: 11,
+        fontWeight: 600,
+        color: '#1f2937',
+        padding: '0 8px',
+        cursor: 'pointer',
+        transition: 'all 0.18s ease',
+    };
+
+    const blendButtonActiveStyle = {
+        background: '#1d4ed8',
+        borderColor: '#1d4ed8',
+        color: '#ffffff',
+        boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
+    };
+
+    const smoothingControlStyle = {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+    };
+
+    const sliderStyle = {
+        flex: 1,
+    };
+
+    const AlignLeftIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="3" width="2" height="12" rx="1" fill="currentColor" />
+            <rect x="6" y="5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+    );
+
+    const AlignHCenterIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="5" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <rect x="8" y="3" width="2" height="12" rx="1" fill="currentColor" />
+        </svg>
+    );
+
+    const AlignRightIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="14" y="3" width="2" height="12" rx="1" fill="currentColor" />
+            <rect x="4" y="5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+    );
+
+    const AlignTopIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="2" width="12" height="2" rx="1" fill="currentColor" />
+            <rect x="5" y="6" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+    );
+
+    const AlignVMiddleIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="5" y="3" width="8" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <rect x="3" y="8" width="12" height="2" rx="1" fill="currentColor" />
+        </svg>
+    );
+
+    const AlignBottomIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="14" width="12" height="2" rx="1" fill="currentColor" />
+            <rect x="5" y="4" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+    );
+
+    const TidyUpIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="4" height="4" rx="1" fill="currentColor" />
+            <rect x="11" y="3" width="4" height="4" rx="1" fill="currentColor" />
+            <rect x="3" y="11" width="4" height="4" rx="1" fill="currentColor" />
+            <rect x="11" y="11" width="4" height="4" rx="1" fill="currentColor" />
+        </svg>
+    );
+
+    const DistributeHorizontalIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="4" width="3" height="10" rx="1" fill="currentColor" />
+            <rect x="12" y="4" width="3" height="10" rx="1" fill="currentColor" />
+            <rect x="7" y="2" width="1.5" height="14" rx="0.75" fill="currentColor" opacity="0.6" />
+            <rect x="9.5" y="2" width="1.5" height="14" rx="0.75" fill="currentColor" opacity="0.6" />
+        </svg>
+    );
+
+    const DistributeVerticalIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="3" width="10" height="3" rx="1" fill="currentColor" />
+            <rect x="4" y="12" width="10" height="3" rx="1" fill="currentColor" />
+            <rect x="2" y="7" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.6" />
+            <rect x="2" y="9.5" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.6" />
+        </svg>
+    );
+
+    const RotateIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 3a6 6 0 106 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M12 3H9V0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+
+    const FlipHorizontalIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 4L4 9l4 5V4zM10 14l4-5-4-5v10z" fill="currentColor" />
+            <rect x="8.25" y="3" width="1.5" height="12" fill="currentColor" opacity="0.6" />
+        </svg>
+    );
+
+    const FlipVerticalIcon = () => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 10l5 4 5-4H4zM14 8l-5-4-5 4h10z" fill="currentColor" />
+            <rect x="3" y="8.25" width="12" height="1.5" fill="currentColor" opacity="0.6" />
+        </svg>
+    );
+
+    const LockClosedIcon = () => (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3.5" y="7" width="9" height="7" rx="2" stroke="currentColor" strokeWidth="1.4" />
+            <path
+                d="M5.5 7V5.5a2.5 2.5 0 115 0V7"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+            />
+        </svg>
+    );
+
+    const LockOpenIcon = () => (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3.5" y="7" width="9" height="7" rx="2" stroke="currentColor" strokeWidth="1.4" />
+            <path
+                d="M6 7V5.5a2.5 2.5 0 114.9-.5"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+            />
+        </svg>
+    );
+
+    const ChevronDownIcon = ({ rotated = false }) => (
+        <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ transform: rotated ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease' }}
+        >
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+
+    const EyeIcon = ({ hidden = false }) => (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+                d="M1.5 9c1.2-3 4-5.5 7.5-5.5S15.8 6 17 9c-1.2 3-4 5.5-8 5.5S2.7 12 1.5 9z"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill={hidden ? 'none' : 'rgba(30,64,175,0.08)'}
+            />
+            {hidden ? (
+                <path d="M4 14l10-10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            ) : (
+                <circle cx="9" cy="9" r="2.5" fill="currentColor" />
+            )}
+        </svg>
+    );
+
+    const BlendDot = () => (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="6" cy="6" r="4" fill="currentColor" opacity="0.45" />
+        </svg>
+    );
+
+    const horizontalAlignmentControls = [
+        { id: 'left', label: 'Align Left', icon: AlignLeftIcon },
+        { id: 'center', label: 'Align Horizontal Center', icon: AlignHCenterIcon },
+        { id: 'right', label: 'Align Right', icon: AlignRightIcon },
+    ];
+
+    const verticalAlignmentControls = [
+        { id: 'top', label: 'Align Top', icon: AlignTopIcon },
+        { id: 'middle', label: 'Align Vertical Center', icon: AlignVMiddleIcon },
+        { id: 'bottom', label: 'Align Bottom', icon: AlignBottomIcon },
+    ];
+
+    const distributionControls = [
+        { id: 'tidy', label: 'Tidy Up', icon: TidyUpIcon },
+        { id: 'horizontal', label: 'Distribute Horizontal Spacing', icon: DistributeHorizontalIcon },
+        { id: 'vertical', label: 'Distribute Vertical Spacing', icon: DistributeVerticalIcon },
+    ];
+
+    const blendOptions = [
+        { id: 'normal', label: 'Normal' },
+        { id: 'multiply', label: 'Multiply' },
+        { id: 'screen', label: 'Screen' },
+    ];
 
     const fieldStyle = {
         display: 'flex',
@@ -1104,7 +1464,7 @@ const solidSwatchButtonInnerStyle = {
     borderRadius: 'inherit',
 };
 
-    const Section = ({ title, children, disabled = false }) => (
+    const Section = ({ title, children, disabled = false, actions = null }) => (
         <section
             style={{
                 ...sectionCardStyle,
@@ -1114,6 +1474,7 @@ const solidSwatchButtonInnerStyle = {
         >
             <div style={sectionHeaderStyle}>
                 <div style={sectionTitleStyle}>{title}</div>
+                {actions ? <div style={sectionHeaderActionsStyle}>{actions}</div> : null}
             </div>
             <div style={sectionBodyStyle}>{children}</div>
         </section>
@@ -2544,10 +2905,492 @@ export default function PropertiesPanel({
     onTextVerticalAlignChange,
     textDecoration,
     onTextDecorationChange,
+    selectionInfo,
+    onAlign,
+    onDistribute,
+    onPositionChange,
+    onRotationChange,
+    onRotateClockwise,
+    onFlip,
+    onDimensionChange,
+    onVisibilityChange,
+    onBlendModeChange,
+    onOpacityChange,
+    onCornerRadiusChange,
+    onCornerSmoothingChange,
 }) {
         const isTextShape = shape?.type === 'text';
     const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
     const disableStrokeControls = shape?.type === 'group';
+
+    const clamp = (value, min, max) => {
+        if (!Number.isFinite(value)) return min;
+        return Math.min(Math.max(value, min), max);
+    };
+
+    const formatNumeric = (value, precision = 2) => {
+        if (!Number.isFinite(value)) return '0';
+        const factor = 10 ** precision;
+        const rounded = Math.round(value * factor) / factor;
+        if (precision <= 0) {
+            return String(Math.round(rounded));
+        }
+        const fixed = rounded.toFixed(precision);
+        return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+    };
+
+    const primaryShape = shape || selectionInfo?.shape || null;
+    const selectedIds = Array.isArray(selectionInfo?.selectedIds)
+        ? selectionInfo.selectedIds
+        : primaryShape?.id != null
+            ? [primaryShape.id]
+            : [];
+    const selectedIdsKey = selectedIds.join(',');
+    const isMultiSelect = selectedIds.length > 1;
+    const hasSelection = Boolean(primaryShape);
+    const supportsCornerRadius = Boolean(
+        primaryShape && ['rectangle', 'frame', 'group'].includes(primaryShape.type)
+    );
+    const supportsDimensions = Boolean(
+        primaryShape && ['rectangle', 'frame', 'group', 'circle', 'ellipse', 'text'].includes(primaryShape.type)
+    );
+
+    const [alignmentActive, setAlignmentActive] = useState(null);
+    const [distributionActive, setDistributionActive] = useState(null);
+
+    useEffect(() => {
+        setAlignmentActive(null);
+        setDistributionActive(null);
+    }, [selectedIdsKey]);
+
+    const positionRef = useRef({ x: 0, y: 0 });
+    const [positionDraft, setPositionDraft] = useState({ x: '', y: '' });
+
+    useEffect(() => {
+        if (primaryShape) {
+            const nextX = typeof primaryShape.x === 'number' ? primaryShape.x : 0;
+            const nextY = typeof primaryShape.y === 'number' ? primaryShape.y : 0;
+            positionRef.current = { x: nextX, y: nextY };
+            setPositionDraft({ x: formatNumeric(nextX), y: formatNumeric(nextY) });
+        } else {
+            positionRef.current = { x: 0, y: 0 };
+            setPositionDraft({ x: '', y: '' });
+        }
+    }, [primaryShape?.x, primaryShape?.y, primaryShape?.id]);
+
+    const getShapeDimensionsForPanel = useCallback(
+        (target) => {
+            if (!target) return { width: 0, height: 0 };
+            switch (target.type) {
+                case 'rectangle':
+                case 'frame':
+                case 'group':
+                    return {
+                        width: Math.max(0, target.width || 0),
+                        height: Math.max(0, target.height || 0),
+                    };
+                case 'circle': {
+                    const radius = Math.max(0, target.radius || 0);
+                    return { width: radius * 2, height: radius * 2 };
+                }
+                case 'ellipse':
+                    return {
+                        width: Math.max(0, (target.radiusX || 0) * 2),
+                        height: Math.max(0, (target.radiusY || 0) * 2),
+                    };
+                case 'text':
+                    return {
+                        width: Math.max(0, target.width || 0),
+                        height: Math.max(0, target.height || 0),
+                    };
+                default:
+                    return { width: 0, height: 0 };
+            }
+        },
+        []
+    );
+
+    const dimensionRef = useRef({ width: 0, height: 0 });
+    const [dimensionDraft, setDimensionDraft] = useState({ width: '', height: '' });
+    const aspectRatioRef = useRef(1);
+    const [isAspectLocked, setAspectLocked] = useState(true);
+
+    useEffect(() => {
+        if (primaryShape && supportsDimensions) {
+            const dims = getShapeDimensionsForPanel(primaryShape);
+            dimensionRef.current = dims;
+            if (dims.height > 0) {
+                aspectRatioRef.current = dims.width / dims.height;
+            }
+            setDimensionDraft({
+                width: dims.width ? formatNumeric(dims.width) : '0',
+                height: dims.height ? formatNumeric(dims.height) : '0',
+            });
+        } else {
+            dimensionRef.current = { width: 0, height: 0 };
+            setDimensionDraft({ width: '', height: '' });
+        }
+    }, [
+        primaryShape?.width,
+        primaryShape?.height,
+        primaryShape?.radius,
+        primaryShape?.radiusX,
+        primaryShape?.radiusY,
+        primaryShape?.id,
+        getShapeDimensionsForPanel,
+        supportsDimensions,
+    ]);
+
+    const [rotationDraft, setRotationDraft] = useState('0');
+    const rotationRef = useRef(0);
+
+    useEffect(() => {
+        const rotation = typeof primaryShape?.rotation === 'number' ? primaryShape.rotation : 0;
+        rotationRef.current = rotation;
+        setRotationDraft(formatNumeric(rotation, 1));
+    }, [primaryShape?.rotation, primaryShape?.id]);
+
+    const [opacityDraft, setOpacityDraft] = useState('100');
+    useEffect(() => {
+        if (primaryShape) {
+            const opacity = typeof primaryShape.opacity === 'number' ? clamp(primaryShape.opacity, 0, 1) : 1;
+            setOpacityDraft(String(Math.round(opacity * 100)));
+        } else {
+            setOpacityDraft('100');
+        }
+    }, [primaryShape?.opacity, primaryShape?.id]);
+
+    const [cornerRadiusDraft, setCornerRadiusDraft] = useState('0');
+    const [cornerDetailDraft, setCornerDetailDraft] = useState({
+        topLeft: '0',
+        topRight: '0',
+        bottomRight: '0',
+        bottomLeft: '0',
+    });
+    const cornerDetailRef = useRef({ topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 });
+    const [showCornerDetails, setShowCornerDetails] = useState(false);
+
+    useEffect(() => {
+        if (primaryShape && supportsCornerRadius) {
+            if (primaryShape.cornerRadii && typeof primaryShape.cornerRadii === 'object') {
+                const details = {
+                    topLeft: Number(primaryShape.cornerRadii.topLeft) || 0,
+                    topRight: Number(primaryShape.cornerRadii.topRight) || 0,
+                    bottomRight: Number(primaryShape.cornerRadii.bottomRight) || 0,
+                    bottomLeft: Number(primaryShape.cornerRadii.bottomLeft) || 0,
+                };
+                cornerDetailRef.current = details;
+                setCornerDetailDraft({
+                    topLeft: formatNumeric(details.topLeft),
+                    topRight: formatNumeric(details.topRight),
+                    bottomRight: formatNumeric(details.bottomRight),
+                    bottomLeft: formatNumeric(details.bottomLeft),
+                });
+                const uniqueValues = new Set(
+                    Object.values(details).map((value) => Math.round((value || 0) * 1000) / 1000)
+                );
+                if (uniqueValues.size === 1) {
+                    setCornerRadiusDraft(formatNumeric(details.topLeft));
+                } else {
+                    setCornerRadiusDraft('');
+                    setShowCornerDetails(true);
+                }
+            } else {
+                const uniform = Number(primaryShape.cornerRadius) || 0;
+                cornerDetailRef.current = {
+                    topLeft: uniform,
+                    topRight: uniform,
+                    bottomRight: uniform,
+                    bottomLeft: uniform,
+                };
+                setCornerDetailDraft({
+                    topLeft: formatNumeric(uniform),
+                    topRight: formatNumeric(uniform),
+                    bottomRight: formatNumeric(uniform),
+                    bottomLeft: formatNumeric(uniform),
+                });
+                setCornerRadiusDraft(formatNumeric(uniform));
+            }
+        } else {
+            cornerDetailRef.current = { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };
+            setCornerDetailDraft({ topLeft: '0', topRight: '0', bottomRight: '0', bottomLeft: '0' });
+            setCornerRadiusDraft('0');
+            setShowCornerDetails(false);
+        }
+    }, [primaryShape?.cornerRadius, primaryShape?.cornerRadii, primaryShape?.id, supportsCornerRadius]);
+
+    const [smoothingActive, setSmoothingActive] = useState(false);
+    const [smoothingValue, setSmoothingValue] = useState(0);
+    const smoothingRef = useRef(0);
+
+    useEffect(() => {
+        if (primaryShape && supportsCornerRadius) {
+            const smoothing = typeof primaryShape.cornerSmoothing === 'number'
+                ? clamp(primaryShape.cornerSmoothing, 0, 1)
+                : 0;
+            smoothingRef.current = smoothing;
+            setSmoothingValue(smoothing);
+            setSmoothingActive(smoothing > 0);
+        } else {
+            smoothingRef.current = 0;
+            setSmoothingValue(0);
+            setSmoothingActive(false);
+        }
+    }, [primaryShape?.cornerSmoothing, primaryShape?.id, supportsCornerRadius]);
+
+    const currentBlendMode = typeof primaryShape?.blendMode === 'string' ? primaryShape.blendMode : 'normal';
+    const isVisible = primaryShape ? primaryShape.visible !== false : true;
+
+    const handleAlignmentClick = (id) => {
+        if (!isMultiSelect || typeof onAlign !== 'function') return;
+        onAlign(id);
+        setAlignmentActive(id);
+    };
+
+    const handleDistributionClick = (mode) => {
+        if (!isMultiSelect || typeof onDistribute !== 'function') return;
+        onDistribute(mode);
+        setDistributionActive(mode);
+    };
+
+    const handlePositionFieldChange = (axis, rawValue) => {
+        setPositionDraft((prev) => ({ ...prev, [axis]: rawValue }));
+        if (!hasSelection || typeof onPositionChange !== 'function') return;
+        const numeric = Number(rawValue);
+        if (Number.isNaN(numeric)) return;
+        const next = { ...positionRef.current, [axis]: numeric };
+        positionRef.current = next;
+        onPositionChange(next);
+    };
+
+    const handleDimensionFieldChange = (axis, rawValue) => {
+        setDimensionDraft((prev) => ({ ...prev, [axis]: rawValue }));
+        if (!supportsDimensions || typeof onDimensionChange !== 'function') return;
+        const numeric = Number(rawValue);
+        if (Number.isNaN(numeric)) return;
+        let nextWidth = dimensionRef.current.width;
+        let nextHeight = dimensionRef.current.height;
+        if (axis === 'width') {
+            nextWidth = Math.max(0, numeric);
+            if (isAspectLocked && aspectRatioRef.current > 0) {
+                nextHeight = aspectRatioRef.current ? nextWidth / aspectRatioRef.current : nextHeight;
+                dimensionRef.current = { width: nextWidth, height: nextHeight };
+                setDimensionDraft((prev) => ({ ...prev, height: formatNumeric(nextHeight) }));
+            } else {
+                dimensionRef.current = { ...dimensionRef.current, width: nextWidth };
+            }
+        } else {
+            nextHeight = Math.max(0, numeric);
+            if (isAspectLocked && aspectRatioRef.current > 0) {
+                nextWidth = nextHeight * aspectRatioRef.current;
+                dimensionRef.current = { width: nextWidth, height: nextHeight };
+                setDimensionDraft((prev) => ({ ...prev, width: formatNumeric(nextWidth) }));
+            } else {
+                dimensionRef.current = { ...dimensionRef.current, height: nextHeight };
+            }
+        }
+        if (nextHeight > 0) {
+            aspectRatioRef.current = nextWidth / nextHeight;
+        }
+        onDimensionChange({ width: nextWidth, height: nextHeight });
+    };
+
+    const handleAspectToggle = () => {
+        setAspectLocked((prev) => {
+            const next = !prev;
+            if (next) {
+                const { width, height } = dimensionRef.current;
+                if (height > 0) {
+                    aspectRatioRef.current = width / height;
+                }
+            }
+            return next;
+        });
+    };
+
+    const handleRotationInputChange = (value) => {
+        setRotationDraft(value);
+        if (!hasSelection || typeof onRotationChange !== 'function') return;
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) return;
+        rotationRef.current = numeric;
+        onRotationChange(numeric);
+    };
+
+    const handleRotateClockwiseClick = () => {
+        if (!hasSelection || typeof onRotateClockwise !== 'function') return;
+        onRotateClockwise();
+        const next = rotationRef.current + 90;
+        rotationRef.current = next;
+        setRotationDraft(formatNumeric(next, 1));
+    };
+
+    const handleFlipClick = (axis) => {
+        if (!hasSelection || typeof onFlip !== 'function') return;
+        onFlip(axis);
+    };
+
+    const handleOpacityInputChange = (value) => {
+        setOpacityDraft(value);
+        if (!hasSelection || typeof onOpacityChange !== 'function') return;
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) return;
+        const clampedPercent = clamp(numeric, 0, 100);
+        onOpacityChange(clampedPercent / 100);
+    };
+
+    const handleCornerRadiusInputChange = (value) => {
+        setCornerRadiusDraft(value);
+        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) return;
+        const clampedValue = Math.max(0, numeric);
+        cornerDetailRef.current = {
+            topLeft: clampedValue,
+            topRight: clampedValue,
+            bottomRight: clampedValue,
+            bottomLeft: clampedValue,
+        };
+        setCornerDetailDraft({
+            topLeft: formatNumeric(clampedValue),
+            topRight: formatNumeric(clampedValue),
+            bottomRight: formatNumeric(clampedValue),
+            bottomLeft: formatNumeric(clampedValue),
+        });
+        onCornerRadiusChange(clampedValue);
+    };
+
+    const handleCornerDetailInputChange = (key, value) => {
+        setCornerDetailDraft((prev) => ({ ...prev, [key]: value }));
+        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        const numeric = Number(value);
+        if (Number.isNaN(numeric)) return;
+        const clampedValue = Math.max(0, numeric);
+        cornerDetailRef.current = { ...cornerDetailRef.current, [key]: clampedValue };
+        onCornerRadiusChange({ ...cornerDetailRef.current });
+    };
+
+    const handleCornerDetailsToggle = () => {
+        setShowCornerDetails((prev) => !prev);
+    };
+
+    const handleSmoothingToggle = () => {
+        if (!supportsCornerRadius || typeof onCornerSmoothingChange !== 'function') return;
+        if (smoothingActive) {
+            setSmoothingActive(false);
+            setSmoothingValue(0);
+            smoothingRef.current = 0;
+            onCornerSmoothingChange(0);
+        } else {
+            const nextValue = smoothingValue > 0 ? smoothingValue : 0.2;
+            setSmoothingActive(true);
+            setSmoothingValue(nextValue);
+            smoothingRef.current = nextValue;
+            onCornerSmoothingChange(nextValue);
+        }
+    };
+
+    const handleSmoothingSliderChange = (event) => {
+        if (!supportsCornerRadius || typeof onCornerSmoothingChange !== 'function') return;
+        const numeric = Number(event.target.value);
+        if (Number.isNaN(numeric)) return;
+        const normalized = clamp(numeric, 0, 100) / 100;
+        setSmoothingValue(normalized);
+        smoothingRef.current = normalized;
+        if (!smoothingActive && normalized > 0) {
+            setSmoothingActive(true);
+        }
+        onCornerSmoothingChange(normalized);
+    };
+
+    const handleVisibilityToggle = () => {
+        if (!hasSelection || typeof onVisibilityChange !== 'function') return;
+        const isVisible = primaryShape ? primaryShape.visible !== false : true;
+        onVisibilityChange(!isVisible);
+    };
+
+    const handleBlendChange = (mode) => {
+        if (!hasSelection || typeof onBlendModeChange !== 'function') return;
+        onBlendModeChange(mode);
+    };
+
+    const getIconButtonStyles = (active, disabled) => ({
+        ...iconButtonStyle,
+        ...(active ? iconButtonActiveStyle : null),
+        ...(disabled ? iconButtonDisabledStyle : null),
+    });
+
+    const appearanceActions = (
+        <>
+            <button
+                type="button"
+                title={isVisible ? 'Hide selection' : 'Show selection'}
+                onClick={handleVisibilityToggle}
+                disabled={!hasSelection}
+                style={{
+                    ...iconButtonStyle,
+                    width: 32,
+                    height: 32,
+                    ...(isVisible ? null : { color: '#1d4ed8', borderColor: '#94a3b8' }),
+                    pointerEvents: !hasSelection ? 'none' : 'auto',
+                }}
+            >
+                <EyeIcon hidden={!isVisible} />
+            </button>
+            <div style={blendActionsWrapperStyle}>
+                {blendOptions.map((option) => (
+                    <button
+                        key={option.id}
+                        type="button"
+                        title={option.label}
+                        onClick={() => handleBlendChange(option.id)}
+                        disabled={!hasSelection}
+                        style={{
+                            ...blendButtonStyle,
+                            ...(currentBlendMode === option.id ? blendButtonActiveStyle : null),
+                            pointerEvents: !hasSelection ? 'none' : 'auto',
+                        }}
+                    >
+                        <BlendDot />
+                    </button>
+                ))}
+            </div>
+        </>
+    );
+
+    const NumericField = ({
+        label,
+        value,
+        onChange,
+        suffix = 'px',
+        step = 1,
+        min = undefined,
+        max = undefined,
+        disabled = false,
+    }) => (
+        <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
+            <span style={fieldLabelStyle}>{label}</span>
+            <div
+                style={{
+                    ...numericInputWrapperInlineStyle,
+                    pointerEvents: disabled ? 'none' : 'auto',
+                }}
+            >
+                <input
+                    type="number"
+                    value={value}
+                    step={step}
+                    min={min}
+                    max={max}
+                    onChange={(event) => onChange(event.target.value)}
+                    onFocus={(event) => event.target.select?.()}
+                    style={numericInputFieldStyle}
+                    disabled={disabled}
+                />
+                {suffix ? <span style={unitSuffixStyle}>{suffix}</span> : null}
+            </div>
+        </label>
+    );
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 
@@ -2721,7 +3564,163 @@ const subtitle = shape
             </div>
 
             <div style={contentStyle}>
-                <Section title="Appearance">
+                <Section title="Positions">
+                    <div>
+                        <div style={sectionSubheadingStyle}>Alignment</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div style={alignmentGridStyle}>
+                                {horizontalAlignmentControls.map(({ id, label, icon: Icon }) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        title={label}
+                                        onClick={() => handleAlignmentClick(id)}
+                                        disabled={!isMultiSelect}
+                                        style={getIconButtonStyles(alignmentActive === id, !isMultiSelect)}
+                                    >
+                                        <Icon />
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={alignmentGridStyle}>
+                                {verticalAlignmentControls.map(({ id, label, icon: Icon }) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        title={label}
+                                        onClick={() => handleAlignmentClick(id)}
+                                        disabled={!isMultiSelect}
+                                        style={getIconButtonStyles(alignmentActive === id, !isMultiSelect)}
+                                    >
+                                        <Icon />
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={distributeRowStyle}>
+                                {distributionControls.map(({ id, label, icon: Icon }) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        title={label}
+                                        onClick={() => handleDistributionClick(id)}
+                                        disabled={!isMultiSelect}
+                                        style={getIconButtonStyles(distributionActive === id, !isMultiSelect)}
+                                    >
+                                        <Icon />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div style={dividerStyle} />
+                    <div>
+                        <div style={sectionSubheadingStyle}>Position</div>
+                        <div style={numericRowStyle}>
+                            <NumericField
+                                label="X"
+                                value={positionDraft.x}
+                                onChange={(value) => handlePositionFieldChange('x', value)}
+                                step={0.1}
+                                suffix="px"
+                                disabled={!hasSelection}
+                            />
+                            <NumericField
+                                label="Y"
+                                value={positionDraft.y}
+                                onChange={(value) => handlePositionFieldChange('y', value)}
+                                step={0.1}
+                                suffix="px"
+                                disabled={!hasSelection}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <div style={sectionSubheadingStyle}>Rotation</div>
+                        <div style={rotationRowStyle}>
+                            <NumericField
+                                label="Angle"
+                                value={rotationDraft}
+                                onChange={handleRotationInputChange}
+                                suffix="°"
+                                step={0.1}
+                                disabled={!hasSelection}
+                            />
+                            <button
+                                type="button"
+                                title="Rotate 90° Clockwise"
+                                onClick={handleRotateClockwiseClick}
+                                disabled={!hasSelection}
+                                style={getIconButtonStyles(false, !hasSelection)}
+                            >
+                                <RotateIcon />
+                            </button>
+                            <button
+                                type="button"
+                                title="Flip Horizontal"
+                                onClick={() => handleFlipClick('horizontal')}
+                                disabled={!hasSelection}
+                                style={getIconButtonStyles(false, !hasSelection)}
+                            >
+                                <FlipHorizontalIcon />
+                            </button>
+                            <button
+                                type="button"
+                                title="Flip Vertical"
+                                onClick={() => handleFlipClick('vertical')}
+                                disabled={!hasSelection}
+                                style={getIconButtonStyles(false, !hasSelection)}
+                            >
+                                <FlipVerticalIcon />
+                            </button>
+                        </div>
+                    </div>
+                </Section>
+
+                <div style={dividerStyle} />
+
+                <Section title="Layout">
+                    <div>
+                        <div style={sectionSubheadingStyle}>Dimension</div>
+                        <div style={dimensionRowStyle}>
+                            <NumericField
+                                label="W"
+                                value={dimensionDraft.width}
+                                onChange={(value) => handleDimensionFieldChange('width', value)}
+                                step={0.1}
+                                suffix="px"
+                                disabled={!supportsDimensions || !hasSelection}
+                            />
+                            <NumericField
+                                label="H"
+                                value={dimensionDraft.height}
+                                onChange={(value) => handleDimensionFieldChange('height', value)}
+                                step={0.1}
+                                suffix="px"
+                                disabled={!supportsDimensions || !hasSelection}
+                            />
+                            <button
+                                type="button"
+                                title={isAspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+                                onClick={handleAspectToggle}
+                                disabled={!supportsDimensions || !hasSelection}
+                                style={{
+                                    ...toggleButtonStyle,
+                                    width: 36,
+                                    height: 36,
+                                    padding: 0,
+                                    ...(isAspectLocked ? toggleButtonActiveStyle : null),
+                                    pointerEvents: !supportsDimensions || !hasSelection ? 'none' : 'auto',
+                                }}
+                            >
+                                {isAspectLocked ? <LockClosedIcon /> : <LockOpenIcon />}
+                            </button>
+                        </div>
+                    </div>
+                </Section>
+
+                <div style={dividerStyle} />
+
+                <Section title="Appearance" actions={appearanceActions}>
                     <ColorControl
                         label="Fill"
                         style={supportsFill ? fillStyle : { type: 'solid', value: '#000000' }}
@@ -2745,6 +3744,113 @@ const subtitle = shape
                         step={1}
                         disabled={disableStrokeControls}
                     />
+                    <div style={dividerStyle} />
+                    <div>
+                        <div style={sectionSubheadingStyle}>Opacity</div>
+                        <div style={appearanceRowStyle}>
+                            <NumericField
+                                label="Opacity"
+                                value={opacityDraft}
+                                onChange={handleOpacityInputChange}
+                                min={0}
+                                max={100}
+                                suffix="%"
+                                disabled={!hasSelection}
+                            />
+                            <NumericField
+                                label="Corner Radius"
+                                value={cornerRadiusDraft}
+                                onChange={handleCornerRadiusInputChange}
+                                step={0.5}
+                                suffix="px"
+                                disabled={!supportsCornerRadius || !hasSelection}
+                            />
+                            <button
+                                type="button"
+                                title={showCornerDetails ? 'Hide individual corners' : 'Show individual corners'}
+                                onClick={handleCornerDetailsToggle}
+                                disabled={!supportsCornerRadius || !hasSelection}
+                                style={{
+                                    ...toggleButtonStyle,
+                                    width: 36,
+                                    height: 36,
+                                    padding: 0,
+                                    ...(showCornerDetails ? toggleButtonActiveStyle : null),
+                                    pointerEvents: !supportsCornerRadius || !hasSelection ? 'none' : 'auto',
+                                }}
+                            >
+                                <ChevronDownIcon rotated={showCornerDetails} />
+                            </button>
+                        </div>
+                        {showCornerDetails ? (
+                            <div style={cornerDetailsGridStyle}>
+                                <NumericField
+                                    label="Top-Left"
+                                    value={cornerDetailDraft.topLeft}
+                                    onChange={(value) => handleCornerDetailInputChange('topLeft', value)}
+                                    step={0.5}
+                                    suffix="px"
+                                    disabled={!supportsCornerRadius || !hasSelection}
+                                />
+                                <NumericField
+                                    label="Top-Right"
+                                    value={cornerDetailDraft.topRight}
+                                    onChange={(value) => handleCornerDetailInputChange('topRight', value)}
+                                    step={0.5}
+                                    suffix="px"
+                                    disabled={!supportsCornerRadius || !hasSelection}
+                                />
+                                <NumericField
+                                    label="Bottom-Right"
+                                    value={cornerDetailDraft.bottomRight}
+                                    onChange={(value) => handleCornerDetailInputChange('bottomRight', value)}
+                                    step={0.5}
+                                    suffix="px"
+                                    disabled={!supportsCornerRadius || !hasSelection}
+                                />
+                                <NumericField
+                                    label="Bottom-Left"
+                                    value={cornerDetailDraft.bottomLeft}
+                                    onChange={(value) => handleCornerDetailInputChange('bottomLeft', value)}
+                                    step={0.5}
+                                    suffix="px"
+                                    disabled={!supportsCornerRadius || !hasSelection}
+                                />
+                            </div>
+                        ) : null}
+                        <div style={smoothingControlStyle}>
+                            <button
+                                type="button"
+                                title={smoothingActive ? 'Disable corner smoothing' : 'Enable corner smoothing'}
+                                onClick={handleSmoothingToggle}
+                                disabled={!supportsCornerRadius || !hasSelection}
+                                style={{
+                                    ...toggleButtonStyle,
+                                    ...(smoothingActive ? toggleButtonActiveStyle : null),
+                                    pointerEvents: !supportsCornerRadius || !hasSelection ? 'none' : 'auto',
+                                }}
+                            >
+                                Corner Smoothing
+                            </button>
+                            <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={Math.round(smoothingValue * 100)}
+                                onChange={handleSmoothingSliderChange}
+                                disabled={!supportsCornerRadius || !hasSelection || !smoothingActive}
+                                style={{
+                                    ...sliderStyle,
+                                    opacity: smoothingActive ? 1 : 0.5,
+                                    pointerEvents:
+                                        !supportsCornerRadius || !hasSelection || !smoothingActive
+                                            ? 'none'
+                                            : 'auto',
+                                }}
+                            />
+                            <span style={fieldLabelStyle}>{Math.round(smoothingValue * 100)}%</span>
+                        </div>
+                    </div>
                 </Section>
 
                 <Section title="Typography" disabled={!isTextShape}>
@@ -2757,7 +3863,6 @@ const subtitle = shape
                         }
                         options={fontOptions}
                     />
-
                     <SelectControl
                         label="Variation"
                         value={normalizedFontStyle}
@@ -2767,32 +3872,29 @@ const subtitle = shape
                         }
                         options={fontVariationOptions}
                     />
-
-                    <NumberControl
-                        label="Size"
-                        value={textFontSize}
-                        onChange={(value) =>
-                            typeof onTextFontSizeChange === 'function' && onTextFontSizeChange(value)
-                        }
-                        min={0}
-                        max={200}
-                        step={1}
-                    />
-                    <div style={{ display: 'flex', height: '100%', gap: '12px' }}>
-
-                    <NumberControl
-                        label="Line Height"
-                        value={textLineHeight}
-                        onChange={(value) =>
-                            typeof onTextLineHeightChange === 'function' && onTextLineHeightChange(value)
-                        }
-                        min={0.5}
-                        max={4}
-                        step={0.1}
-                        suffix=""
-                        
-                    />
-
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <NumberControl
+                            label="Size"
+                            value={textFontSize}
+                            onChange={(value) =>
+                                typeof onTextFontSizeChange === 'function' && onTextFontSizeChange(value)
+                            }
+                            min={0}
+                            max={200}
+                            step={1}
+                        />
+                        <NumberControl
+                            label="Line Height"
+                            value={textLineHeight}
+                            onChange={(value) =>
+                                typeof onTextLineHeightChange === 'function' && onTextLineHeightChange(value)
+                            }
+                            min={0.5}
+                            max={4}
+                            step={0.1}
+                            suffix=""
+                        />
+                    </div>
                     <NumberControl
                         label="Letter Spacing"
                         value={textLetterSpacing}
@@ -2802,11 +3904,7 @@ const subtitle = shape
                         min={-10}
                         max={50}
                         step={0.5}
-                        />
-                    </div>
-
-                    <div style={{ display: 'flex', height: '100%', gap: '12px' }}>
-
+                    />
                     <ToggleField label="Alignment">
                         <ToggleGroup>
                             {alignOptions.map((option) => (
@@ -2822,8 +3920,7 @@ const subtitle = shape
                                 </ToggleButton>
                             ))}
                         </ToggleGroup>
-                        </ToggleField>
-
+                    </ToggleField>
                     <ToggleField label="Vertical">
                         <ToggleGroup>
                             {verticalAlignOptions.map((option) => (
@@ -2840,9 +3937,7 @@ const subtitle = shape
                                 </ToggleButton>
                             ))}
                         </ToggleGroup>
-                        </ToggleField>
-                    </div>
-
+                    </ToggleField>
                     <ToggleField label="Decoration">
                         <ToggleGroup>
                             <ToggleButton
