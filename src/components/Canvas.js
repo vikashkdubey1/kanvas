@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer } from 'react-konva';
 import PagesPanel from './PagesPanel';
 import LayersPanel from './LayersPanel';
+import PropertiesPanel from './PropertiesPanel';
 import {
     buildGradientColorStops,
     getGradientFirstColor,
@@ -301,6 +302,7 @@ export default function Canvas({
     const drawingStartRef = useRef(null);
     const currentDrawingIdRef = useRef(null);
     const pendingTextEditRef = useRef(null);
+    const strokeTxnRef = useRef(false);
 
     const [shapes, setShapes] = useState([]);
     const shapesRef = useRef(shapes);
@@ -572,45 +574,45 @@ export default function Canvas({
     }, [selectedIds, selectedId]);
 
     // Normalize parent key (null for root)
-const parentKeyOf = (s) => (s?.parentId ?? null);
+    const parentKeyOf = (s) => (s?.parentId ?? null);
 
-// Reorder *siblings* for a given parent so that panel Top→Bottom
-// becomes canvas Bottom→Top (because later-drawn = on top).
-const reorderSiblingsToMatchPanel = (prevShapes, parentId, panelTopToBottomIds) => {
-  const pkey = parentId ?? null;
-  const sibSet = new Set(panelTopToBottomIds);
+    // Reorder *siblings* for a given parent so that panel Top→Bottom
+    // becomes canvas Bottom→Top (because later-drawn = on top).
+    const reorderSiblingsToMatchPanel = (prevShapes, parentId, panelTopToBottomIds) => {
+        const pkey = parentId ?? null;
+        const sibSet = new Set(panelTopToBottomIds);
 
-  // indices where these siblings currently live (to keep block location stable)
-  const idxs = prevShapes
-    .map((s, i) => ((parentKeyOf(s) === pkey && sibSet.has(s.id)) ? i : -1))
-    .filter(i => i !== -1);
+        // indices where these siblings currently live (to keep block location stable)
+        const idxs = prevShapes
+            .map((s, i) => ((parentKeyOf(s) === pkey && sibSet.has(s.id)) ? i : -1))
+            .filter(i => i !== -1);
 
-  if (idxs.length === 0) return prevShapes; // nothing to do
+        if (idxs.length === 0) return prevShapes; // nothing to do
 
-  const firstIdx = Math.min(...idxs);
-  const bottomToTopIds = [...panelTopToBottomIds].reverse();
+        const firstIdx = Math.min(...idxs);
+        const bottomToTopIds = [...panelTopToBottomIds].reverse();
 
-  // Build fast lookup for siblings by id
-  const byId = {};
-  for (const s of prevShapes) byId[s.id] = s;
+        // Build fast lookup for siblings by id
+        const byId = {};
+        for (const s of prevShapes) byId[s.id] = s;
 
-  // Remove siblings from the array
-  const withoutSibs = prevShapes.filter(s => !(parentKeyOf(s) === pkey && sibSet.has(s.id)));
+        // Remove siblings from the array
+        const withoutSibs = prevShapes.filter(s => !(parentKeyOf(s) === pkey && sibSet.has(s.id)));
 
-  // Split at the original first sibling position (so block doesn’t jump across other parents)
-  const before = withoutSibs.slice(0, firstIdx);
-  const after  = withoutSibs.slice(firstIdx);
+        // Split at the original first sibling position (so block doesn’t jump across other parents)
+        const before = withoutSibs.slice(0, firstIdx);
+        const after = withoutSibs.slice(firstIdx);
 
-  // Put siblings back in bottom→top order (so last drawn = panel top)
-  const reorderedSibs = bottomToTopIds.map(id => byId[id]).filter(Boolean);
+        // Put siblings back in bottom→top order (so last drawn = panel top)
+        const reorderedSibs = bottomToTopIds.map(id => byId[id]).filter(Boolean);
 
-  return [...before, ...reorderedSibs, ...after];
-};
+        return [...before, ...reorderedSibs, ...after];
+    };
 
-// Convenience: apply the reorder with history entry
-const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
-  applyChange((prev) => reorderSiblingsToMatchPanel(prev, parentId, panelTopToBottomIds));
-};
+    // Convenience: apply the reorder with history entry
+    const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
+        applyChange((prev) => reorderSiblingsToMatchPanel(prev, parentId, panelTopToBottomIds));
+    };
 
 
     useEffect(() => {
@@ -923,6 +925,11 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         return transform.point(pointer);
     };
 
+    const selectedShape = useMemo(
+  () => shapes.find((s) => s.id === selectedId) || null,
+  [shapes, selectedId]
+);
+
     const resolvedTextOptions = useMemo(
         () => ({
             fontFamily: textOptions.fontFamily || 'Inter',
@@ -994,6 +1001,15 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         (updater, options = {}) => {
             const prev = shapesRef.current;
             const next = typeof updater === 'function' ? updater(prev) : updater;
+            // ---- no-op guards (stop churn/loops) ----
+              if (next === prev) return;
+              if (Array.isArray(prev) && Array.isArray(next) && prev.length === next.length) {
+                    let same = true;
+                    for (let i = 0; i < prev.length; i++) {
+                          if (prev[i] !== next[i]) { same = false; break; }
+                        }
+                    if (same) return;
+                  }
             const baseState = options.baseState || prev;
             pastRef.current.push(baseState);
             if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
@@ -1221,9 +1237,9 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedIds.length || selectedId)) {
                 e.preventDefault();
                 const idsToRemove = new Set(selectedIds.length ? selectedIds : [selectedId]);
-                   applyChange((prev) => prev.filter((shape) => !idsToRemove.has(shape.id)));
-                   setSelectedId(null);
-                   setSelectedIds([]);
+                applyChange((prev) => prev.filter((shape) => !idsToRemove.has(shape.id)));
+                setSelectedId(null);
+                setSelectedIds([]);
                 setSelectedId(null);
                 return;
             }
@@ -1423,6 +1439,9 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         })();
         if (!needsChange) return;
 
+        if (strokeTxnRef.current) return; // avoid re-entrancy bursts
+        strokeTxnRef.current = true;
+
         // Commit change to all selected stroke-capable shapes
         applyChange((prev) =>
             prev.map((s) => {
@@ -1435,13 +1454,14 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                 };
             })
         );
+        setTimeout(() => { strokeTxnRef.current = false; }, 0);
     }, [
         applyChange,
         resolvedStrokeColor,   // color from panel
         resolvedStrokeType,    // 'solid' etc.
         strokeWidth,           // numeric width
         selectedIds, selectedId
-    ]); 
+    ]);
 
     useEffect(() => {
         if (!selectedId) return;
@@ -1489,7 +1509,9 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         const clickedOnEmpty = targetNode === stage;
         const shiftKey = !!(e?.evt?.shiftKey || e?.shiftKey);
 
-        if (selectedTool === 'select' && shiftKey && clickedOnEmpty) {
+        if (selectedTool === 'select' && clickedOnEmpty) {
+            setSelectedId(null);
+            setSelectedIds([]);
             const pointer = getCanvasPointer();
             if (!pointer) return;
             marqueeStateRef.current = { active: true, start: pointer, end: pointer };
@@ -1548,7 +1570,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
 
         // start drag-create for supported tools
         const dragTools = ['rectangle', 'circle', 'ellipse', 'line', 'frame', 'group'];
-        if (clickedOnEmpty && dragTools.includes(selectedTool)) {
+        if (dragTools.includes(selectedTool)) {
             const pos = getCanvasPointer();
             if (!pos) return;
             const baseProps = {
@@ -1571,8 +1593,8 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                     strokeWidth: strokeWidth || 0,
                 });
             } else if (selectedTool === 'circle') {
-                    newShape = createShape('circle', {
-                        ...baseProps,
+                newShape = createShape('circle', {
+                    ...baseProps,
                     radius: 1,
                     fill: resolvedFillColor,
                     fillType: resolvedFillType,
@@ -1666,6 +1688,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         }
     };
 
+    
     // handle mouse move for panning (hand tool) and drawing
     const handleStageMouseMove = () => {
         const stage = stageRef.current;
@@ -1687,12 +1710,16 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
 
             // If using PEN, append points to the active stroke and return
             if (selectedTool === 'pen') {
-                setShapes((prev) =>
-                    prev.map((s) => {
-                        if (s.id !== id || s.type !== 'pen') return s;
-                        return { ...s, points: [...s.points, pos.x, pos.y] };
-                    })
-                );
+                setShapes((prev) => prev.map((s) => {
+                       if (s.id !== id || s.type !== 'pen') return s;
+                       const pts = s.points || [];
+                       const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
+                       if (lx != null && ly != null) {
+                             const dx = pos.x - lx, dy = pos.y - ly;
+                             if (dx * dx + dy * dy < 0.25) return s; // <0.5px
+                           }
+                       return { ...s, points: [...pts, pos.x, pos.y] };
+                     }));
                 return;
             }
 
@@ -1874,11 +1901,11 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
     const handleStageDoubleClick = (e) => {
         const stage = stageRef.current;
         if (!stage) return;
-          // ✅ ignore dbl-clicks that originated on any node other than the stage
-              if (e?.target && e.target !== stage) {
-                    e.cancelBubble = true;
-                    return;
-                  }
+        // ✅ ignore dbl-clicks that originated on any node other than the stage
+        if (e?.target && e.target !== stage) {
+            e.cancelBubble = true;
+            return;
+        }
         setActiveContainerPath((current) => {
             if (!Array.isArray(current) || current.length <= 1) {
                 return [null];
@@ -2007,21 +2034,21 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         const previousParentId = current?.parentId ?? null;
 
         applyChange((prev) => {
-               // update this node and its descendants’ positions
-                   let positioned = prev.map((s) => {
-                         if (s.id === id) return { ...s, x, y };
-                         if (current && isContainerShape(current) && isDescendantOf(s.id, id, prev)) {
-                               return { ...s, x: (s.x || 0) + deltaX, y: (s.y || 0) + deltaY };
-                             }
-                         return s;
-                       });
-            
-                   // if parent changed, move this node to TOP of new parent’s stack
-                   if (current && nextParentId !== previousParentId) {
-                         return moveShapeToParentTop(positioned, id, nextParentId);
-                       }
-               return positioned;
-             });
+            // update this node and its descendants’ positions
+            let positioned = prev.map((s) => {
+                if (s.id === id) return { ...s, x, y };
+                if (current && isContainerShape(current) && isDescendantOf(s.id, id, prev)) {
+                    return { ...s, x: (s.x || 0) + deltaX, y: (s.y || 0) + deltaY };
+                }
+                return s;
+            });
+
+            // if parent changed, move this node to TOP of new parent’s stack
+            if (current && nextParentId !== previousParentId) {
+                return moveShapeToParentTop(positioned, id, nextParentId);
+            }
+            return positioned;
+        });
     };
 
     // NEW: multi-select state. We'll still keep selectedId as the "primary".
@@ -2579,19 +2606,19 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
 
     // Helper: extract shape id (number) from a Konva node's id: "shape-123"
     const getShapeIdFromNode = (node) => {
-             if (!node || typeof node.id !== 'function') return null;
-             const idValue = node.id();
-             const m = /^shape-(\d+)$/.exec(idValue || '');
-             if (!m) return null;
-             const n = Number(m[1]);
-             return Number.isFinite(n) ? n : null;
-         };
+        if (!node || typeof node.id !== 'function') return null;
+        const idValue = node.id();
+        const m = /^shape-(\d+)$/.exec(idValue || '');
+        if (!m) return null;
+        const n = Number(m[1]);
+        return Number.isFinite(n) ? n : null;
+    };
 
     const handleShapeDoubleClick = (shape, event) => {
         if (!shape) return;
         if (shape.locked) return;
         if (event && typeof event.cancelBubble !== 'undefined') event.cancelBubble = true;
-         try { event?.target?.stopDrag?.(); } catch { } // kill any drag that may have started
+        try { event?.target?.stopDrag?.(); } catch { } // kill any drag that may have started
         if (selectedTool !== 'select') return;
 
         const stage = stageRef.current;
@@ -3332,7 +3359,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                     strokeWidth={2}
                     draggable={canEditGradientHandles}
                     onMouseDown={(event) => {
-                        if (!canEditGradientHandles) return;    
+                        if (!canEditGradientHandles) return;
                         event.cancelBubble = true;
                         markTransientGradientInteraction();
                     }}
@@ -3695,7 +3722,7 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         stage.y(stagePos.y);
         const layer = stage.getLayer ? stage.getLayer() : null;
         if (layer && typeof layer.batchDraw === 'function') layer.batchDraw();
-    }, [scale, stagePos, shapes]);
+    }, [scale, stagePos]);
 
     const handlePagesSectionResizeStart = useCallback(
         (event) => {
@@ -3858,8 +3885,8 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                     onPointerDown={handlePagesSectionResizeStart}
                     style={{
                         flex: '0 0 auto',
-                        height: 8,
-                        padding: '2px 0',
+                        height: 1,
+                        padding: '0',
                         cursor: 'row-resize',
                         display: 'flex',
                         alignItems: 'stretch',
@@ -4126,8 +4153,8 @@ const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
                 onPointerDown={handleLayerResizeStart}
                 style={{
                     flex: '0 0 auto',
-                    width: 8,
-                    padding: '0 2px',
+                    width: 1,
+                    padding: '0',
                     cursor: 'col-resize',
                     display: 'flex',
                     alignItems: 'stretch',
