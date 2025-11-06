@@ -130,16 +130,16 @@ const activeSubtitleStyle = {
 
 
     const contentStyle = {
-        padding: '20px',
+        //padding: '20px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 0,
         overflowY: 'auto',
     };
 
     const sectionCardStyle = {
         background: '#ffffff',
-        borderRadius: 12,
+        borderRadius: 0,
         padding: '18px 16px',
         boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
     };
@@ -169,29 +169,30 @@ const sectionHeaderActionsStyle = {
     const sectionBodyStyle = {
         display: 'flex',
         flexDirection: 'column',
-        gap: 14,
+        gap: 4,
 };
 
 const sectionSubheadingStyle = {
-    fontSize: 12,
+    fontSize: '.5625rem',
     fontWeight: 700,
     letterSpacing: 0.6,
-    textTransform: 'uppercase',
     color: '#475569',
+    lineHeight: 1.5,
 };
 
 const iconButtonStyle = {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    border: '1px solid #cbd5f5',
-    background: '#f8fafc',
+    width: 26,
+    height: 24,
+    borderRadius: 0,
+    border: '0px solid #cbd5f5',
+    background: '#e5e5e5',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
     transition: 'all 0.18s ease',
     color: '#1f2937',
+    padding: 0,
 };
 
 const iconButtonActiveStyle = {
@@ -208,8 +209,11 @@ const iconButtonDisabledStyle = {
 
 const alignmentGridStyle = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, 36px)',
-    gap: 8,
+    gridTemplateColumns: 'repeat(3, 26px)',
+    gap: 1,
+    borderRadius: 8,
+    background: '#ffffff',
+
 };
 
 const distributeRowStyle = {
@@ -219,7 +223,7 @@ const distributeRowStyle = {
 
 const rotationRowStyle = {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 36px)',
+    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 24px)',
     gap: 8,
     alignItems: 'end',
 };
@@ -256,20 +260,21 @@ const numericRowStyle = {
 };
 
 const numericFieldStyle = {
-    flex: '1 1 0',
+    flex: '1, 1',
     display: 'flex',
     flexDirection: 'column',
-    gap: 4,
+    gap: 0,
+    border: 'none',
 };
 
 const numericInputWrapperInlineStyle = {
     display: 'flex',
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 4,
     border: '1px solid #cdd5e0',
     background: '#f8fafc',
     padding: '0 10px',
-    height: 36,
+    height: 24,
     gap: 6,
 };
 
@@ -289,10 +294,16 @@ const unitSuffixStyle = {
     fontWeight: 600,
 };
 
+const unitPrefixStyle = {
+    fontSize: 11,
+    color: '#111',
+    fontWeight: 600,
+};
+
 const dividerStyle = {
     height: 1,
-    background: '#e2e8f0',
-    margin: '4px 0',
+    background: '#e5e5e5',
+    padding: '1px 0',
 };
 
 const toggleButtonStyle = {
@@ -341,6 +352,7 @@ const smoothingControlStyle = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
+    marginTop: 16,
 };
 
 const sliderStyle = {
@@ -348,16 +360,16 @@ const sliderStyle = {
 };
 
 const AlignLeftIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="3" width="2" height="12" rx="1" fill="currentColor" />
-        <rect x="6" y="5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+    <svg width="24" height="24" fill="#111111" viewBox="0 0 24 24" data-fpl-icon-size="24">
+        <path fill="var(--fpl-icon-color, var(--color-icon))" d="M17.25 10a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-8.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75zm-4 5a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75z"></path>
+        <path fill="var(--fpl-icon-color-3, var(--color-icon-tertiary))" d="M6 17.5a.5.5 0 0 1-1 0v-12a.5.5 0 0 1 1 0z"></path>
     </svg>
 );
 
 const AlignHCenterIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="3" y="5" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="8" y="3" width="2" height="12" rx="1" fill="currentColor" />
+    <svg width="24" height="24" fill="#111111" viewBox="0 0 24 24" data-fpl-icon-size="24">
+        <path fill="var(--fpl-icon-color, var(--color-icon))" d="M17.25 10a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-9.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75zm-2 5a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75z"></path>
+        <path fill="var(--fpl-icon-color-3, var(--color-icon-tertiary))" d="M13 17.5a.5.5 0 0 1-1 0V15h1zm0-4.5v-3h-1v3zm0-7.5V8h-1V5.5a.5.5 0 0 1 1 0" ></path>
     </svg>
 );
 
@@ -520,7 +532,7 @@ const blendOptions = [
     { id: 'normal', label: 'Normal' },
     { id: 'multiply', label: 'Multiply' },
     { id: 'screen', label: 'Screen' },
-];
+];  
 
     const fieldStyle = {
         display: 'flex',
@@ -535,10 +547,11 @@ const blendOptions = [
     };
 
     const selectStyle = {
-        height: 36,
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
+        height: 24,
+        borderRadius: 4,
+        //border: '1px solid #cdd5e0',
+        border: 'none',
+        background: '#e5e5e5',
         fontSize: 13,
         color: '#1f2937',
         padding: '0 12px',
@@ -551,7 +564,7 @@ const blendOptions = [
         border: '1px solid #cdd5e0',
         background: '#f8fafc',
         padding: '0 10px',
-        height: 36,
+        height: 24,
         gap: 6,
     };
 
@@ -572,7 +585,7 @@ const blendOptions = [
 
 const toggleButtonBase = {
     flex: 1,
-    width: 24,
+    width: 26,
     maxWidth:24,
     height: 24,
     padding: '6px 8px',
@@ -613,7 +626,7 @@ const ToggleButton = ({ active, onClick, children, title, icon }) => (
 );
 
 const ToggleGroup = ({ children }) => (
-    <div style={{ display: 'flex', gap: 6 }}>{children}</div>
+    <div style={{ display: 'flex', gap: 1, flexDirection: 'row' }}>{children}</div>
 );
 
     const hiddenColorInputStyle = {
@@ -625,9 +638,9 @@ const ToggleGroup = ({ children }) => (
 
     const colorSwatchStyle = {
         position: 'relative',
-        width: 36,
-        height: 36,
-        borderRadius: 10,
+        width: 14,
+        height: 14,
+        borderRadius: 2,
         border: '1px solid #cdd5e0',
         overflow: 'hidden',
         boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)',
@@ -639,13 +652,13 @@ const colorPickerButtonStyle = {
     justifyContent: 'space-between',
     gap: 12,
     width: '100%',
-    padding: '6px 10px',
-    borderRadius: 12,
-    border: '1px solid #cdd5e0',
-    background: '#ffffff',
+    padding: '2px 6px',
+    borderRadius: 4,
+    border: 'none',
+    background: '#f2f2f2',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    minHeight: 48,
+    minHeight: 24,
 };
 
 const colorPickerSummaryStyle = {
@@ -2743,7 +2756,8 @@ const ColorControl = ({
                             aria-label="Close colour picker"
                             onPointerDown={(event) => event.stopPropagation()}
                         >
-                            ×
+
+
                         </button>
                     </div>
                     <div style={colorPopoverBodyStyle}>
@@ -2777,7 +2791,7 @@ const ColorControl = ({
                 ref={containerRef}
                 style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}
         >
-                <span style={fieldLabelStyle}>{label}</span>
+                <span style={sectionSubheadingStyle}>{label}</span>
                 <button
                     type="button"
                     aria-haspopup="dialog"
@@ -2795,8 +2809,8 @@ const ColorControl = ({
                             aria-hidden="true"
                             style={{
                                 ...colorSwatchStyle,
-                                width: 32,
-                                height: 32,
+                                width: 14,
+                                height: 14,
                                 ...summaryPreview,
                             }}
                         />
@@ -2836,7 +2850,7 @@ const NumberControl = ({
     disabled = false,
 }) => (
     <div style={{ ...fieldStyle, opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
-        <span style={fieldLabelStyle}>{label}</span>
+        <span style={sectionSubheadingStyle}>{label}</span>
         <div style={numberInputWrapperStyle}>
             <input
                 type="number"
@@ -2879,7 +2893,7 @@ const SelectControl = ({ label, value, onChange, options }) => {
 
     const ToggleField = ({ label, children }) => (
         <div style={fieldStyle}>
-            <span style={fieldLabelStyle}>{label}</span>
+            <span style={sectionSubheadingStyle}>{label}</span>
             {children}
         </div>
 );
@@ -2929,6 +2943,13 @@ export default function PropertiesPanel({
     const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
     const disableStrokeControls = shape?.type === 'group';
 
+    // ---- current values derived from the active selection ----
+    
+    const currentX = primaryShape?.x ?? 0;
+    const currentY = primaryShape?.y ?? 0;
+    const currentW = primaryShape?.width ?? 0;   // fine as a baseline; your dimension effect handles special types
+    const currentH = primaryShape?.height ?? 0;
+
     const clamp = (value, min, max) => {
         if (!Number.isFinite(value)) return min;
         return Math.min(Math.max(value, min), max);
@@ -2971,6 +2992,15 @@ export default function PropertiesPanel({
 
     const positionRef = useRef({ x: 0, y: 0 });
     const [positionDraft, setPositionDraft] = useState({ x: '', y: '' });
+    const positionEditingRef = useRef(false);
+
+    useEffect(() => {
+        if (positionEditingRef.current) return; // don't stomp while typing
+        const committedX = formatNumeric(currentX /* from selected shape */);
+        const committedY = formatNumeric(currentY /* from selected shape */);
+        positionRef.current = { x: Number(committedX) || 0, y: Number(committedY) || 0 };
+        setPositionDraft({ x: committedX, y: committedY });
+    }, [currentX, currentY, hasSelection]);
 
     useEffect(() => {
         if (primaryShape) {
@@ -3019,7 +3049,16 @@ export default function PropertiesPanel({
     const dimensionRef = useRef({ width: 0, height: 0 });
     const [dimensionDraft, setDimensionDraft] = useState({ width: '', height: '' });
     const aspectRatioRef = useRef(1);
+    const dimensionEditingRef = useRef(false);
     const [isAspectLocked, setAspectLocked] = useState(true);
+
+    useEffect(() => {
+        if (dimensionEditingRef.current) return; // don't stomp while typing
+        const committedW = formatNumeric(currentW /* from selected shape */);
+        const committedH = formatNumeric(currentH /* from selected shape */);
+        dimensionRef.current = { width: Number(committedW) || 0, height: Number(committedH) || 0 };
+        setDimensionDraft({ width: committedW, height: committedH });
+    }, [currentW, currentH, hasSelection]);
 
     useEffect(() => {
         if (primaryShape && supportsDimensions) {
@@ -3161,17 +3200,56 @@ export default function PropertiesPanel({
 
     const handlePositionFieldChange = (axis, rawValue) => {
         setPositionDraft((prev) => ({ ...prev, [axis]: rawValue }));
-        if (!hasSelection || typeof onPositionChange !== 'function') return;
+        /*if (!hasSelection || typeof onPositionChange !== 'function') return;
         const numeric = Number(rawValue);
         if (Number.isNaN(numeric)) return;
         const next = { ...positionRef.current, [axis]: numeric };
         positionRef.current = next;
-        onPositionChange(next);
+        onPositionChange(next);*/
+    };
+
+    const commitPositionDraft = () => {
+        if (!hasSelection || typeof onPositionChange !== 'function') return;
+        const xNum = Number(positionDraft.x);
+        const yNum = Number(positionDraft.y);
+        if (!Number.isNaN(xNum) && !Number.isNaN(yNum)) {
+            positionRef.current = { x: xNum, y: yNum };
+            onPositionChange(positionRef.current);
+        }
+    };
+
+    const commitDimensionDraft = () => {
+        if (!supportsDimensions || typeof onDimensionChange !== 'function') return;
+        let w = Number(dimensionDraft.width);
+        let h = Number(dimensionDraft.height);
+        if (Number.isNaN(w) || Number.isNaN(h)) return;
+
+        if (isAspectLocked && w > 0 && h > 0) {
+            // keep ratio; infer which field changed and compute the other
+            const last = dimensionRef.current; // previous committed
+            const ratio = aspectRatioRef.current || (last.height > 0 ? last.width / last.height : w / (h || 1));
+            if (String(w) !== String(last.width)) {
+                h = ratio ? w / ratio : h;
+            } else if (String(h) !== String(last.height)) {
+                w = ratio ? h * ratio : w;
+            }
+        }
+
+        w = Math.max(0, w);
+        h = Math.max(0, h);
+        dimensionRef.current = { width: w, height: h };
+        if (h > 0) aspectRatioRef.current = w / h;
+
+        // single commit
+        onDimensionChange({ width: w, height: h });
+
+        // normalize drafts so the UI shows clean numbers after commit
+        setDimensionDraft({ width: String(Math.round(w * 100) / 100), height: String(Math.round(h * 100) / 100) });
     };
 
     const handleDimensionFieldChange = (axis, rawValue) => {
         setDimensionDraft((prev) => ({ ...prev, [axis]: rawValue }));
-        if (!supportsDimensions || typeof onDimensionChange !== 'function') return;
+        /*if (!supportsDimensions || typeof onDimensionChange !== 'function') return;
         const numeric = Number(rawValue);
         if (Number.isNaN(numeric)) return;
         let nextWidth = dimensionRef.current.width;
@@ -3198,7 +3276,7 @@ export default function PropertiesPanel({
         if (nextHeight > 0) {
             aspectRatioRef.current = nextWidth / nextHeight;
         }
-        onDimensionChange({ width: nextWidth, height: nextHeight });
+        onDimensionChange({ width: nextWidth, height: nextHeight });*/
     };
 
     const handleAspectToggle = () => {
@@ -3244,9 +3322,21 @@ export default function PropertiesPanel({
         const clampedPercent = clamp(numeric, 0, 100);
         onOpacityChange(clampedPercent / 100);
     };
+    const commitRotation = () => {
+        if (!hasSelection || typeof onRotationChange !== 'function') return;
+        const n = Number(rotationDraft); if (Number.isNaN(n)) return;
+        onRotationChange(n);
+    };
+
+    const commitOpacity = () => {
+        if (!hasSelection || typeof onOpacityChange !== 'function') return;
+        const n = Number(opacityDraft); if (Number.isNaN(n)) return;
+        onOpacityChange(Math.min(100, Math.max(0, n)) / 100);
+    };
+
 
     const handleCornerRadiusInputChange = (value) => {
-        setCornerRadiusDraft(value);
+        /*setCornerRadiusDraft(value);
         //if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
         const numeric = Number(value);
         if (Number.isNaN(numeric)) return;
@@ -3264,7 +3354,8 @@ export default function PropertiesPanel({
             bottomRight: formatNumeric(clampedValue),
             bottomLeft: formatNumeric(clampedValue),
         });
-        onCornerRadiusChange(clampedValue);
+        onCornerRadiusChange(clampedValue);*/
+        setCornerRadiusDraft(value);
     };
 
     // Commit the single unified corner radius from the draft
@@ -3345,12 +3436,12 @@ export default function PropertiesPanel({
 
     const handleCornerDetailInputChange = (key, value) => {
         setCornerDetailDraft((prev) => ({ ...prev, [key]: value }));
-        //if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        /*if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
         const numeric = Number(value);
         if (Number.isNaN(numeric)) return;
         const clampedValue = Math.max(0, numeric);
         cornerDetailRef.current = { ...cornerDetailRef.current, [key]: clampedValue };
-        onCornerRadiusChange({ ...cornerDetailRef.current });
+        onCornerRadiusChange({ ...cornerDetailRef.current });*/
     };
 
     const handleCornerDetailsToggle = () => {
@@ -3445,28 +3536,37 @@ export default function PropertiesPanel({
         label,
         value,
         onChange,
+        onBlur,
+        onKeyDown,
+        onFocus,
         suffix = 'px',
+        prefix = 'x',
         step = 1,
         min = undefined,
         max = undefined,
         disabled = false,
     }) => (
         <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
-            <span style={fieldLabelStyle}>{label}</span>
+            <span style={sectionSubheadingStyle}>{label}</span>
             <div
+
                 style={{
                     ...numericInputWrapperInlineStyle,
                     pointerEvents: disabled ? 'none' : 'auto',
                 }}
             >
+                {prefix ? <span style={unitPrefixStyle}>{prefix}</span> : null}
                 <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={value}
                     step={step}
                     min={min}
                     max={max}
                     onChange={(event) => onChange(event.target.value)}
                     onFocus={(event) => event.target.select?.()}
+                    onBlur={onBlur}
+                    onKeyDown={onKeyDown}
                     style={numericInputFieldStyle}
                     disabled={disabled}
                 />
@@ -3687,7 +3787,7 @@ const subtitle = shape
                 <Section title="Positions">
                     <div>
                         <div style={sectionSubheadingStyle}>Alignment</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ display: 'flex', flexDirection: 'row', gap: 8, marginTop: 4 }}>
                             <div style={alignmentGridStyle}>
                                 {horizontalAlignmentControls.map(({ id, label, icon: Icon }) => (
                                     <button
@@ -3732,23 +3832,29 @@ const subtitle = shape
                             </div>
                         </div>
                     </div>
-                    <div style={dividerStyle} />
+                    
                     <div>
                         <div style={sectionSubheadingStyle}>Position</div>
                         <div style={numericRowStyle}>
                             <NumericField
-                                label="X"
                                 value={positionDraft.x}
                                 onChange={(value) => handlePositionFieldChange('x', value)}
-                                step={0.1}
+                                onFocus={() => { positionEditingRef.current = true; }}
+                                onBlur={commitPositionDraft}
+                                onKeyDown={(e) => { if (e.key === 'Enter') commitPositionDraft(); }}
+                                step={1}
+                                prefix="X"
                                 suffix="px"
                                 disabled={!hasSelection}
                             />
                             <NumericField
-                                label="Y"
                                 value={positionDraft.y}
                                 onChange={(value) => handlePositionFieldChange('y', value)}
-                                step={0.1}
+                                onFocus={() => { positionEditingRef.current = true; }}
+                                onBlur={commitPositionDraft}
+                                onKeyDown={(e) => { if (e.key === 'Enter') commitPositionDraft(); }}
+                                step={1}
+                                prefix="Y"
                                 suffix="px"
                                 disabled={!hasSelection}
                             />
@@ -3758,11 +3864,14 @@ const subtitle = shape
                         <div style={sectionSubheadingStyle}>Rotation</div>
                         <div style={rotationRowStyle}>
                             <NumericField
-                                label="Angle"
+                                label=""
                                 value={rotationDraft}
                                 onChange={handleRotationInputChange}
+                                onBlur={commitRotation}
+                                onKeyDown={(e) => { if (e.key === 'Enter') commitRotation(); }}
+                                prefix=""
                                 suffix="°"
-                                step={0.1}
+                                step={1}
                                 disabled={!hasSelection}
                             />
                             <button
@@ -3803,19 +3912,27 @@ const subtitle = shape
                         <div style={sectionSubheadingStyle}>Dimension</div>
                         <div style={dimensionRowStyle}>
                             <NumericField
-                                label="W"
+                                label=""
                                 value={dimensionDraft.width}
                                 onChange={(value) => handleDimensionFieldChange('width', value)}
-                                step={0.1}
+                                onFocus={() => { dimensionEditingRef.current = true; }}
+                                onBlur={commitDimensionDraft}
+                                onKeyDown={(e) => { if (e.key === 'Enter') commitDimensionDraft(); }}
+                                step={1}
                                 suffix="px"
+                                prefix="W"
                                 disabled={!supportsDimensions || !hasSelection}
                             />
                             <NumericField
-                                label="H"
+                                label=""
                                 value={dimensionDraft.height}
                                 onChange={(value) => handleDimensionFieldChange('height', value)}
-                                step={0.1}
+                                onFocus={() => { dimensionEditingRef.current = true; }}
+                                onBlur={commitDimensionDraft}
+                                onKeyDown={(e) => { if (e.key === 'Enter') commitDimensionDraft(); }}
+                                step={1}
                                 suffix="px"
+                                prefix="H"
                                 disabled={!supportsDimensions || !hasSelection}
                             />
                             <button
@@ -3825,8 +3942,8 @@ const subtitle = shape
                                 disabled={!supportsDimensions || !hasSelection}
                                 style={{
                                     ...toggleButtonStyle,
-                                    width: 36,
-                                    height: 36,
+                                    width: 24,
+                                    height: 24,
                                     padding: 0,
                                     ...(isAspectLocked ? toggleButtonActiveStyle : null),
                                     pointerEvents: !supportsDimensions || !hasSelection ? 'none' : 'auto',
@@ -3841,40 +3958,18 @@ const subtitle = shape
                 <div style={dividerStyle} />
 
                 <Section title="Appearance" actions={appearanceActions}>
-                    <ColorControl
-                        label="Fill"
-                        style={supportsFill ? fillStyle : { type: 'solid', value: '#000000' }}
-                        onStyleChange={supportsFill ? onFillStyleChange : undefined}
-                        disabled={!supportsFill}
-                        onGradientPopoverToggle={supportsFill ? onGradientPickerToggle : undefined}
-                        gradientInteractionRef={gradientInteractionRef}
-                    />
-                    <ColorControl
-                        label="Stroke"
-                        style={strokeStyle}
-                        onStyleChange={disableStrokeControls ? undefined : onStrokeStyleChange}
-                        disabled={disableStrokeControls}
-                    />
-                    <NumberControl
-                        label="Stroke Width"
-                        value={strokeWidth}
-                        onChange={disableStrokeControls ? undefined : onStrokeWidthChange}
-                        min={0}
-                        max={64}
-                        step={1}
-                        disabled={disableStrokeControls}
-                    />
-                    <div style={dividerStyle} />
                     <div>
-                        <div style={sectionSubheadingStyle}>Opacity</div>
                         <div style={appearanceRowStyle}>
                             <NumericField
                                 label="Opacity"
                                 value={opacityDraft}
                                 onChange={handleOpacityInputChange}
+                                onBlur={commitOpacity}
+                                onKeyDown={(e) => { if (e.key === 'Enter') commitOpacity(); }}
                                 min={0}
                                 max={100}
                                 suffix="%"
+                                prefix=""
                                 disabled={!hasSelection}
                             />
                             <NumericField
@@ -3886,6 +3981,7 @@ const subtitle = shape
                                 onKeyDown={(e) => { if (e.key === 'Enter') commitCornerRadius(); }}
                                 step={1}
                                 suffix="px"
+                                prefix=""
                                 disabled={!supportsCornerRadius || !hasSelection}
                             />
                             <button
@@ -3895,8 +3991,8 @@ const subtitle = shape
                                 disabled={!supportsCornerRadius || !hasSelection}
                                 style={{
                                     ...toggleButtonStyle,
-                                    width: 36,
-                                    height: 36,
+                                    width: 24,
+                                    height: 24,
                                     padding: 0,
                                     ...(showCornerDetails ? toggleButtonActiveStyle : null),
                                     pointerEvents: !supportsCornerRadius || !hasSelection ? 'none' : 'auto',
@@ -3950,6 +4046,7 @@ const subtitle = shape
                             </div>
                         ) : null}
                         <div style={smoothingControlStyle}>
+                            <span style={sectionSubheadingStyle}>Corner Smoothing</span>
                             <button
                                 type="button"
                                 title={smoothingActive ? 'Disable corner smoothing' : 'Enable corner smoothing'}
@@ -3961,7 +4058,6 @@ const subtitle = shape
                                     pointerEvents: !supportsCornerRadius || !hasSelection ? 'none' : 'auto',
                                 }}
                             >
-                                Corner Smoothing
                             </button>
                             <input
                                 type="range"
@@ -3984,6 +4080,42 @@ const subtitle = shape
                     </div>
                 </Section>
 
+                <div style={dividerStyle} />
+
+                <Section title="Fill">
+                    <ColorControl
+                        label=""
+                        style={supportsFill ? fillStyle : { type: 'solid', value: '#000000' }}
+                        onStyleChange={supportsFill ? onFillStyleChange : undefined}
+                        disabled={!supportsFill}
+                        onGradientPopoverToggle={supportsFill ? onGradientPickerToggle : undefined}
+                        gradientInteractionRef={gradientInteractionRef}
+                    />
+                </Section>
+
+                <div style={dividerStyle} />
+
+                <Section title="Stroke">
+                    <ColorControl
+                        label=""
+                        style={strokeStyle}
+                        onStyleChange={disableStrokeControls ? undefined : onStrokeStyleChange}
+                        disabled={disableStrokeControls}
+                    />
+                    <NumberControl
+                        label="Stroke Width"
+                        value={strokeWidth}
+                        onChange={disableStrokeControls ? undefined : onStrokeWidthChange}
+                        min={0}
+                        max={64}
+                        step={1}
+                        disabled={disableStrokeControls}
+                    />
+                    
+                </Section>
+
+                <div style={dividerStyle} />
+
                 <Section title="Typography" disabled={!isTextShape}>
                     {/* Optional: only show if API is available and nothing loaded yet */}
                        {(!localFontEntries.length && (navigator?.fonts?.query || window?.queryLocalFonts)) && (
@@ -3997,7 +4129,7 @@ const subtitle = shape
                          </button>
    )}
                     <SelectControl
-                        label="Font"
+                        label=""
                         value={textFontFamily}
                         onChange={(event) =>
                             typeof onTextFontFamilyChange === 'function' &&
@@ -4005,8 +4137,9 @@ const subtitle = shape
                         }
                         options={fontOptions}
                     />
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     <SelectControl
-                        label="Variation"
+                        label=""
                         value={normalizedFontStyle}
                         onChange={(event) =>
                             typeof onTextFontStyleChange === 'function' &&
@@ -4014,17 +4147,21 @@ const subtitle = shape
                         }
                         options={fontVariationOptions}
                     />
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                        <NumberControl
-                            label="Size"
-                            value={textFontSize}
-                            onChange={(value) =>
-                                typeof onTextFontSizeChange === 'function' && onTextFontSizeChange(value)
-                            }
-                            min={0}
-                            max={200}
-                            step={1}
+                    <NumberControl
+                        label=""
+                        value={textFontSize}
+                        onChange={(value) =>
+                            typeof onTextFontSizeChange === 'function' && onTextFontSizeChange(value)
+                        }
+                        min={0}
+                        suffix=""
+                        prefix=""
+                        max={200}
+                        step={1}
                         />
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        
                         <NumberControl
                             label="Line Height"
                             value={textLineHeight}
@@ -4036,17 +4173,20 @@ const subtitle = shape
                             step={0.1}
                             suffix=""
                         />
+                        <NumberControl
+                            label="Letter Spacing"
+                            value={textLetterSpacing}
+                            onChange={(value) =>
+                                typeof onTextLetterSpacingChange === 'function' && onTextLetterSpacingChange(value)
+                            }
+                            min={-10}
+                            max={50}
+                            step={0.5}
+                        />
                     </div>
-                    <NumberControl
-                        label="Letter Spacing"
-                        value={textLetterSpacing}
-                        onChange={(value) =>
-                            typeof onTextLetterSpacingChange === 'function' && onTextLetterSpacingChange(value)
-                        }
-                        min={-10}
-                        max={50}
-                        step={0.5}
-                    />
+
+                    <div style={{ display: 'flex', flexDirection: 'row', gap: 8, }}>
+                    
                     <ToggleField label="Alignment">
                         <ToggleGroup>
                             {alignOptions.map((option) => (
@@ -4099,7 +4239,8 @@ const subtitle = shape
                                 S
                             </ToggleButton>
                         </ToggleGroup>
-                    </ToggleField>
+                        </ToggleField>
+                    </div>
                 </Section>
             </div>
         </aside>
