@@ -220,6 +220,36 @@ export default function App() {
         [propertiesPanelWidth]
     );
 
+    // 🟢 Handle Corner Radius changes coming from PropertiesPanel
+    const handleCornerRadiusChange = (v) => {
+        setActiveShape((prev) => {
+            if (!prev) return prev;
+
+            // Only apply to rectangles for now
+            if (prev.type !== 'rectangle') return prev;
+
+            // Uniform radius (number)
+            if (typeof v === 'number') {
+                return { ...prev, cornerRadius: Math.max(0, v) };
+            }
+
+            // Per-corner radius (object with topLeft, etc.)
+            if (v && typeof v === 'object') {
+                return {
+                    ...prev,
+                    cornerRadius: {
+                        topLeft: Math.max(0, Number(v.topLeft ?? 0)),
+                        topRight: Math.max(0, Number(v.topRight ?? 0)),
+                        bottomRight: Math.max(0, Number(v.bottomRight ?? 0)),
+                        bottomLeft: Math.max(0, Number(v.bottomLeft ?? 0)),
+                    },
+                };
+            }
+
+            return prev;
+        });
+    };
+
     return (
         <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
             <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
@@ -245,8 +275,8 @@ export default function App() {
                     onPointerDown={handlePropertiesResizeStart}
                     style={{
                         flex: '0 0 auto',
-                        width: 8,
-                        padding: '0 2px',
+                        width: 1,
+                        padding: '0',
                         cursor: 'col-resize',
                         display: 'flex',
                         alignItems: 'stretch',
@@ -291,6 +321,7 @@ export default function App() {
                     onTextVerticalAlignChange={setTextVerticalAlign}
                     textDecoration={textDecoration}
                     onTextDecorationChange={setTextDecoration}
+                    onCornerRadiusChange={handleCornerRadiusChange}
                 />
             </div>
         </div>
