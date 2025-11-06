@@ -251,6 +251,20 @@ export default function App() {
     };
 
     return (
+    <>
+        <style>
+            {`
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+          html, body, * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-weight: 400;
+            letter-spacing: 0.01em;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+          }
+        `}
+      </style>
+
         <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
             <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
 
@@ -325,5 +339,6 @@ export default function App() {
                 />
             </div>
         </div>
+        </>
     );
 }
