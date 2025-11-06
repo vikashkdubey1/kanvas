@@ -146,16 +146,16 @@ const activeSubtitleStyle = {
 
     const sectionHeaderStyle = {
         marginBottom: 14,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-    };
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+};
 
-    const sectionHeaderActionsStyle = {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
+const sectionHeaderActionsStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
     };
 
     const sectionTitleStyle = {
@@ -170,357 +170,357 @@ const activeSubtitleStyle = {
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
-    };
+};
 
-    const sectionSubheadingStyle = {
-        fontSize: 12,
-        fontWeight: 700,
-        letterSpacing: 0.6,
-        textTransform: 'uppercase',
-        color: '#475569',
-    };
+const sectionSubheadingStyle = {
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: '#475569',
+};
 
-    const iconButtonStyle = {
-        width: 36,
-        height: 36,
-        borderRadius: 8,
-        border: '1px solid #cbd5f5',
-        background: '#f8fafc',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        transition: 'all 0.18s ease',
-        color: '#1f2937',
-    };
+const iconButtonStyle = {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    border: '1px solid #cbd5f5',
+    background: '#f8fafc',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.18s ease',
+    color: '#1f2937',
+};
 
-    const iconButtonActiveStyle = {
-        background: '#1d4ed8',
-        borderColor: '#1d4ed8',
-        color: '#ffffff',
-        boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
-    };
+const iconButtonActiveStyle = {
+    background: '#1d4ed8',
+    borderColor: '#1d4ed8',
+    color: '#ffffff',
+    boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
+};
 
-    const iconButtonDisabledStyle = {
-        opacity: 0.45,
-        cursor: 'not-allowed',
-    };
+const iconButtonDisabledStyle = {
+    opacity: 0.45,
+    cursor: 'not-allowed',
+};
 
-    const alignmentGridStyle = {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 36px)',
-        gap: 8,
-    };
+const alignmentGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 36px)',
+    gap: 8,
+};
 
-    const distributeRowStyle = {
-        display: 'flex',
-        gap: 8,
-    };
+const distributeRowStyle = {
+    display: 'flex',
+    gap: 8,
+};
 
-    const rotationRowStyle = {
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 36px)',
-        gap: 8,
-        alignItems: 'end',
-    };
+const rotationRowStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, 36px)',
+    gap: 8,
+    alignItems: 'end',
+};
 
-    const dimensionRowStyle = {
-        display: 'flex',
-        gap: 12,
-        alignItems: 'flex-end',
-    };
+const dimensionRowStyle = {
+    display: 'flex',
+    gap: 12,
+    alignItems: 'flex-end',
+};
 
-    const cornerDetailsGridStyle = {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: 12,
-    };
+const cornerDetailsGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: 12,
+};
 
-    const appearanceRowStyle = {
-        display: 'flex',
-        gap: 12,
-        alignItems: 'flex-end',
-        flexWrap: 'wrap',
-    };
+const appearanceRowStyle = {
+    display: 'flex',
+    gap: 12,
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+};
 
-    const blendActionsWrapperStyle = {
-        display: 'flex',
-        gap: 6,
-        alignItems: 'center',
-    };
+const blendActionsWrapperStyle = {
+    display: 'flex',
+    gap: 6,
+    alignItems: 'center',
+};
 
-    const numericRowStyle = {
-        display: 'flex',
-        gap: 12,
-        alignItems: 'center',
-    };
+const numericRowStyle = {
+    display: 'flex',
+    gap: 12,
+    alignItems: 'center',
+};
 
-    const numericFieldStyle = {
-        flex: '1 1 0',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-    };
+const numericFieldStyle = {
+    flex: '1 1 0',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+};
 
-    const numericInputWrapperInlineStyle = {
-        display: 'flex',
-        alignItems: 'center',
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        padding: '0 10px',
-        height: 36,
-        gap: 6,
-    };
+const numericInputWrapperInlineStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    padding: '0 10px',
+    height: 36,
+    gap: 6,
+};
 
-    const numericInputFieldStyle = {
-        flex: 1,
-        border: 'none',
-        outline: 'none',
-        background: 'transparent',
-        fontSize: 13,
-        color: '#0f172a',
-        minWidth: 0,
-    };
+const numericInputFieldStyle = {
+    flex: 1,
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    fontSize: 13,
+    color: '#0f172a',
+    minWidth: 0,
+};
 
-    const unitSuffixStyle = {
-        fontSize: 11,
-        color: '#64748b',
-        fontWeight: 600,
-    };
+const unitSuffixStyle = {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: 600,
+};
 
-    const dividerStyle = {
-        height: 1,
-        background: '#e2e8f0',
-        margin: '4px 0',
-    };
+const dividerStyle = {
+    height: 1,
+    background: '#e2e8f0',
+    margin: '4px 0',
+};
 
-    const toggleButtonStyle = {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        transition: 'all 0.18s ease',
-        color: '#1f2937',
-    };
+const toggleButtonStyle = {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.18s ease',
+    color: '#1f2937',
+};
 
-    const toggleButtonActiveStyle = {
-        background: '#1d4ed8',
-        borderColor: '#1d4ed8',
-        color: '#ffffff',
-        boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
-    };
+const toggleButtonActiveStyle = {
+    background: '#1d4ed8',
+    borderColor: '#1d4ed8',
+    color: '#ffffff',
+    boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
+};
 
-    const blendButtonStyle = {
-        minWidth: 44,
-        height: 28,
-        borderRadius: 6,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        fontSize: 11,
-        fontWeight: 600,
-        color: '#1f2937',
-        padding: '0 8px',
-        cursor: 'pointer',
-        transition: 'all 0.18s ease',
-    };
+const blendButtonStyle = {
+    minWidth: 44,
+    height: 28,
+    borderRadius: 6,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#1f2937',
+    padding: '0 8px',
+    cursor: 'pointer',
+    transition: 'all 0.18s ease',
+};
 
-    const blendButtonActiveStyle = {
-        background: '#1d4ed8',
-        borderColor: '#1d4ed8',
-        color: '#ffffff',
-        boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
-    };
+const blendButtonActiveStyle = {
+    background: '#1d4ed8',
+    borderColor: '#1d4ed8',
+    color: '#ffffff',
+    boxShadow: '0 0 0 1px rgba(29, 78, 216, 0.12)',
+};
 
-    const smoothingControlStyle = {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-    };
+const smoothingControlStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+};
 
-    const sliderStyle = {
-        flex: 1,
-    };
+const sliderStyle = {
+    flex: 1,
+};
 
-    const AlignLeftIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2" y="3" width="2" height="12" rx="1" fill="currentColor" />
-            <rect x="6" y="5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-    );
+const AlignLeftIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="3" width="2" height="12" rx="1" fill="currentColor" />
+        <rect x="6" y="5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+);
 
-    const AlignHCenterIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="5" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            <rect x="8" y="3" width="2" height="12" rx="1" fill="currentColor" />
-        </svg>
-    );
+const AlignHCenterIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="5" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="8" y="3" width="2" height="12" rx="1" fill="currentColor" />
+    </svg>
+);
 
-    const AlignRightIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="14" y="3" width="2" height="12" rx="1" fill="currentColor" />
-            <rect x="4" y="5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-    );
+const AlignRightIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="14" y="3" width="2" height="12" rx="1" fill="currentColor" />
+        <rect x="4" y="5" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+);
 
-    const AlignTopIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="2" width="12" height="2" rx="1" fill="currentColor" />
-            <rect x="5" y="6" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-    );
+const AlignTopIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="2" width="12" height="2" rx="1" fill="currentColor" />
+        <rect x="5" y="6" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+);
 
-    const AlignVMiddleIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="5" y="3" width="8" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            <rect x="3" y="8" width="12" height="2" rx="1" fill="currentColor" />
-        </svg>
-    );
+const AlignVMiddleIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="3" width="8" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="3" y="8" width="12" height="2" rx="1" fill="currentColor" />
+    </svg>
+);
 
-    const AlignBottomIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="14" width="12" height="2" rx="1" fill="currentColor" />
-            <rect x="5" y="4" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-    );
+const AlignBottomIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="14" width="12" height="2" rx="1" fill="currentColor" />
+        <rect x="5" y="4" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+);
 
-    const TidyUpIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="3" width="4" height="4" rx="1" fill="currentColor" />
-            <rect x="11" y="3" width="4" height="4" rx="1" fill="currentColor" />
-            <rect x="3" y="11" width="4" height="4" rx="1" fill="currentColor" />
-            <rect x="11" y="11" width="4" height="4" rx="1" fill="currentColor" />
-        </svg>
-    );
+const TidyUpIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="3" width="4" height="4" rx="1" fill="currentColor" />
+        <rect x="11" y="3" width="4" height="4" rx="1" fill="currentColor" />
+        <rect x="3" y="11" width="4" height="4" rx="1" fill="currentColor" />
+        <rect x="11" y="11" width="4" height="4" rx="1" fill="currentColor" />
+    </svg>
+);
 
-    const DistributeHorizontalIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="4" width="3" height="10" rx="1" fill="currentColor" />
-            <rect x="12" y="4" width="3" height="10" rx="1" fill="currentColor" />
-            <rect x="7" y="2" width="1.5" height="14" rx="0.75" fill="currentColor" opacity="0.6" />
-            <rect x="9.5" y="2" width="1.5" height="14" rx="0.75" fill="currentColor" opacity="0.6" />
-        </svg>
-    );
+const DistributeHorizontalIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="4" width="3" height="10" rx="1" fill="currentColor" />
+        <rect x="12" y="4" width="3" height="10" rx="1" fill="currentColor" />
+        <rect x="7" y="2" width="1.5" height="14" rx="0.75" fill="currentColor" opacity="0.6" />
+        <rect x="9.5" y="2" width="1.5" height="14" rx="0.75" fill="currentColor" opacity="0.6" />
+    </svg>
+);
 
-    const DistributeVerticalIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="4" y="3" width="10" height="3" rx="1" fill="currentColor" />
-            <rect x="4" y="12" width="10" height="3" rx="1" fill="currentColor" />
-            <rect x="2" y="7" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.6" />
-            <rect x="2" y="9.5" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.6" />
-        </svg>
-    );
+const DistributeVerticalIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="3" width="10" height="3" rx="1" fill="currentColor" />
+        <rect x="4" y="12" width="10" height="3" rx="1" fill="currentColor" />
+        <rect x="2" y="7" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.6" />
+        <rect x="2" y="9.5" width="14" height="1.5" rx="0.75" fill="currentColor" opacity="0.6" />
+    </svg>
+);
 
-    const RotateIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 3a6 6 0 106 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M12 3H9V0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
+const RotateIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 3a6 6 0 106 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 3H9V0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+);
 
-    const FlipHorizontalIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 4L4 9l4 5V4zM10 14l4-5-4-5v10z" fill="currentColor" />
-            <rect x="8.25" y="3" width="1.5" height="12" fill="currentColor" opacity="0.6" />
-        </svg>
-    );
+const FlipHorizontalIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 4L4 9l4 5V4zM10 14l4-5-4-5v10z" fill="currentColor" />
+        <rect x="8.25" y="3" width="1.5" height="12" fill="currentColor" opacity="0.6" />
+    </svg>
+);
 
-    const FlipVerticalIcon = () => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 10l5 4 5-4H4zM14 8l-5-4-5 4h10z" fill="currentColor" />
-            <rect x="3" y="8.25" width="12" height="1.5" fill="currentColor" opacity="0.6" />
-        </svg>
-    );
+const FlipVerticalIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 10l5 4 5-4H4zM14 8l-5-4-5 4h10z" fill="currentColor" />
+        <rect x="3" y="8.25" width="12" height="1.5" fill="currentColor" opacity="0.6" />
+    </svg>
+);
 
-    const LockClosedIcon = () => (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3.5" y="7" width="9" height="7" rx="2" stroke="currentColor" strokeWidth="1.4" />
-            <path
-                d="M5.5 7V5.5a2.5 2.5 0 115 0V7"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-            />
-        </svg>
-    );
+const LockClosedIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3.5" y="7" width="9" height="7" rx="2" stroke="currentColor" strokeWidth="1.4" />
+        <path
+            d="M5.5 7V5.5a2.5 2.5 0 115 0V7"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+        />
+    </svg>
+);
 
-    const LockOpenIcon = () => (
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3.5" y="7" width="9" height="7" rx="2" stroke="currentColor" strokeWidth="1.4" />
-            <path
-                d="M6 7V5.5a2.5 2.5 0 114.9-.5"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-            />
-        </svg>
-    );
+const LockOpenIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3.5" y="7" width="9" height="7" rx="2" stroke="currentColor" strokeWidth="1.4" />
+        <path
+            d="M6 7V5.5a2.5 2.5 0 114.9-.5"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+        />
+    </svg>
+);
 
-    const ChevronDownIcon = ({ rotated = false }) => (
-        <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            style={{ transform: rotated ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease' }}
-        >
-            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
+const ChevronDownIcon = ({ rotated = false }) => (
+    <svg
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ transform: rotated ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease' }}
+    >
+        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+);
 
-    const EyeIcon = ({ hidden = false }) => (
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-                d="M1.5 9c1.2-3 4-5.5 7.5-5.5S15.8 6 17 9c-1.2 3-4 5.5-8 5.5S2.7 12 1.5 9z"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill={hidden ? 'none' : 'rgba(30,64,175,0.08)'}
-            />
-            {hidden ? (
-                <path d="M4 14l10-10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            ) : (
-                <circle cx="9" cy="9" r="2.5" fill="currentColor" />
-            )}
-        </svg>
-    );
+const EyeIcon = ({ hidden = false }) => (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+            d="M1.5 9c1.2-3 4-5.5 7.5-5.5S15.8 6 17 9c-1.2 3-4 5.5-8 5.5S2.7 12 1.5 9z"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill={hidden ? 'none' : 'rgba(30,64,175,0.08)'}
+        />
+        {hidden ? (
+            <path d="M4 14l10-10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        ) : (
+            <circle cx="9" cy="9" r="2.5" fill="currentColor" />
+        )}
+    </svg>
+);
 
-    const BlendDot = () => (
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="6" cy="6" r="4" fill="currentColor" opacity="0.45" />
-        </svg>
-    );
+const BlendDot = () => (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="6" cy="6" r="4" fill="currentColor" opacity="0.45" />
+    </svg>
+);
 
-    const horizontalAlignmentControls = [
-        { id: 'left', label: 'Align Left', icon: AlignLeftIcon },
-        { id: 'center', label: 'Align Horizontal Center', icon: AlignHCenterIcon },
-        { id: 'right', label: 'Align Right', icon: AlignRightIcon },
-    ];
+const horizontalAlignmentControls = [
+    { id: 'left', label: 'Align Left', icon: AlignLeftIcon },
+    { id: 'center', label: 'Align Horizontal Center', icon: AlignHCenterIcon },
+    { id: 'right', label: 'Align Right', icon: AlignRightIcon },
+];
 
-    const verticalAlignmentControls = [
-        { id: 'top', label: 'Align Top', icon: AlignTopIcon },
-        { id: 'middle', label: 'Align Vertical Center', icon: AlignVMiddleIcon },
-        { id: 'bottom', label: 'Align Bottom', icon: AlignBottomIcon },
-    ];
+const verticalAlignmentControls = [
+    { id: 'top', label: 'Align Top', icon: AlignTopIcon },
+    { id: 'middle', label: 'Align Vertical Center', icon: AlignVMiddleIcon },
+    { id: 'bottom', label: 'Align Bottom', icon: AlignBottomIcon },
+];
 
-    const distributionControls = [
-        { id: 'tidy', label: 'Tidy Up', icon: TidyUpIcon },
-        { id: 'horizontal', label: 'Distribute Horizontal Spacing', icon: DistributeHorizontalIcon },
-        { id: 'vertical', label: 'Distribute Vertical Spacing', icon: DistributeVerticalIcon },
-    ];
+const distributionControls = [
+    { id: 'tidy', label: 'Tidy Up', icon: TidyUpIcon },
+    { id: 'horizontal', label: 'Distribute Horizontal Spacing', icon: DistributeHorizontalIcon },
+    { id: 'vertical', label: 'Distribute Vertical Spacing', icon: DistributeVerticalIcon },
+];
 
-    const blendOptions = [
-        { id: 'normal', label: 'Normal' },
-        { id: 'multiply', label: 'Multiply' },
-        { id: 'screen', label: 'Screen' },
-    ];
+const blendOptions = [
+    { id: 'normal', label: 'Normal' },
+    { id: 'multiply', label: 'Multiply' },
+    { id: 'screen', label: 'Screen' },
+];
 
     const fieldStyle = {
         display: 'flex',
@@ -713,7 +713,7 @@ const colorPopoverCloseButtonStyle = {
 const colorPopoverBodyStyle = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 14,
+    gap: 16,
 };
 
 const colorModeGridStyle = {
@@ -1314,7 +1314,7 @@ const solidEditorWrapperStyle = {
 const solidPickerMainStyle = {
     display: 'flex',
     flexDirection: 'column',
-    gap: 10,
+    gap: 16,
 };
 
 const solidSaturationWrapperStyle = {
@@ -1346,18 +1346,19 @@ const solidSliderGroupStyle = {
 
 const solidSliderWrapperStyle = {
     position: 'relative',
-    height: 14,
+    height: 28,
     borderRadius: 999,
     overflow: 'hidden',
     cursor: 'pointer',
     boxShadow: 'inset 0 0 0 1px rgba(15, 23, 42, 0.12)',
+    overflow: 'visible',
 };
 
 const solidSliderThumbStyle = {
     position: 'absolute',
     top: '50%',
-    width: 18,
-    height: 18,
+    width: 28,
+    height: 28,
     borderRadius: '50%',
     border: '2px solid #ffffff',
     boxShadow: '0 1px 4px rgba(15, 23, 42, 0.45)',
@@ -1370,6 +1371,7 @@ const solidInputsRowStyle = {
     gridTemplateColumns: 'minmax(72px, 92px) 1fr 72px',
     gap: 10,
     alignItems: 'center',
+    width: '100%',
 };
 
 const solidFormatSelectStyle = {
@@ -1395,13 +1397,14 @@ const solidHexInputStyle = {
     padding: '0 12px',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
+    width: 64,
 };
 
 const solidAlphaInputWrapperStyle = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
+    gap: 0,
     height: 36,
     borderRadius: 10,
     border: '1px solid #cdd5e0',
@@ -1409,7 +1412,8 @@ const solidAlphaInputWrapperStyle = {
     color: '#f8fafc',
     fontSize: 13,
     fontWeight: 600,
-    padding: '0 10px 0 14px',
+    padding: '0 10px 0 10px',
+    width: 48,
 };
 
 const solidAlphaInputStyle = {
@@ -1421,6 +1425,7 @@ const solidAlphaInputStyle = {
     fontWeight: 'inherit',
     textAlign: 'right',
     outline: 'none',
+    width: 32,
 };
 
 const solidSwatchSectionStyle = {
@@ -1464,7 +1469,7 @@ const solidSwatchButtonInnerStyle = {
     borderRadius: 'inherit',
 };
 
-    const Section = ({ title, children, disabled = false, actions = null }) => (
+const Section = ({ title, children, disabled = false, actions = null }) => (
         <section
             style={{
                 ...sectionCardStyle,
@@ -1473,8 +1478,8 @@ const solidSwatchButtonInnerStyle = {
             }}
         >
             <div style={sectionHeaderStyle}>
-                <div style={sectionTitleStyle}>{title}</div>
-                {actions ? <div style={sectionHeaderActionsStyle}>{actions}</div> : null}
+            <div style={sectionTitleStyle}>{title}</div>
+            {actions ? <div style={sectionHeaderActionsStyle}>{actions}</div> : null}
             </div>
             <div style={sectionBodyStyle}>{children}</div>
         </section>
@@ -1846,7 +1851,7 @@ const ColorControl = ({
             if (!rect || rect.width === 0) return;
             const ratio = clamp01((clientX - rect.left) / rect.width);
             const current = solidHsvaRef.current;
-            applySolidColor({ ...current, a: ratio }, options);
+            applySolidColor({ ...current, h: ratio * 360 }, options); // ✅ change hue (0–360)
         },
         [applySolidColor]
     );
@@ -1899,6 +1904,7 @@ const ColorControl = ({
             window.removeEventListener('pointermove', handleHuePointerMove);
             window.removeEventListener('pointerup', handleHuePointerUp);
             window.removeEventListener('pointercancel', handleHuePointerUp);
+            finalizeSolidInteraction(); // ✅ commit the final hue
         },
         [finalizeSolidInteraction, handleHuePointerMove]
     );
@@ -2916,7 +2922,7 @@ export default function PropertiesPanel({
     onVisibilityChange,
     onBlendModeChange,
     onOpacityChange,
-    onCornerRadiusChange,
+    onCornerRadiusChange = () => { },
     onCornerSmoothingChange,
 }) {
         const isTextShape = shape?.type === 'text';
@@ -3241,10 +3247,11 @@ export default function PropertiesPanel({
 
     const handleCornerRadiusInputChange = (value) => {
         setCornerRadiusDraft(value);
-        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        //if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
         const numeric = Number(value);
         if (Number.isNaN(numeric)) return;
         const clampedValue = Math.max(0, numeric);
+        console.log('clampedValue', value),
         cornerDetailRef.current = {
             topLeft: clampedValue,
             topRight: clampedValue,
@@ -3260,9 +3267,85 @@ export default function PropertiesPanel({
         onCornerRadiusChange(clampedValue);
     };
 
+    // Commit the single unified corner radius from the draft
+    const commitCornerRadiusFromDraft = () => {
+        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        const numeric = Number(cornerRadiusDraft);
+        if (Number.isNaN(numeric)) return;
+        const clampedValue = Math.max(0, numeric);
+
+        // keep detail ref in sync
+        cornerDetailRef.current = {
+            topLeft: clampedValue,
+            topRight: clampedValue,
+            bottomRight: clampedValue,
+            bottomLeft: clampedValue,
+        };
+        setCornerDetailDraft({
+            topLeft: formatNumeric(clampedValue),
+            topRight: formatNumeric(clampedValue),
+            bottomRight: formatNumeric(clampedValue),
+            bottomLeft: formatNumeric(clampedValue),
+        });
+
+        onCornerRadiusChange(clampedValue);
+    };
+
+    // Factory to commit one corner detail by key, from its draft field
+    const commitCornerDetailFromDraft = (key) => {
+        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        const draftValue = cornerDetailDraft?.[key];
+        const numeric = Number(draftValue);
+        if (Number.isNaN(numeric)) return;
+        const clampedValue = Math.max(0, numeric);
+
+        cornerDetailRef.current = { ...cornerDetailRef.current, [key]: clampedValue };
+        onCornerRadiusChange({ ...cornerDetailRef.current });
+    };
+
+    // Convenience: handle Enter key to commit
+    const handleCommitKeyDown = (e, commitFn) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            commitFn();
+            // Optionally blur to show commit happened
+            if (e.currentTarget && typeof e.currentTarget.blur === 'function') e.currentTarget.blur();
+        }
+    };
+
+    // Commit a uniform corner radius from the single input
+    const commitCornerRadius = () => {
+        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        const numeric = Number(cornerRadiusDraft);
+        if (Number.isNaN(numeric)) return;
+        const clamped = Math.max(0, numeric);
+        // keep the detail ref in sync
+        cornerDetailRef.current = {
+            topLeft: clamped, topRight: clamped, bottomRight: clamped, bottomLeft: clamped,
+        };
+        setCornerDetailDraft({
+            topLeft: formatNumeric(clamped),
+            topRight: formatNumeric(clamped),
+            bottomRight: formatNumeric(clamped),
+            bottomLeft: formatNumeric(clamped),
+        });
+        onCornerRadiusChange(clamped);
+    };
+
+    // Commit an individual corner by key
+    const commitCornerDetail = (key) => {
+        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        const raw = cornerDetailDraft[key];
+        const numeric = Number(raw);
+        if (Number.isNaN(numeric)) return;
+        const clamped = Math.max(0, numeric);
+        cornerDetailRef.current = { ...cornerDetailRef.current, [key]: clamped };
+        onCornerRadiusChange({ ...cornerDetailRef.current });
+    };
+
     const handleCornerDetailInputChange = (key, value) => {
         setCornerDetailDraft((prev) => ({ ...prev, [key]: value }));
-        if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
+        //if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
         const numeric = Number(value);
         if (Number.isNaN(numeric)) return;
         const clampedValue = Math.max(0, numeric);
@@ -3394,6 +3477,7 @@ export default function PropertiesPanel({
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 
+    /*
     useEffect(() => {
         let isActive = true;
 
@@ -3451,6 +3535,42 @@ export default function PropertiesPanel({
             isActive = false;
         };
     }, []);
+    */
+
+   const normalizeFonts = (fontArray) => {
+  if (!Array.isArray(fontArray)) return [];
+  return fontArray.map((font) => ({
+    family: font.family || font.familyName || font.fullName || 'Unknown',
+    fullName: font.fullName || font.family || 'Unknown',
+    postscriptName: font.postscriptName || font.postscript || font.fullName || 'Unknown',
+  }));
+};
+
+   // Ask for local fonts only after a user gesture
+  const loadLocalFonts = async () => {
+      let isActive = true;
+      console.log('Requesting local fonts...');
+      try {
+          if (navigator?.fonts?.query) {
+              const collected = [];
+              // Must be called from a user gesture (e.g., button onClick)
+              for await (const fontData of navigator.fonts.query()) {
+                  collected.push(fontData);
+              }
+              if (isActive) setLocalFontEntries(normalizeFonts(collected));
+          } else if (typeof window !== 'undefined' && typeof window.queryLocalFonts === 'function') {
+              // Chromium alt API
+              const localFonts = await window.queryLocalFonts();
+              if (isActive) setLocalFontEntries(normalizeFonts(localFonts));
+          } else {
+              console.info('Local Font Access API not supported in this browser');
+          }
+      } catch (err) {
+          // SecurityError typically means no user activation or permission denied
+          console.warn('Unable to access local fonts', err);
+      }
+      return () => { isActive = false; };
+  };
 
     const fontOptions = useMemo(() => {
         const seen = new Set();
@@ -3761,7 +3881,10 @@ const subtitle = shape
                                 label="Corner Radius"
                                 value={cornerRadiusDraft}
                                 onChange={handleCornerRadiusInputChange}
-                                step={0.5}
+                                //onChange={(value) => setCornerRadiusDraft(value)}
+                                onBlur={commitCornerRadius}
+                                onKeyDown={(e) => { if (e.key === 'Enter') commitCornerRadius(); }}
+                                step={1}
                                 suffix="px"
                                 disabled={!supportsCornerRadius || !hasSelection}
                             />
@@ -3786,9 +3909,11 @@ const subtitle = shape
                             <div style={cornerDetailsGridStyle}>
                                 <NumericField
                                     label="Top-Left"
-                                    value={cornerDetailDraft.topLeft}
+                                    value={cornerDetailDraft.topLeft || cornerRadiusDraft}
                                     onChange={(value) => handleCornerDetailInputChange('topLeft', value)}
-                                    step={0.5}
+                                    onBlur={() => commitCornerDetail('topLeft')}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('topLeft'); }}
+                                    step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
                                 />
@@ -3796,7 +3921,9 @@ const subtitle = shape
                                     label="Top-Right"
                                     value={cornerDetailDraft.topRight}
                                     onChange={(value) => handleCornerDetailInputChange('topRight', value)}
-                                    step={0.5}
+                                    onBlur={() => commitCornerDetail('topRight')}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('topRight'); }}
+                                    step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
                                 />
@@ -3804,7 +3931,9 @@ const subtitle = shape
                                     label="Bottom-Right"
                                     value={cornerDetailDraft.bottomRight}
                                     onChange={(value) => handleCornerDetailInputChange('bottomRight', value)}
-                                    step={0.5}
+                                    onBlur={() => commitCornerDetail('bottomRight')}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('bottomRight') }}
+                                    step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
                                 />
@@ -3812,7 +3941,9 @@ const subtitle = shape
                                     label="Bottom-Left"
                                     value={cornerDetailDraft.bottomLeft}
                                     onChange={(value) => handleCornerDetailInputChange('bottomLeft', value)}
-                                    step={0.5}
+                                    onBlur={() => commitCornerDetail('bottomLeft')}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('bottomLeft'); }}
+                                    step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
                                 />
@@ -3854,6 +3985,17 @@ const subtitle = shape
                 </Section>
 
                 <Section title="Typography" disabled={!isTextShape}>
+                    {/* Optional: only show if API is available and nothing loaded yet */}
+                       {(!localFontEntries.length && (navigator?.fonts?.query || window?.queryLocalFonts)) && (
+                             <button
+                             type="button"
+                           onClick={loadLocalFonts}
+                           style={{ alignSelf: 'flex-start', marginBottom: 8 }}
+                           title="Load local fonts from your system (requires a click)"
+     >
+                           Load local fonts
+                         </button>
+   )}
                     <SelectControl
                         label="Font"
                         value={textFontFamily}
@@ -3921,6 +4063,7 @@ const subtitle = shape
                             ))}
                         </ToggleGroup>
                     </ToggleField>
+
                     <ToggleField label="Vertical">
                         <ToggleGroup>
                             {verticalAlignOptions.map((option) => (
@@ -3938,6 +4081,7 @@ const subtitle = shape
                             ))}
                         </ToggleGroup>
                     </ToggleField>
+
                     <ToggleField label="Decoration">
                         <ToggleGroup>
                             <ToggleButton
