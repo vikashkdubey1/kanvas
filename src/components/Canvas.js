@@ -257,6 +257,21 @@ const computeLinearGradientPoints = (shape, angle) => {
     };
 };
 
+// Compute group box from its children's bounding boxes
+function computeGroupBox(group, source) {
+    const kids = source.filter(s => s.parentId === group.id && s.visible !== false);
+    if (!kids.length) return null;
+    const boxes = kids.map(getShapeBoundingBox).filter(Boolean);
+    const u = unionBoundingBoxes(boxes);
+    if (!u) return null;
+    return {
+        x: (u.left + u.right) / 2,
+        y: (u.top + u.bottom) / 2,
+        width: Math.max(1, u.right - u.left),
+        height: Math.max(1, u.bottom - u.top),
+    };
+}
+
 export default function Canvas({
     selectedTool,
     onToolChange,
@@ -366,6 +381,26 @@ export default function Canvas({
     const activeShapesRef = useRef(shapesOnActivePage);
     useEffect(() => {
         activeShapesRef.current = shapesOnActivePage;
+    }, [shapesOnActivePage]);
+
+    useEffect(() => {
+        setShapes(prev => {
+            let changed = false;
+            const next = prev.map(s => {
+                if (s.type !== 'group') return s;
+                const box = computeGroupBox(s, prev);
+                if (!box) return s;
+                const same =
+                    Math.abs((s.x || 0) - box.x) < 0.001 &&
+                    Math.abs((s.y || 0) - box.y) < 0.001 &&
+                    Math.abs((s.width || 0) - box.width) < 0.001 &&
+                    Math.abs((s.height || 0) - box.height) < 0.001;
+                if (same) return s;
+                changed = true;
+                return { ...s, ...box };
+            });
+            return changed ? next : prev;
+        });
     }, [shapesOnActivePage]);
 
     const pageShapeCounts = useMemo(() => {
@@ -774,6 +809,26 @@ export default function Canvas({
         return null;
     };
 
+    // Remove any groups that have no children
+    function pruneEmptyGroups(shapes) {
+        const allGroupIds = new Set(shapes.filter(s => s.type === 'group').map(s => s.id));
+        const hasChild = new Map([...allGroupIds].map(id => [id, false]));
+
+        for (const s of shapes) {
+            if (s.parentId && hasChild.has(s.parentId)) {
+                hasChild.set(s.parentId, true);
+            }
+        }
+
+        const keepIds = new Set();
+        shapes.forEach(s => {
+            if (s.type !== 'group') keepIds.add(s.id);
+            else if (hasChild.get(s.id)) keepIds.add(s.id);
+        });
+
+        return shapes.filter(s => keepIds.has(s.id));
+    }
+
     const scaleChildWithinContainer = (
         shape,
         prevContainer,
@@ -1001,6 +1056,7 @@ export default function Canvas({
         (updater, options = {}) => {
             const prev = shapesRef.current;
             const next = typeof updater === 'function' ? updater(prev) : updater;
+            const cleaned = pruneEmptyGroups(next);
             // ---- no-op guards (stop churn/loops) ----
               if (next === prev) return;
               if (Array.isArray(prev) && Array.isArray(next) && prev.length === next.length) {
@@ -1014,7 +1070,7 @@ export default function Canvas({
             pastRef.current.push(baseState);
             if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
             futureRef.current = [];
-            setShapes(next);
+            setShapes(cleaned);
         },
         []
     );
@@ -1136,6 +1192,45 @@ export default function Canvas({
         [allocateShapeId, applyChange, makePageCopyName]
     );
 
+    // 🟢 Duplicate selected shapes (Ctrl/Cmd + D)
+    function handleDuplicate() {
+        if (!selectedIds?.length) return;
+
+        setShapes(prev => {
+            const now = Date.now();
+            const clones = [];
+            let maxId = Math.max(0, ...prev.map(s => s.id));
+
+            selectedIds.forEach(id => {
+                const src = prev.find(s => s.id === id);
+                if (!src) return;
+
+                maxId += 1;
+                const baseName = src.name || `${src.type}-${src.id}`;
+                const newName = baseName.endsWith('copy') ? `${baseName} 2` : `${baseName} copy`;
+
+                clones.push({
+                    ...src,
+                    id: maxId,
+                    name: newName,
+                    x: (src.x ?? 0) + 20,    // slight offset so it’s visible
+                    y: (src.y ?? 0) + 20,
+                    selected: false,
+                });
+            });
+
+            // push the new clones to the end
+            return [...prev, ...clones];
+        });
+
+        // auto-select the duplicated shape(s)
+        setSelectedIds(prev => {
+            const all = shapesRef.current || [];
+            const maxId = Math.max(0, ...all.map(s => s.id));
+            return [maxId]; // select the newest one if only one; works fine for multiples too
+        });
+    }
+
     const handleDeletePage = useCallback(
         (pageId, { mode = null, targetPageId = null } = {}) => {
             const currentPages = pagesRef.current;
@@ -1243,6 +1338,12 @@ export default function Canvas({
                 setSelectedId(null);
                 return;
             }
+            // 🟢 Duplicate (Ctrl/Cmd + D)
+            if ((e.key === 'd' || e.key === 'D') && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleDuplicate();
+                  return;
+                }
             if (e.key === 'Escape') {
                 e.preventDefault();
                 setActiveContainerPath((current) => {
@@ -1281,8 +1382,10 @@ export default function Canvas({
             }
             if (!ctrlOrMeta) return;
 
-            if (e.key === 'g' || e.key === 'G') {
+            if ((e.key === 'g' || e.key === 'G') && (e.ctrlKey || e.metaKey)) {
+                console.log("not bad");
                 e.preventDefault();
+                e.stopPropagation();
                 if (e.shiftKey) {
                     ungroupSelectedLayers();
                 } else {
@@ -2128,11 +2231,11 @@ export default function Canvas({
 
     const groupSelectedLayers = useCallback(() => {
         const ids = selectedIds.length >= 2 ? selectedIds : selectedId != null ? [selectedId] : [];
-        if (ids.length < 2) return;
+        if (ids.length < 1) return;
         const shapes = shapesRef.current;
         const idSet = new Set(ids);
         const selection = shapes.filter((shape) => idSet.has(shape.id));
-        if (selection.length < 2) return;
+        if (selection.length < 1) return;
         const parentIds = new Set(selection.map((shape) => shape.parentId ?? null));
         if (parentIds.size !== 1) return;
         const pageIds = new Set(selection.map((shape) => shape.pageId));
@@ -3121,6 +3224,7 @@ export default function Canvas({
                     />
                 );
             case 'group':
+                const isSelected = Array.isArray(selectedIds) && selectedIds.includes(shape.id);
                 return (
                     <Rect
                         {...commonProps}
@@ -3130,10 +3234,14 @@ export default function Canvas({
                         width={shape.width || 0}
                         height={shape.height || 0}
                         offset={{ x: (shape.width || 0) / 2, y: (shape.height || 0) / 2 }}
+                        strokeEnabled={isSelected}
                         stroke={shape.stroke || 'rgba(100,116,139,0.9)'}
                         strokeWidth={shape.strokeWidth || 1}
                         dash={[6, 4]}
+                        // groups don’t paint a fill (Figma-like behavior)
                         fillEnabled={false}
+                        // but make selection easy
+                        hitStrokeWidth={24}
                     />
                 );
             case 'rectangle':
@@ -3533,7 +3641,7 @@ export default function Canvas({
             return node;
         }
         const children = getChildrenForRendering(shape.id);
-        const clipContent = shape.type === 'frame' && shape.clipContent;
+        const clipContent = shape.type === 'frame' && shape.clipContent || (shape.type === 'group' && shape.clipChildren);
         const clipProps = {};
         if (clipContent) {
             const bounds = getContainerBounds(shape);
