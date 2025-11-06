@@ -100,7 +100,7 @@ function PageRow({
                         {page.name}
                     </div>
                 )}
-                <div style={{ fontSize: 11, color: '#6b7280' }}>{count === 1 ? '1 layer' : `${count} layers`}</div>
+                
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
                 <button
