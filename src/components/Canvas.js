@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, forwardRef, useImperativeHandle, useState } from 'react';
 import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer } from 'react-konva';
 import PagesPanel from './PagesPanel';
 import LayersPanel from './LayersPanel';
@@ -648,6 +648,77 @@ export default function Canvas({
     const applyPanelOrderToCanvas = (parentId, panelTopToBottomIds) => {
         applyChange((prev) => reorderSiblingsToMatchPanel(prev, parentId, panelTopToBottomIds));
     };
+
+    // Render a label above a frame (non-interactive)
+    const renderFrameNameLabel = (frame) => {
+         const width = Math.max(1, frame.width || 1);
+         const height = Math.max(1, frame.height || 1);
+         // If your frame.x / frame.y are TOP-LEFT already, set useTopLeft = true.
+        const useTopLeft = false; // flip to true if your data is top-left based
+
+        // Current canvas zoom (you already pass this to <Stage scaleX/scaleY={scale}>)
+        const s = Math.max(0.01, scale || 1);   // stage scale
+        const inv = 1 / s;                      // inverse scale for constant-size UI
+
+         const xLeft = (frame.x || 0) - (useTopLeft ? 0 : width / 2);
+         const yTop = (frame.y || 0) - (useTopLeft ? 0 : height / 2);
+         const label = (frame.name?.trim()) || `Frame ${frame.id}`;
+      
+             // visual metrics
+             const fontSize = 11;
+         const paddingX = 4;                   // extra breathing room for text
+         const hitWidth = Math.max(80, width); // wider click target than text
+         const hitHeight = fontSize + 6;       // tall enough to be easy to click
+         const labelY = yTop - (hitHeight + 0);// sits slightly above top edge
+      
+             return (
+                   <Group
+                        key= {`frame-label-${frame.id}`}
+                        x={ xLeft }
+                     y={labelY}
+                     // Scale content inversely so it stays constant-size on screen
+                     scaleX={inv}
+                     scaleY={inv}
+                        onMouseEnter={ (e) => { e.target.getStage().container().style.cursor = 'pointer'; } }
+                        onMouseLeave={ (e) => { e.target.getStage().container().style.cursor = 'default'; } }
+                        onMouseDown={
+                            (e) => {
+                                    e.cancelBubble = true;          // don't let it fall through
+                                selectSingle(frame.id)        // your existing select handler
+                                const nativeEvt = e.evt;
+                                requestAnimationFrame(() => {
+                                    const stage = stageRef.current;
+                                    if (!stage) return;
+                                    const node = stage.findOne(`#shape-${frame.id}`); // ← use existing ids
+                                    if (node && node.draggable && node.draggable()) {
+                                        try { node.startDrag(nativeEvt); } catch { }
+                                    }
+                                });
+                        }}
+              >
+             {/* Transparent hit area for easy clicking */ }
+       <Rect
+x={ 0 }
+           y={ 0 }
+           width={ hitWidth }
+           height={ hitHeight }
+           fill="rgba(0,0,0,0.001)"        // minimal alpha so it receives events
+       cornerRadius={ 4 }
+         />
+       <Text
+x={ paddingX }
+           y={ (hitHeight - fontSize) / 2 - 1 } // vertically center text
+           width={ width - paddingX }
+           text={ label }
+           align="left"                   // ← left aligned as requested
+       fontFamily="Inter"
+           fontSize={ fontSize }
+           fill="#334155"
+       listening={ false }              // clicks go to the Rect, not the Text
+         />
+           </Group >
+             );
+   };
 
 
     useEffect(() => {
@@ -4334,6 +4405,12 @@ export default function Canvas({
                             centeredScaling={false}
                         />
                     </Layer>
+                    {/* Frame name labels: separate layer so they aren't clipped by frames */}
+                    <Layer listening={true}>
+                          {shapesOnActivePage
+                                .filter((s) => s.type === 'frame' && s.visible !== false && (s.width || 0) > 0 && (s.height || 0) > 0)
+                            .map(renderFrameNameLabel)}
+                        </Layer>
                     <Layer listening={false}>
                         {marqueeRect && marqueeRect.width > 0 && marqueeRect.height > 0 && (
                             <Rect
