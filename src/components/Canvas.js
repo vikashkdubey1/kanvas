@@ -12,6 +12,7 @@ import {
     normalizeGradient,
 } from '../utils/gradient';
 
+
 /**
  * Canvas is the central drawing surface for the application.
  * This component supports creating simple shapes by clicking when a
@@ -319,6 +320,7 @@ export default function Canvas({
     const pendingTextEditRef = useRef(null);
     const strokeTxnRef = useRef(false);
 
+
     const [shapes, setShapes] = useState([]);
     const shapesRef = useRef(shapes);
 
@@ -334,6 +336,79 @@ export default function Canvas({
     const [pages, setPages] = useState(initialPageStateRef.current.pages);
     const [activePageId, setActivePageId] = useState(initialPageStateRef.current.activePageId);
     const pagesRef = useRef(pages);
+
+    useEffect(() => {
+        const stage = stageRef.current;
+        if (!stage) return;
+
+
+        const onDragStart = (e) => {
+            const node = e.target;
+            const lyr = node?.getLayer?.();
+            const restoreIfNeeded = () => {
+                const stage = stageRef.current;
+                const ctx = dragCtxRef.current;
+                if (!stage || !ctx?.layer) return;
+                try { ctx.layer.hitGraphEnabled(true); } catch { }
+                dragCtxRef.current = { active: false, node: null, cached: false, disabledHit: false, layer: null };
+            };
+            window.addEventListener('mouseup', restoreIfNeeded);
+            window.addEventListener('touchend', restoreIfNeeded);
+            return () => {
+                window.removeEventListener('mouseup', restoreIfNeeded);
+                window.removeEventListener('touchend', restoreIfNeeded);
+            };
+              // remember exactly which layer we touched
+                  dragCtxRef.current = { active: true, node, cached: false, disabledHit: !!lyr, layer: lyr || null };
+              if (lyr && lyr.hitGraphEnabled) lyr.hitGraphEnabled(false);
+
+            // 2) Cache the node if it’s complex
+            try {
+                if (node.getClassName?.() === 'Group' || node.children?.length > 0) {
+                    node.cache({ pixelRatio: 1 });
+                    dragCtxRef.current.cached = true;
+                }
+            } catch { }
+            try { node.opacity(0.96); } catch { }
+
+            rafBatchDraw();
+        };
+
+        const onDragMove = (e) => {
+            rafBatchDraw();
+
+            const now = performance.now();
+            if (now - lastDragUpdateRef.current < 16) return;
+            lastDragUpdateRef.current = now;
+
+            // Optional: throttle any state updates while dragging
+        };
+
+        const onDragEnd = (e) => {
+            const node = e.target;
+            const lyr = dragCtxRef.current.layer;
+               if (lyr && lyr.hitGraphEnabled) lyr.hitGraphEnabled(true);
+            if (dragCtxRef.current.cached) {
+                try { node.clearCache(); } catch { }
+            }
+            try { node.opacity(1); } catch { }
+
+            dragCtxRef.current = { active: false, node: null, cached: false, disabledHit: false, layer: null };
+            rafBatchDraw();
+        };
+
+        // 🧩 Attach listeners globally for all draggables
+        stage.on('dragstart.smooth', onDragStart);
+        stage.on('dragmove.smooth', onDragMove);
+        stage.on('dragend.smooth', onDragEnd);
+
+        return () => {
+            stage.off('dragstart.smooth');
+            stage.off('dragmove.smooth');
+            stage.off('dragend.smooth');
+        };
+    }, [stageRef]);
+
     useEffect(() => {
         pagesRef.current = pages;
     }, [pages]);
@@ -557,6 +632,8 @@ export default function Canvas({
         return -1;
     };
 
+    const frameLabelDragRef = useRef({ armed: false, start: null, frameId: null, evt: null });
+
     // Insert a new shape at the TOP of its parent (i.e., above siblings)
     // parentId null => top of root; otherwise top within that container
     const insertShapeAtTop = (prevShapes, shape) => {
@@ -582,6 +659,25 @@ export default function Canvas({
 
     // Tracks the "anchor" row for Shift-range selection in the panel
     const lastLayerAnchorIndexRef = useRef(null);
+
+     // ---- Smooth drag (global) ----
+         const dragRAFRef = useRef(0);            // active requestAnimationFrame id
+     const lastDragUpdateRef = useRef(0);     // throttle state writes during drag
+     const dragCtxRef = useRef({
+ active: false,
+           node: null,
+           cached: false,
+           disabledHit: false,
+         });
+
+     const rafBatchDraw = () => {
+           if (dragRAFRef.current) return;
+           dragRAFRef.current = requestAnimationFrame(() => {
+                 dragRAFRef.current = 0;
+                 // Batch-draw all layers at once (Konva Stage has batchDraw)
+                     stageRef.current?.batchDraw?.();
+               });
+         };
 
     // Build an array of the layer order *as shown in the panel*
     // (You already create layerList = [{shape, depth}, ...])
@@ -651,75 +747,155 @@ export default function Canvas({
 
     // Render a label above a frame (non-interactive)
     const renderFrameNameLabel = (frame) => {
-         const width = Math.max(1, frame.width || 1);
-         const height = Math.max(1, frame.height || 1);
-         // If your frame.x / frame.y are TOP-LEFT already, set useTopLeft = true.
+        const width = Math.max(1, frame.width || 1);
+        const height = Math.max(1, frame.height || 1);
+        // If your frame.x / frame.y are TOP-LEFT already, set useTopLeft = true.
         const useTopLeft = false; // flip to true if your data is top-left based
 
         // Current canvas zoom (you already pass this to <Stage scaleX/scaleY={scale}>)
         const s = Math.max(0.01, scale || 1);   // stage scale
         const inv = 1 / s;                      // inverse scale for constant-size UI
 
-         const xLeft = (frame.x || 0) - (useTopLeft ? 0 : width / 2);
-         const yTop = (frame.y || 0) - (useTopLeft ? 0 : height / 2);
-         const label = (frame.name?.trim()) || `Frame ${frame.id}`;
-      
-             // visual metrics
-             const fontSize = 11;
-         const paddingX = 4;                   // extra breathing room for text
-         const hitWidth = Math.max(80, width); // wider click target than text
-         const hitHeight = fontSize + 6;       // tall enough to be easy to click
-         const labelY = yTop - (hitHeight + 0);// sits slightly above top edge
-      
-             return (
-                   <Group
-                        key= {`frame-label-${frame.id}`}
-                        x={ xLeft }
-                     y={labelY}
-                     // Scale content inversely so it stays constant-size on screen
-                     scaleX={inv}
-                     scaleY={inv}
-                        onMouseEnter={ (e) => { e.target.getStage().container().style.cursor = 'pointer'; } }
-                        onMouseLeave={ (e) => { e.target.getStage().container().style.cursor = 'default'; } }
-                        onMouseDown={
-                            (e) => {
-                                    e.cancelBubble = true;          // don't let it fall through
-                                selectSingle(frame.id)        // your existing select handler
-                                const nativeEvt = e.evt;
-                                requestAnimationFrame(() => {
-                                    const stage = stageRef.current;
-                                    if (!stage) return;
-                                    const node = stage.findOne(`#shape-${frame.id}`); // ← use existing ids
-                                    if (node && node.draggable && node.draggable()) {
-                                        try { node.startDrag(nativeEvt); } catch { }
-                                    }
-                                });
-                        }}
-              >
-             {/* Transparent hit area for easy clicking */ }
-       <Rect
-x={ 0 }
-           y={ 0 }
-           width={ hitWidth }
-           height={ hitHeight }
-           fill="rgba(0,0,0,0.001)"        // minimal alpha so it receives events
-       cornerRadius={ 4 }
-         />
-       <Text
-x={ paddingX }
-           y={ (hitHeight - fontSize) / 2 - 1 } // vertically center text
-           width={ width - paddingX }
-           text={ label }
-           align="left"                   // ← left aligned as requested
-       fontFamily="Inter"
-           fontSize={ fontSize }
-           fill="#334155"
-       listening={ false }              // clicks go to the Rect, not the Text
-         />
-           </Group >
-             );
-   };
+        // helper: snap a scene coordinate so it lands on whole pixels after Stage scale
+        const snapSceneToPixel = (sceneCoord) => Math.round(sceneCoord * s) / s;
 
+        const xLeft = (frame.x || 0) - (useTopLeft ? 0 : width / 2);
+        const yTop = (frame.y || 0) - (useTopLeft ? 0 : height / 2);
+
+        // visual metrics (in screen px)
+        const fontSize = 11;
+        const paddingXpx = 4;
+        const hitHpx = fontSize + 8;
+        const gapPx = 6;
+
+        // convert pixel gap to scene units; snap for pan stability
+        const labelYScene = snapSceneToPixel(yTop - (hitHpx + gapPx) * inv);
+
+        const label = (frame.name?.trim()) || `Frame ${frame.id}`;
+
+        return (
+            <Group
+                key={`frame-label-${frame.id}`}
+                x={snapSceneToPixel(xLeft)}
+                y={labelYScene}
+                // Scale content inversely so it stays constant-size on screen
+                scaleX={inv}
+                scaleY={inv}
+                onMouseEnter={(e) => { e.target.getStage().container().style.cursor = 'pointer'; }}
+                onMouseLeave={(e) => { e.target.getStage().container().style.cursor = 'default'; }}
+                onMouseDown={(e) => {
+                    e.cancelBubble = true;
+                    selectSingle(frame.id);
+
+                    const stage = e.target.getStage?.();
+                    const pos = stage?.getPointerPosition?.() || null;
+
+                    frameLabelDragRef.current = {
+                        armed: true,
+                        start: pos,
+                        frameId: frame.id,
+                        evt: e.evt, // save native event for startDrag later
+                    };
+                }}
+            >
+                {/* Transparent hit area for easy clicking */}
+                <Rect
+                    x={0}
+                    y={0}
+                    width={Math.max(100, width)}
+                    height={hitHpx}
+                    fill="rgba(0,0,0,0.001)"        // minimal alpha so it receives events
+                    cornerRadius={4}
+                    perfectDrawEnabled={false}
+                    shadowForStrokeEnabled={false}
+                />
+                <Text
+                    x={paddingXpx}
+                    y={(hitHpx - fontSize) / 2 - 1} // vertically center text
+                    width={width - paddingXpx}
+                    text={label}
+                    align="left"                   // ← left aligned as requested
+                    fontFamily="Inter"
+                    fontSize={fontSize}
+                    fill="#334155"
+                    listening={false}              // clicks go to the Rect, not the Text
+                    perfectDrawEnabled={false}
+                    shadowForStrokeEnabled={false}
+                />
+            </Group >
+        );
+    };
+
+    useEffect(() => {
+        const moveThreshold = 4;
+
+        const handleMove = () => {
+            const armed = frameLabelDragRef.current;
+            if (!armed.armed || !armed.start) return;
+
+            const stage = stageRef.current;
+            const pos = stage?.getPointerPosition?.();
+            if (!pos) return;
+
+            const dx = pos.x - armed.start.x;
+            const dy = pos.y - armed.start.y;
+            if ((dx * dx + dy * dy) < (moveThreshold * moveThreshold)) return;
+
+            const node = stage.findOne(`#shape-${armed.frameId}`);
+            if (node && node.draggable && node.draggable()) {
+                try { node.startDrag(armed.evt); } catch { }
+            }
+            frameLabelDragRef.current.armed = false; // disarm
+        };
+
+        const handleUp = () => {
+            // mouse released without moving enough → just a click (selection already done)
+            frameLabelDragRef.current = { armed: false, start: null, frameId: null, evt: null };
+        };
+
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMove);
+            window.removeEventListener('mouseup', handleUp);
+        };
+    }, []);
+
+
+    useEffect(() => {
+        const moveThreshold = 4;
+
+        const handleMove = () => {
+            const armed = frameLabelDragRef.current;
+            if (!armed.armed || !armed.start) return;
+
+            const stage = stageRef.current;
+            const pos = stage?.getPointerPosition?.();
+            if (!pos) return;
+
+            const dx = pos.x - armed.start.x;
+            const dy = pos.y - armed.start.y;
+            if ((dx * dx + dy * dy) < (moveThreshold * moveThreshold)) return;
+
+            const node = stage.findOne(`#shape-${armed.frameId}`);
+            if (node && node.draggable && node.draggable()) {
+                try { node.startDrag(armed.evt); } catch { }
+            }
+            frameLabelDragRef.current.armed = false; // disarm
+        };
+
+        const handleUp = () => {
+            // mouse released without moving enough → just a click (selection already done)
+            frameLabelDragRef.current = { armed: false, start: null, frameId: null, evt: null };
+        };
+
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMove);
+            window.removeEventListener('mouseup', handleUp);
+        };
+    }, []);
 
     useEffect(() => {
         shapesRef.current = shapes;
@@ -1052,9 +1228,9 @@ x={ paddingX }
     };
 
     const selectedShape = useMemo(
-  () => shapes.find((s) => s.id === selectedId) || null,
-  [shapes, selectedId]
-);
+        () => shapes.find((s) => s.id === selectedId) || null,
+        [shapes, selectedId]
+    );
 
     const resolvedTextOptions = useMemo(
         () => ({
@@ -1129,14 +1305,14 @@ x={ paddingX }
             const next = typeof updater === 'function' ? updater(prev) : updater;
             const cleaned = pruneEmptyGroups(next);
             // ---- no-op guards (stop churn/loops) ----
-              if (next === prev) return;
-              if (Array.isArray(prev) && Array.isArray(next) && prev.length === next.length) {
-                    let same = true;
-                    for (let i = 0; i < prev.length; i++) {
-                          if (prev[i] !== next[i]) { same = false; break; }
-                        }
-                    if (same) return;
-                  }
+            if (next === prev) return;
+            if (Array.isArray(prev) && Array.isArray(next) && prev.length === next.length) {
+                let same = true;
+                for (let i = 0; i < prev.length; i++) {
+                    if (prev[i] !== next[i]) { same = false; break; }
+                }
+                if (same) return;
+            }
             const baseState = options.baseState || prev;
             pastRef.current.push(baseState);
             if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
@@ -1411,10 +1587,10 @@ x={ paddingX }
             }
             // 🟢 Duplicate (Ctrl/Cmd + D)
             if ((e.key === 'd' || e.key === 'D') && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault();
-                  handleDuplicate();
-                  return;
-                }
+                e.preventDefault();
+                handleDuplicate();
+                return;
+            }
             if (e.key === 'Escape') {
                 e.preventDefault();
                 setActiveContainerPath((current) => {
@@ -1759,7 +1935,7 @@ x={ paddingX }
                     ...baseProps,
                     width: 1,
                     height: 1,
-                    fill: resolvedFillColor,
+                    fill: '#d9d9d9',
                     fillType: resolvedFillType,
                     fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
@@ -1770,7 +1946,7 @@ x={ paddingX }
                 newShape = createShape('circle', {
                     ...baseProps,
                     radius: 1,
-                    fill: resolvedFillColor,
+                    fill: '#d9d9d9',
                     fillType: resolvedFillType,
                     fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
@@ -1782,7 +1958,7 @@ x={ paddingX }
                     ...baseProps,
                     radiusX: 1,
                     radiusY: 1,
-                    fill: resolvedFillColor,
+                    fill: '#d9d9d9',
                     fillType: resolvedFillType,
                     fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
@@ -1805,7 +1981,7 @@ x={ paddingX }
                     width: 1,
                     height: 1,
                     clipContent: true,
-                    fill: resolvedFillColor,
+                    fill: '#ffffff',
                     fillType: resolvedFillType,
                     fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                     stroke: resolvedStrokeColor,
@@ -1823,25 +1999,80 @@ x={ paddingX }
             currentDrawingIdRef.current = newShape.id;
             drawingStartRef.current = pos;
             isDrawingRef.current = true;
-            applyChange((prev) => insertShapeAtTop(prev, newShape));
+            //applyChange((prev) => insertShapeAtTop(prev, newShape));
+            applyChange((prev) => {
+                // 1) insert the frame first (top of z-order)
+                let next = insertShapeAtTop(prev, newShape);
+
+                // 2) compute the new frame's AABB in canvas coords
+                const f = newShape;
+                const fl = f.x;
+                const ft = f.y;
+                const fr = f.x + (f.width || 0);
+                const fb = f.y + (f.height || 0);
+
+                // 3) reparent any shape fully inside this frame
+                next = next.map((s) => {
+                    if (!s || s.id === f.id) return s;          // skip the new frame
+                    if (s.locked === true || s.visible === false) return s; // skip locked/hidden
+
+                    // shapes must have size to be “fully covered”
+                    const sw = s.width || 0;
+                    const sh = s.height || 0;
+                    if (sw <= 0 || sh <= 0) return s;
+
+                    // current AABB in canvas coords (no rotation handling)
+                    const sl = s.x;
+                    const st = s.y;
+                    const sr = s.x + sw;
+                    const sb = s.y + sh;
+
+                    const fullyInside =
+                        sl >= fl && st >= ft &&
+                        sr <= fr && sb <= fb;
+
+                    if (!fullyInside) return s;
+
+                    // IMPORTANT: if your child positions are stored RELATIVE to parent
+                    // (most canvases do), offset the child when reparenting.
+                    const coordsAreRelativeToParent = true; // set false if your model uses absolute coords
+                    if (coordsAreRelativeToParent) {
+                        return {
+                            ...s,
+                            parentId: f.id,
+                            x: s.x - f.x,
+                            y: s.y - f.y,
+                        };
+                    }
+                    // (absolute model) only change parentId
+                    return { ...s, parentId: f.id };
+                });
+
+                return next;
+            });
             selectSingle(newShape.id);
             return;
         }
 
         // fall back to click-to-create (text or simple click behavior)
         // Only add a shape when clicking on empty stage (not on an existing shape)
-        if (!clickedOnEmpty) return;
-        const pointerPos = getCanvasPointer();
-        if (!pointerPos) return;
         if (selectedTool === 'text') {
+            const pointerPos = getCanvasPointer();
+            if (!pointerPos) return;
+
+            // 🧩 Detect if pointer is over a frame/group
+            const dropTarget = findContainerAtPoint(pointerPos, new Set(), shapesRef.current);
+            const parentId = dropTarget ? dropTarget.id : null;
+
             const newShape = createShape('text', {
                 x: pointerPos.x,
                 y: pointerPos.y,
                 text: 'Text',
-                parentId: containerIdFromTarget ?? undefined,
-                fill: resolvedFillColor,
+                parentId, // top-level text over any frame/group
+                fill: '#000000  ',
                 fillType: resolvedFillType,
-                fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
+                fillGradient:
+                    resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                 stroke: resolvedStrokeColor,
                 strokeType: resolvedStrokeType,
                 strokeWidth: strokeWidth || 0,
@@ -1851,18 +2082,22 @@ x={ paddingX }
                 fontSize: resolvedTextOptions.fontSize,
                 lineHeight: resolvedTextOptions.lineHeight,
                 letterSpacing: resolvedTextOptions.letterSpacing,
-                align: resolvedTextOptions.align,
-                verticalAlign: resolvedTextOptions.verticalAlign,
-                textDecoration: resolvedTextOptions.textDecoration,
             });
+
             applyChange((prev) => insertShapeAtTop(prev, newShape));
             pendingTextEditRef.current = newShape.id;
             setSelectedId(newShape.id);
             if (typeof onToolChange === 'function') onToolChange('select');
+            // ⬆️ They ensure the text immediately enters edit mode and tool switches back
+            return;
         }
+        // Other tools: only add when clicking on empty canvas
+                if (!clickedOnEmpty) return;
+                const pointerPos = getCanvasPointer();
+                if (!pointerPos) return;
     };
 
-    
+
     // handle mouse move for panning (hand tool) and drawing
     const handleStageMouseMove = () => {
         const stage = stageRef.current;
@@ -1885,15 +2120,15 @@ x={ paddingX }
             // If using PEN, append points to the active stroke and return
             if (selectedTool === 'pen') {
                 setShapes((prev) => prev.map((s) => {
-                       if (s.id !== id || s.type !== 'pen') return s;
-                       const pts = s.points || [];
-                       const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
-                       if (lx != null && ly != null) {
-                             const dx = pos.x - lx, dy = pos.y - ly;
-                             if (dx * dx + dy * dy < 0.25) return s; // <0.5px
-                           }
-                       return { ...s, points: [...pts, pos.x, pos.y] };
-                     }));
+                    if (s.id !== id || s.type !== 'pen') return s;
+                    const pts = s.points || [];
+                    const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
+                    if (lx != null && ly != null) {
+                        const dx = pos.x - lx, dy = pos.y - ly;
+                        if (dx * dx + dy * dy < 0.25) return s; // <0.5px
+                    }
+                    return { ...s, points: [...pts, pos.x, pos.y] };
+                }));
                 return;
             }
 
@@ -4407,10 +4642,10 @@ x={ paddingX }
                     </Layer>
                     {/* Frame name labels: separate layer so they aren't clipped by frames */}
                     <Layer listening={true}>
-                          {shapesOnActivePage
-                                .filter((s) => s.type === 'frame' && s.visible !== false && (s.width || 0) > 0 && (s.height || 0) > 0)
+                        {shapesOnActivePage
+                            .filter((s) => s.type === 'frame' && s.visible !== false && (s.width || 0) > 0 && (s.height || 0) > 0)
                             .map(renderFrameNameLabel)}
-                        </Layer>
+                    </Layer>
                     <Layer listening={false}>
                         {marqueeRect && marqueeRect.width > 0 && marqueeRect.height > 0 && (
                             <Rect
