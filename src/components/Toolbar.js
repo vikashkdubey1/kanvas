@@ -67,7 +67,7 @@ export default function Toolbar({ selectedTool, onSelect }) {
     const tools = [
         { id: 'select', icon: Icon.select, label: 'Select' },
         { id: 'hand', icon: Icon.hand, label: 'Hand' },
-        { id: 'path', icon: Icon.path, label: 'Path' },
+        { id: 'path', icon: Icon.pen, label: 'Path' },
         { id: 'rectangle', icon: Icon.rectangle, label: 'Rectangle' },
         { id: 'circle', icon: Icon.circle, label: 'Circle' },
         { id: 'ellipse', icon: Icon.ellipse, label: 'Ellipse' },
