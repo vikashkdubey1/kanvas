@@ -460,7 +460,6 @@ export default function Canvas({
     const pathHandleDragRef = useRef(null);
     const [activePathSelection, setActivePathSelection] = useState(null);
 
-
     const [shapes, setShapes] = useState([]);
     const shapesRef = useRef(shapes);
 
@@ -665,6 +664,7 @@ export default function Canvas({
         }
         return inside;
     };
+
 
     const rectFromPoints = (start, end) => {
         if (!start || !end) return null;
@@ -4261,7 +4261,7 @@ export default function Canvas({
                 return (
                     <Path
                         {...commonProps}
-                        data={buildSvgPath(getPathPoints(shape), !!shape.closed)}
+                        ata={buildSvgPath(getPathPoints(shape), !!shape.closed)}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
                         lineCap={shape.lineCap || 'round'}
@@ -5530,7 +5530,7 @@ export default function Canvas({
                         scale={scale}
                         stagePos={stagePos}
                         viewport={{width: stageSize.width,
-    height: stageSize.height}}
+                        height: stageSize.height}}
                         minScaleToShow={8} // visible at 800%
                         //color={isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.22)"}
                     />
