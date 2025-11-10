@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer, Path } from 'react-konva';
 import PagesPanel from './PagesPanel';
 import LayersPanel from './LayersPanel';
 import PropertiesPanel from './PropertiesPanel';
@@ -13,6 +13,18 @@ import {
     interpolateGradientColor,
     normalizeGradient,
 } from '../utils/gradient';
+import PATH_NODE_TYPES, {
+    MAX_POINTS_PER_PATH,
+    MIN_SEGMENT_LENGTH,
+    buildSvgPath,
+    clonePathPoint,
+    clonePathPoints,
+    createPathPoint,
+    distanceBetween,
+    distanceToSegment,
+    ensureHandlesForType,
+    updateHandleSymmetry,
+} from '../utils/path';
 
 
 /**
@@ -40,6 +52,37 @@ const CONTAINER_TYPES = ['frame', 'group'];
 
 const isContainerShape = (shape) => Boolean(shape && CONTAINER_TYPES.includes(shape.type));
 
+const getPathPoints = (shape) => {
+    if (!shape || !Array.isArray(shape.points)) return [];
+    return shape.points.map((point) => ({
+        x: typeof point.x === 'number' ? point.x : 0,
+        y: typeof point.y === 'number' ? point.y : 0,
+        type: point.type || PATH_NODE_TYPES.CORNER,
+        handles: point.handles || undefined,
+    }));
+};
+
+const getPointsBoundingBox = (points) => {
+    if (!Array.isArray(points) || points.length === 0) return null;
+    let minX = points[0].x;
+    let maxX = points[0].x;
+    let minY = points[0].y;
+    let maxY = points[0].y;
+    for (let i = 1; i < points.length; i += 1) {
+        const p = points[i];
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    }
+    return {
+        left: minX,
+        right: maxX,
+        top: minY,
+        bottom: maxY,
+    };
+};
+
 const SHAPE_LABELS = {
     frame: 'Frame',
     group: 'Group',
@@ -47,7 +90,7 @@ const SHAPE_LABELS = {
     circle: 'Circle',
     ellipse: 'Ellipse',
     line: 'Line',
-    pen: 'Pen',
+    path: 'Path',
     text: 'Text',
 };
 
@@ -76,6 +119,14 @@ const getShapeDimensions = (shape) => {
                 width: Math.max(0, (shape.radiusX || 0) * 2),
                 height: Math.max(0, (shape.radiusY || 0) * 2),
             };
+        case 'path': {
+            const bounds = getPointsBoundingBox(getPathPoints(shape));
+            if (!bounds) return { width: 0, height: 0 };
+            return {
+                width: Math.max(0, bounds.right - bounds.left),
+                height: Math.max(0, bounds.bottom - bounds.top),
+            };
+        }
         case 'text': {
             const estimatedWidth =
                 typeof shape.width === 'number' && shape.width > 0
@@ -132,8 +183,7 @@ const getShapeBoundingBox = (shape) => {
                 bottom: centerY + radiusY,
             };
         }
-        case 'line':
-        case 'pen': {
+        case 'line': {
             const points = Array.isArray(shape.points) ? shape.points : [];
             if (points.length < 2) {
                 const x = shape.x || 0;
@@ -162,6 +212,15 @@ const getShapeBoundingBox = (shape) => {
                 return { left: x, right: x, top: y, bottom: y };
             }
             return { left: minX, right: maxX, top: minY, bottom: maxY };
+        }
+        case 'path': {
+            const bounds = getPointsBoundingBox(getPathPoints(shape));
+            if (!bounds) {
+                const x = shape.x || 0;
+                const y = shape.y || 0;
+                return { left: x, right: x, top: y, bottom: y };
+            }
+            return bounds;
         }
         case 'text': {
             const { width, height } = getShapeDimensions(shape);
@@ -284,7 +343,7 @@ const formatTypeLabel = (t) => {
         circle: 'Circle',
         ellipse: 'Ellipse',
         line: 'Line',
-        pen: 'Pen',
+        path: 'Path',
         text: 'Text',
         frame: 'Frame',
         group: 'Group',
@@ -377,7 +436,7 @@ export default function Canvas({
         circle: 1,
         ellipse: 1,
         line: 1,
-        pen: 1,
+        path: 1,
         text: 1,
     });
     const stageContainerRef = useRef(null);
@@ -391,6 +450,15 @@ export default function Canvas({
     const currentDrawingIdRef = useRef(null);
     const pendingTextEditRef = useRef(null);
     const strokeTxnRef = useRef(false);
+    const pathInteractionRef = useRef({
+        shapeId: null,
+        pendingPoint: null,
+        draggingHandle: null,
+        baseState: null,
+        containerId: null,
+    });
+    const pathHandleDragRef = useRef(null);
+    const [activePathSelection, setActivePathSelection] = useState(null);
 
 
     const [shapes, setShapes] = useState([]);
@@ -584,6 +652,20 @@ export default function Canvas({
         return distSq(px, py, qx, qy) <= tol * tol;
     };
 
+    const pointInPolygon = (px, py, vertices) => {
+        if (!Array.isArray(vertices) || vertices.length < 3) return false;
+        let inside = false;
+        for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
+            const xi = vertices[i].x;
+            const yi = vertices[i].y;
+            const xj = vertices[j].x;
+            const yj = vertices[j].y;
+            const intersect = yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi + 0.00001) + xi;
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    };
+
     const rectFromPoints = (start, end) => {
         if (!start || !end) return null;
         const x = Math.min(start.x, end.x);
@@ -639,11 +721,33 @@ export default function Canvas({
                 return (nx * nx + ny * ny) <= 1;
             }
             case 'line':
-            case 'pen': {
-                const pts = Array.isArray(shape.points) ? shape.points : [];
+            case 'path': {
+                const ptsRaw = Array.isArray(shape.points) ? shape.points : [];
+                const points = shape.type === 'path' ? getPathPoints(shape) : [];
                 const tol = (shape.strokeWidth || 2) + 3;
-                for (let i = 0; i + 3 < pts.length; i += 2) {
-                    if (pointNearSegment(px, py, pts[i], pts[i + 1], pts[i + 2], pts[i + 3], tol)) return true;
+                if (shape.type === 'line') {
+                    for (let i = 0; i + 3 < ptsRaw.length; i += 2) {
+                        if (pointNearSegment(px, py, ptsRaw[i], ptsRaw[i + 1], ptsRaw[i + 2], ptsRaw[i + 3], tol)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                if (!points.length) return false;
+                for (let i = 0; i < points.length - 1; i += 1) {
+                    if (pointNearSegment(px, py, points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, tol)) {
+                        return true;
+                    }
+                }
+                if (shape.closed && points.length > 2) {
+                    const last = points[points.length - 1];
+                    const first = points[0];
+                    if (pointNearSegment(px, py, last.x, last.y, first.x, first.y, tol)) {
+                        return true;
+                    }
+                    if (pointInPolygon(px, py, points)) {
+                        return true;
+                    }
                 }
                 return false;
             }
@@ -1039,6 +1143,124 @@ export default function Canvas({
         return source.find((shape) => shape.id === id) || null;
     };
 
+    const updatePathShape = useCallback(
+        (shapeId, mutator, options = {}) => {
+            if (!shapeId || typeof mutator !== 'function') return;
+            const applyUpdater = (source) =>
+                source.map((shape) => {
+                    if (shape.id !== shapeId || shape.type !== 'path') {
+                        return shape;
+                    }
+                    const currentPoints = getPathPoints(shape);
+                    const result = mutator(clonePathPoints(currentPoints), shape);
+                    if (!result) {
+                        return shape;
+                    }
+                    if (Array.isArray(result)) {
+                        return { ...shape, points: result };
+                    }
+                    if (typeof result === 'object') {
+                        const nextPoints = Array.isArray(result.points)
+                            ? result.points
+                            : clonePathPoints(currentPoints);
+                        const { points: _ignored, ...rest } = result;
+                        return { ...shape, ...rest, points: nextPoints };
+                    }
+                    return shape;
+                });
+            if (options.commit) {
+                const baseState = options.baseState || shapesRef.current;
+                applyChange(applyUpdater, { baseState });
+            } else {
+                setShapes((prev) => applyUpdater(prev));
+            }
+        },
+        [applyChange]
+    );
+
+    const setPathPointType = useCallback(
+        (shapeId, index, nextType, options = {}) => {
+            if (!shapeId || index == null) return;
+            updatePathShape(
+                shapeId,
+                (pts) => {
+                    if (!pts[index]) return pts;
+                    const next = pts.slice();
+                    const point = ensureHandlesForType({ ...pts[index], type: nextType });
+                    if (nextType === PATH_NODE_TYPES.CORNER) {
+                        delete point.handles;
+                    }
+                    next[index] = point;
+                    return next;
+                },
+                options
+            );
+        },
+        [updatePathShape]
+    );
+
+    const movePathAnchor = useCallback(
+        (shapeId, index, position, options = {}) => {
+            if (!shapeId || index == null || !position) return;
+            updatePathShape(
+                shapeId,
+                (pts) => {
+                    if (!pts[index]) return pts;
+                    const next = pts.slice();
+                    const current = clonePathPoint(next[index]);
+                    const dx = position.x - current.x;
+                    const dy = position.y - current.y;
+                    current.x = position.x;
+                    current.y = position.y;
+                    if (current.handles) {
+                        if (current.handles.left) {
+                            current.handles.left = {
+                                x: current.handles.left.x + dx,
+                                y: current.handles.left.y + dy,
+                            };
+                        }
+                        if (current.handles.right) {
+                            current.handles.right = {
+                                x: current.handles.right.x + dx,
+                                y: current.handles.right.y + dy,
+                            };
+                        }
+                    }
+                    next[index] = current;
+                    return next;
+                },
+                options
+            );
+        },
+        [updatePathShape]
+    );
+
+    const movePathHandle = useCallback(
+        (shapeId, index, side, position, altKey = false, options = {}) => {
+            if (!shapeId || index == null || !position || !side) return;
+            updatePathShape(
+                shapeId,
+                (pts) => {
+                    if (!pts[index]) return pts;
+                    const next = pts.slice();
+                    let point = ensureHandlesForType({ ...pts[index] });
+                    if (point.type === PATH_NODE_TYPES.CORNER) {
+                        point.type = altKey ? PATH_NODE_TYPES.DISCONNECTED : PATH_NODE_TYPES.SMOOTH;
+                    }
+                    point.handles = point.handles || {};
+                    point.handles[side] = { x: position.x, y: position.y };
+                    if (!altKey && point.type === PATH_NODE_TYPES.SMOOTH) {
+                        point = updateHandleSymmetry(point, side);
+                    }
+                    next[index] = point;
+                    return next;
+                },
+                options
+            );
+        },
+        [updatePathShape]
+    );
+
     const getParentShape = (shape, source = activeShapesRef.current) => {
         if (!shape || shape.parentId == null) return null;
         return getShapeById(shape.parentId, source);
@@ -1200,7 +1422,7 @@ export default function Canvas({
                 });
                 return { ...updated, points: scaledPoints };
             }
-            case 'pen': {
+            case 'path': {
                 const points = Array.isArray(shape.points) ? [...shape.points] : [];
                 const scaledPoints = points.map((value, index) => {
                     if (index % 2 === 0) {
@@ -1648,15 +1870,68 @@ export default function Canvas({
 
             const ctrlOrMeta = e.ctrlKey || e.metaKey;
 
-            if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedIds.length || selectedId)) {
-            // 🗑 Delete or Backspace key
-                e.preventDefault();
-                const idsToRemove = new Set(selectedIds.length ? selectedIds : [selectedId]);
-                applyChange((prev) => prev.filter((shape) => !idsToRemove.has(shape.id)));
-                setSelectedId(null);
-                setSelectedIds([]);
-                setSelectedId(null);
+            if ((e.key === 'Enter' || e.key === 'Escape') && selectedTool === 'path') {
+                const state = pathInteractionRef.current;
+                if (state && state.shapeId) {
+                    e.preventDefault();
+                    const shape = shapesRef.current.find(
+                        (s) => s.id === state.shapeId && s.type === 'path'
+                    );
+                    if (shape && (!Array.isArray(shape.points) || shape.points.length <= 1)) {
+                        applyChange((prev) => prev.filter((s) => s.id !== shape.id));
+                        setSelectedId(null);
+                        setSelectedIds([]);
+                    }
+                    setActivePathSelection(null);
+                    pathInteractionRef.current = {
+                        shapeId: null,
+                        pendingPoint: null,
+                        draggingHandle: null,
+                        baseState: null,
+                        containerId: null,
+                    };
+                }
                 return;
+            }
+
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (activePathSelection && activePathSelection.shapeId != null) {
+                    const { shapeId, index } = activePathSelection;
+                    const shape = shapesRef.current.find(
+                        (s) => s.id === shapeId && s.type === 'path'
+                    );
+                    if (shape) {
+                        e.preventDefault();
+                        const points = getPathPoints(shape);
+                        if (index >= 0 && index < points.length) {
+                            if (points.length <= 1) {
+                                applyChange((prev) => prev.filter((s) => s.id !== shape.id));
+                                setSelectedId(null);
+                                setSelectedIds([]);
+                            } else {
+                                const closed = shape.closed === true && points.length > 3;
+                                updatePathShape(
+                                    shape.id,
+                                    (pts) => ({
+                                        points: pts.filter((_, idx) => idx !== index),
+                                        closed: closed && pts.length - 1 >= 3,
+                                    }),
+                                    { commit: true }
+                                );
+                            }
+                        }
+                        setActivePathSelection(null);
+                        return;
+                    }
+                }
+                if (selectedIds.length || selectedId) {
+                    e.preventDefault();
+                    const idsToRemove = new Set(selectedIds.length ? selectedIds : [selectedId]);
+                    applyChange((prev) => prev.filter((shape) => !idsToRemove.has(shape.id)));
+                    setSelectedId(null);
+                    setSelectedIds([]);
+                    return;
+                }
             }
 
             // 🟢 Duplicate (Ctrl/Cmd + D)
@@ -1818,23 +2093,50 @@ export default function Canvas({
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [
+        activePathSelection,
         applyChange,
         getLayerPanelIds,
         groupSelectedLayers,
+        selectedTool,
         redo,
         selectedId,
         selectedIds,
+        setActivePathSelection,
         shapesRef,
         undo,
         ungroupSelectedLayers,
+        updatePathShape,
     ]);
+
+    useEffect(() => {
+        if (!selectedId) {
+            setActivePathSelection(null);
+            return;
+        }
+        const shape = shapesRef.current.find((s) => s.id === selectedId);
+        if (!shape || shape.type !== 'path') {
+            setActivePathSelection(null);
+        }
+    }, [selectedId, shapes]);
+
+    useEffect(() => {
+        if (selectedTool !== 'path') {
+            pathInteractionRef.current = {
+                shapeId: null,
+                pendingPoint: null,
+                draggingHandle: null,
+                baseState: null,
+                containerId: null,
+            };
+        }
+    }, [selectedTool]);
 
     useEffect(() => {
         const ids = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
         if (!ids.length) return;
 
         // Only apply on shapes that can have fills
-        const supportsFill = new Set(['rectangle', 'circle', 'ellipse', 'text', 'frame']);
+        const supportsFill = new Set(['rectangle', 'circle', 'ellipse', 'text', 'frame', 'path']);
         const idsSet = new Set(ids);
 
         // Respect live-preview metadata (prevents color ping-pong)
@@ -1925,7 +2227,7 @@ export default function Canvas({
         if (!ids.length) return;
 
         // Shapes that can have stroke
-        const supportsStroke = new Set(['rectangle', 'circle', 'ellipse', 'line', 'pen', 'text', 'frame']);
+        const supportsStroke = new Set(['rectangle', 'circle', 'ellipse', 'line', 'path', 'text', 'frame']);
         const selectedSet = new Set(ids);
 
         // Desired stroke from the panel
@@ -2035,29 +2337,136 @@ export default function Canvas({
             resetMarquee();
         }
 
-        // PEN tool: begin freehand stroke anywhere
-        if (selectedTool === 'pen') {
+        if (selectedTool === 'path') {
+            const pointer = getCanvasPointer();
+            if (!pointer) return;
             const effectiveStrokeWidth = typeof strokeWidth === 'number' && strokeWidth > 0 ? strokeWidth : 1;
-            const pos = getCanvasPointer();
-            if (!pos) return;
-            const targetNode = e.target;
-            const targetName =
-                targetNode && typeof targetNode.name === 'function' ? targetNode.name() : '';
-            const containerIdFromTarget = (() => {
-                if (!['frame', 'group'].includes(targetName)) return null;
-                if (!targetNode || typeof targetNode.id !== 'function') return null;
-                const idValue = targetNode.id();
-                const match = /^shape-(\d+)$/.exec(idValue || '');
-                if (!match) return null;
-                const parsed = Number(match[1]);
-                return Number.isFinite(parsed) ? parsed : null;
-            })();
-            const clickedOnEmpty = targetNode === stage || containerIdFromTarget != null;
-            isDrawingRef.current = true;
-            currentDrawingIdRef.current = newShape.id;
-            drawingStartRef.current = pos;
-            setSelectedId(null);
-            currentDrawingIdRef.current = newShape.id;
+            const tolerance = 8 / Math.max(scale || 1, 0.01);
+            const altKey = !!(e?.evt?.altKey || e?.altKey);
+            const activeState = pathInteractionRef.current;
+            const activeShapeId = activeState.shapeId;
+            const containerId = containerIdFromTarget ?? undefined;
+            const existingShape =
+                activeShapeId != null ? shapesRef.current.find((shape) => shape.id === activeShapeId) : null;
+            let targetPathShape = existingShape;
+            if (!targetPathShape && selectedId) {
+                const candidate = shapesRef.current.find((shape) => shape.id === selectedId && shape.type === 'path');
+                if (candidate) targetPathShape = candidate;
+            }
+            if (!targetPathShape) {
+                const hitShapeId = (() => {
+                    if (!targetNode || typeof targetNode.id !== 'function') return null;
+                    const idValue = targetNode.id();
+                    const match = /^shape-(\d+)$/.exec(idValue || '');
+                    if (!match) return null;
+                    const parsed = Number(match[1]);
+                    return Number.isFinite(parsed) ? parsed : null;
+                })();
+                if (hitShapeId != null) {
+                    const candidate = shapesRef.current.find(
+                        (shape) => shape.id === hitShapeId && shape.type === 'path'
+                    );
+                    if (candidate) targetPathShape = candidate;
+                }
+            }
+
+            if (!existingShape && targetPathShape) {
+                const points = getPathPoints(targetPathShape);
+                if (points.length >= 1) {
+                    let bestIndex = -1;
+                    let bestDist = tolerance;
+                    for (let i = 0; i < points.length - 1; i += 1) {
+                        const dist = distanceToSegment(pointer, points[i], points[i + 1]);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            bestIndex = i;
+                        }
+                    }
+                    if (targetPathShape.closed && points.length > 2) {
+                        const dist = distanceToSegment(pointer, points[points.length - 1], points[0]);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            bestIndex = points.length - 1;
+                        }
+                    }
+                    if (bestIndex >= 0 && points.length < MAX_POINTS_PER_PATH) {
+                        updatePathShape(
+                            targetPathShape.id,
+                            (pts) => {
+                                const next = pts.slice();
+                                next.splice(bestIndex + 1, 0, createPathPoint({ x: pointer.x, y: pointer.y }));
+                                const stillClosed = targetPathShape.closed && next.length > 2;
+                                return { points: next, closed: stillClosed };
+                            },
+                            { commit: true }
+                        );
+                        setActivePathSelection({ shapeId: targetPathShape.id, index: bestIndex + 1 });
+                        return;
+                    }
+                }
+            }
+
+            if (!existingShape) {
+                const fillColor =
+                    resolvedFillType === 'gradient'
+                        ? getGradientFirstColor(resolvedFillGradient, resolvedFillColor)
+                        : resolvedFillColor;
+                const newShape = createShape('path', {
+                    parentId: containerId,
+                    points: [createPathPoint({ x: pointer.x, y: pointer.y })],
+                    closed: false,
+                    stroke: resolvedStrokeColor,
+                    strokeType: resolvedStrokeType,
+                    strokeWidth: effectiveStrokeWidth,
+                    fill: fillColor,
+                    fillType: resolvedFillType,
+                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
+                });
+                applyChange((prev) => insertShapeAtTop(prev, newShape));
+                pathInteractionRef.current = {
+                    shapeId: newShape.id,
+                    pendingPoint: { index: 0, start: pointer, hasDragged: false, altKey },
+                    draggingHandle: null,
+                    baseState: null,
+                    containerId: containerId ?? null,
+                };
+                setSelectedId(newShape.id);
+                setSelectedIds([newShape.id]);
+                setActivePathSelection({ shapeId: newShape.id, index: 0 });
+                return;
+            }
+
+            const points = getPathPoints(existingShape);
+            const firstPoint = points[0];
+            if (points.length > 1 && firstPoint && distanceBetween(firstPoint, pointer) <= tolerance) {
+                updatePathShape(existingShape.id, (pts) => ({ points: pts, closed: true }));
+                pathInteractionRef.current = {
+                    shapeId: null,
+                    pendingPoint: null,
+                    draggingHandle: null,
+                    baseState: null,
+                    containerId: null,
+                };
+                setActivePathSelection(null);
+                return;
+            }
+
+            if (points.length >= MAX_POINTS_PER_PATH) {
+                return;
+            }
+
+            updatePathShape(existingShape.id, (pts) => ({
+                points: [...pts, createPathPoint({ x: pointer.x, y: pointer.y })],
+                closed: false,
+            }));
+            pathInteractionRef.current = {
+                shapeId: existingShape.id,
+                pendingPoint: { index: points.length, start: pointer, hasDragged: false, altKey },
+                draggingHandle: null,
+                baseState: null,
+                containerId: activeState.containerId ?? containerId ?? null,
+            };
+            setActivePathSelection({ shapeId: existingShape.id, index: points.length });
             return;
         }
 
@@ -2214,6 +2623,56 @@ export default function Canvas({
     const handleStageMouseMove = () => {
         const stage = stageRef.current;
         if (!stage) return;
+        if (selectedTool === 'path') {
+            const pointer = getCanvasPointer();
+            const state = pathInteractionRef.current;
+            if (pointer && state && state.shapeId && state.pendingPoint) {
+                const { index, start, altKey } = state.pendingPoint;
+                const dx = pointer.x - start.x;
+                const dy = pointer.y - start.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist >= MIN_SEGMENT_LENGTH) {
+                    state.pendingPoint.hasDragged = true;
+                    updatePathShape(state.shapeId, (pts) => {
+                        if (!pts[index]) return pts;
+                        const next = pts.map((point, idx) => {
+                            if (idx !== index && idx !== index - 1) {
+                                return point;
+                            }
+                            if (idx === index) {
+                                const current = ensureHandlesForType({
+                                    ...point,
+                                    type: altKey ? PATH_NODE_TYPES.DISCONNECTED : PATH_NODE_TYPES.SMOOTH,
+                                });
+                                const anchor = { x: current.x, y: current.y };
+                                current.handles = current.handles || {};
+                                current.handles.left = { x: anchor.x - dx, y: anchor.y - dy };
+                                current.handles.right = { x: anchor.x + dx, y: anchor.y + dy };
+                                if (!altKey && current.type === PATH_NODE_TYPES.SMOOTH) {
+                                    const mirrored = updateHandleSymmetry(current, 'right');
+                                    return mirrored;
+                                }
+                                return current;
+                            }
+                            if (idx === index - 1) {
+                                const previous = ensureHandlesForType({
+                                    ...point,
+                                    type: altKey ? PATH_NODE_TYPES.DISCONNECTED : PATH_NODE_TYPES.SMOOTH,
+                                });
+                                previous.handles = previous.handles || {};
+                                previous.handles.right = { x: previous.x + dx, y: previous.y + dy };
+                                if (!altKey && previous.type === PATH_NODE_TYPES.SMOOTH) {
+                                    return updateHandleSymmetry(previous, 'right');
+                                }
+                                return previous;
+                            }
+                            return point;
+                        });
+                        return next;
+                    });
+                }
+            }
+        }
         if (marqueeStateRef.current.active) {
             const pointer = getCanvasPointer();
             if (!pointer) return;
@@ -2230,9 +2689,9 @@ export default function Canvas({
             if (!pos || !start || id == null) return;
 
             // If using PEN, append points to the active stroke and return
-            if (selectedTool === 'pen') {
+            if (selectedTool === 'path') {
                 setShapes((prev) => prev.map((s) => {
-                    if (s.id !== id || s.type !== 'pen') return s;
+                    if (s.id !== id || s.type !== 'path') return s;
                     const pts = s.points || [];
                     const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
                     if (lx != null && ly != null) {
@@ -2304,6 +2763,26 @@ export default function Canvas({
     const handleStageMouseUp = (e) => {
         const stage = stageRef.current;
         if (!stage) return;
+        if (selectedTool === 'path') {
+            const state = pathInteractionRef.current;
+            if (state && state.shapeId && state.pendingPoint) {
+                const { index, hasDragged } = state.pendingPoint;
+                updatePathShape(state.shapeId, (pts) => {
+                    if (!pts[index]) return pts;
+                    const next = pts.map((point, idx) => {
+                        if (idx !== index) return point;
+                        const updated = clonePathPoint(point);
+                        if (!hasDragged) {
+                            updated.type = PATH_NODE_TYPES.CORNER;
+                            delete updated.handles;
+                        }
+                        return updated;
+                    });
+                    return next;
+                }, { commit: true });
+                state.pendingPoint = null;
+            }
+        }
         // finish drawing
         if (isDrawingRef.current) {
             const id = currentDrawingIdRef.current;
@@ -2321,13 +2800,13 @@ export default function Canvas({
                     else if (s.type === 'circle') keep = s.radius >= 3;
                     else if (s.type === 'ellipse') keep = s.radiusX >= 3 && s.radiusY >= 3;
                     else if (s.type === 'line') keep = !(Math.abs(s.points[0] - s.points[2]) < 2 && Math.abs(s.points[1] - s.points[3]) < 2);
-                    else if (s.type === 'pen') keep = Array.isArray(s.points) && s.points.length > 4;
+                    else if (s.type === 'path') keep = Array.isArray(s.points) && s.points.length > 4;
                     if (!keep) removed = true;
                     return keep;
                 });
                 return next;
             });
-            if (!removed && selectedTool !== 'pen' && selectedTool !== 'select') {
+            if (!removed && selectedTool !== 'path' && selectedTool !== 'select') {
                 if (typeof onToolChange === 'function') onToolChange('select');
             }
 
@@ -2667,10 +3146,10 @@ export default function Canvas({
     }, [handleAddPage, handleActivatePage]);
 
     // Helper: make a single selection (resets multi-select)
-    const selectSingle = (id) => {
+    function selectSingle(id) {
         setSelectedId(id || null);
         setSelectedIds(id ? [id] : []);
-    };
+    }
 
     // Helper: toggle an id in the multi-select set
     const toggleSelect = (id) => {
@@ -3778,19 +4257,16 @@ export default function Canvas({
                         rotation={shape.rotation || 0}
                     />
                 );
-            case 'pen':
+            case 'path':
                 return (
-                    <Line
+                    <Path
                         {...commonProps}
-                        x={shape.x || 0}
-                        y={shape.y || 0}
-                        points={shape.points}
+                        data={buildSvgPath(getPathPoints(shape), !!shape.closed)}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
-                        lineCap={shape.lineCap}
-                        lineJoin={shape.lineJoin}
-                        tension={shape.tension}
-                        rotation={shape.rotation || 0}
+                        lineCap={shape.lineCap || 'round'}
+                        lineJoin={shape.lineJoin || 'round'}
+                        {...fillProps}
                     />
                 );
             case 'text':
@@ -4065,7 +4541,7 @@ export default function Canvas({
         circle: 'Circle',
         ellipse: 'Ellipse',
         line: 'Line',
-        pen: 'Pen',
+        path: 'Path',
         text: 'Text',
     };
 
@@ -4164,6 +4640,194 @@ export default function Canvas({
                 {children.map((child) => renderShapeTree(child))}
             </Group>
         );
+    };
+
+    const renderPathEditor = () => {
+        const allowEditing = selectedTool === 'path' || selectedTool === 'select';
+        if (!allowEditing) return null;
+        const primaryShape = selectedId
+            ? shapes.find((s) => s.id === selectedId && s.type === 'path')
+            : null;
+        if (!primaryShape) return null;
+        const points = getPathPoints(primaryShape);
+        if (!points.length) return null;
+        const selectedPointIndex =
+            activePathSelection && activePathSelection.shapeId === primaryShape.id
+                ? activePathSelection.index
+                : null;
+        const elements = [];
+        const handleColor = '#38bdf8';
+        const anchorColor = '#2563eb';
+        const anchorSize = 8;
+
+        const beginDrag = (shapeId, payload) => {
+            pathHandleDragRef.current = {
+                shapeId,
+                baseState: shapesRef.current,
+                ...payload,
+            };
+        };
+
+        const endDrag = () => {
+            pathHandleDragRef.current = null;
+        };
+
+        points.forEach((point, index) => {
+            const anchorKey = `anchor-${primaryShape.id}-${index}`;
+            if (point.handles?.left) {
+                const left = point.handles.left;
+                elements.push(
+                    <Line
+                        key={`handle-line-left-${anchorKey}`}
+                        points={[point.x, point.y, left.x, left.y]}
+                        stroke="#94a3b8"
+                        strokeWidth={1}
+                        dash={[4, 4]}
+                        listening={false}
+                    />
+                );
+                elements.push(
+                    <Circle
+                        key={`handle-left-${anchorKey}`}
+                        x={left.x}
+                        y={left.y}
+                        radius={4}
+                        fill="#ffffff"
+                        stroke={handleColor}
+                        strokeWidth={1}
+                        draggable
+                        onMouseDown={(evt) => {
+                            evt.cancelBubble = true;
+                            beginDrag(primaryShape.id, { index, side: 'left', type: 'handle' });
+                        }}
+                        onDragMove={(evt) => {
+                            evt.cancelBubble = true;
+                            movePathHandle(
+                                primaryShape.id,
+                                index,
+                                'left',
+                                { x: evt.target.x(), y: evt.target.y() },
+                                !!evt.evt?.altKey
+                            );
+                        }}
+                        onDragEnd={(evt) => {
+                            evt.cancelBubble = true;
+                            const baseState = pathHandleDragRef.current?.baseState || shapesRef.current;
+                            movePathHandle(
+                                primaryShape.id,
+                                index,
+                                'left',
+                                { x: evt.target.x(), y: evt.target.y() },
+                                !!evt.evt?.altKey,
+                                { commit: true, baseState }
+                            );
+                            endDrag();
+                        }}
+                    />
+                );
+            }
+            if (point.handles?.right) {
+                const right = point.handles.right;
+                elements.push(
+                    <Line
+                        key={`handle-line-right-${anchorKey}`}
+                        points={[point.x, point.y, right.x, right.y]}
+                        stroke="#94a3b8"
+                        strokeWidth={1}
+                        dash={[4, 4]}
+                        listening={false}
+                    />
+                );
+                elements.push(
+                    <Circle
+                        key={`handle-right-${anchorKey}`}
+                        x={right.x}
+                        y={right.y}
+                        radius={4}
+                        fill="#ffffff"
+                        stroke={handleColor}
+                        strokeWidth={1}
+                        draggable
+                        onMouseDown={(evt) => {
+                            evt.cancelBubble = true;
+                            beginDrag(primaryShape.id, { index, side: 'right', type: 'handle' });
+                        }}
+                        onDragMove={(evt) => {
+                            evt.cancelBubble = true;
+                            movePathHandle(
+                                primaryShape.id,
+                                index,
+                                'right',
+                                { x: evt.target.x(), y: evt.target.y() },
+                                !!evt.evt?.altKey
+                            );
+                        }}
+                        onDragEnd={(evt) => {
+                            evt.cancelBubble = true;
+                            const baseState = pathHandleDragRef.current?.baseState || shapesRef.current;
+                            movePathHandle(
+                                primaryShape.id,
+                                index,
+                                'right',
+                                { x: evt.target.x(), y: evt.target.y() },
+                                !!evt.evt?.altKey,
+                                { commit: true, baseState }
+                            );
+                            endDrag();
+                        }}
+                    />
+                );
+            }
+
+            const isSelected = selectedPointIndex === index;
+            elements.push(
+                <Rect
+                    key={`anchor-node-${anchorKey}`}
+                    x={point.x}
+                    y={point.y}
+                    width={anchorSize}
+                    height={anchorSize}
+                    offset={{ x: anchorSize / 2, y: anchorSize / 2 }}
+                    fill={isSelected ? anchorColor : '#ffffff'}
+                    stroke={anchorColor}
+                    strokeWidth={isSelected ? 2 : 1}
+                    cornerRadius={2}
+                    draggable
+                    onMouseDown={(evt) => {
+                        evt.cancelBubble = true;
+                        setActivePathSelection({ shapeId: primaryShape.id, index });
+                        if (evt.evt?.altKey) {
+                            const nextType =
+                                point.type === PATH_NODE_TYPES.CORNER
+                                    ? PATH_NODE_TYPES.SMOOTH
+                                    : PATH_NODE_TYPES.CORNER;
+                            setPathPointType(primaryShape.id, index, nextType, { commit: true });
+                        }
+                    }}
+                    onDragStart={(evt) => {
+                        evt.cancelBubble = true;
+                        beginDrag(primaryShape.id, { index, type: 'anchor' });
+                    }}
+                    onDragMove={(evt) => {
+                        evt.cancelBubble = true;
+                        movePathAnchor(primaryShape.id, index, { x: evt.target.x(), y: evt.target.y() });
+                    }}
+                    onDragEnd={(evt) => {
+                        evt.cancelBubble = true;
+                        const baseState = pathHandleDragRef.current?.baseState || shapesRef.current;
+                        movePathAnchor(
+                            primaryShape.id,
+                            index,
+                            { x: evt.target.x(), y: evt.target.y() },
+                            { commit: true, baseState }
+                        );
+                        endDrag();
+                    }}
+                />
+            );
+        });
+
+        return <Group key={`path-editor-${primaryShape.id}`}>{elements}</Group>;
     };
 
     const toggleLayerCollapse = useCallback((shapeId) => {
@@ -4857,6 +5521,9 @@ export default function Canvas({
                                 perfectDrawEnabled={false}
                             />
                         )}
+                    </Layer>
+                    <Layer listening={selectedTool === 'path' || selectedTool === 'select'}>
+                        {renderPathEditor()}
                     </Layer>
                     <Layer listening={selectedTool === 'select'}>{renderGradientHandles()}</Layer>
                     <PixelGrid
