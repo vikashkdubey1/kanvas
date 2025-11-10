@@ -19,7 +19,7 @@ const Icon = {
             />
         </svg>
     ),
-    pen: (
+    path: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path
                 d="M3 21l3.5-1 12-12a2.8 2.8 0 0 0-4-4L6.5 16 5 19.5 3 21z"
@@ -67,7 +67,7 @@ export default function Toolbar({ selectedTool, onSelect }) {
     const tools = [
         { id: 'select', icon: Icon.select, label: 'Select' },
         { id: 'hand', icon: Icon.hand, label: 'Hand' },
-        { id: 'pen', icon: Icon.pen, label: 'Pen' },
+        { id: 'path', icon: Icon.path, label: 'Path' },
         { id: 'rectangle', icon: Icon.rectangle, label: 'Rectangle' },
         { id: 'circle', icon: Icon.circle, label: 'Circle' },
         { id: 'ellipse', icon: Icon.ellipse, label: 'Ellipse' },
