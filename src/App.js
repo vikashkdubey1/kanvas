@@ -71,7 +71,7 @@ export default function App() {
                 s: 'select',
                 r: 'rectangle',
                 l: 'line',
-                p: 'pen',
+                p: 'path',
                 o: 'ellipse',
                 h: 'hand',
                 f: 'frame',
@@ -119,7 +119,7 @@ export default function App() {
         if (typeof shape.strokeWidth === 'number' && !Number.isNaN(shape.strokeWidth)) {
             setStrokeWidth(shape.strokeWidth);
         } else {
-            setStrokeWidth(shape.type === 'line' || shape.type === 'pen' ? 1 : DEFAULT_STROKE_WIDTH);
+            setStrokeWidth(shape.type === 'line' || shape.type === 'path' ? 1 : DEFAULT_STROKE_WIDTH);
         }
 
         if (shape.type === 'text') {
