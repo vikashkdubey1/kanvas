@@ -79,6 +79,7 @@ export default function App() {
                 h: 'hand',
                 f: 'frame',
                 g: 'group',
+                t: 'text',
             };
 
             const nextTool = shortcutMap[key];
@@ -304,6 +305,11 @@ export default function App() {
         },
         [emitShapePropertyChange]
     );
+
+    const handleStrokeWidthChange = useCallback((value) => {
+        setStrokeWidth(value);
+        setStrokeWidthVersion((prev) => prev + 1);
+    }, []);
 
     const handleStrokeWidthChange = useCallback((value) => {
         setStrokeWidth(value);
