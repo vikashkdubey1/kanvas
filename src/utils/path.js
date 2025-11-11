@@ -51,6 +51,33 @@ export const clonePathPoints = (points) => {
     return points.map((point) => clonePathPoint(point));
 };
 
+export const translatePathPoints = (points, dx = 0, dy = 0) => {
+    if (!Array.isArray(points)) return [];
+    return points.map((point) => {
+        const next = clonePathPoint(point);
+        next.x += dx;
+        next.y += dy;
+        if (next.handles) {
+            if (next.handles.left) {
+                next.handles.left = {
+                    x: next.handles.left.x + dx,
+                    y: next.handles.left.y + dy,
+                };
+            }
+            if (next.handles.right) {
+                next.handles.right = {
+                    x: next.handles.right.x + dx,
+                    y: next.handles.right.y + dy,
+                };
+            }
+            if (!next.handles.left && !next.handles.right) {
+                delete next.handles;
+            }
+        }
+        return next;
+    });
+};
+
 export const getHandle = (point, side) => {
     if (!point || !point.handles) return null;
     const handle = point.handles[side];

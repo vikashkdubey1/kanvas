@@ -23,6 +23,7 @@ import PATH_NODE_TYPES, {
     distanceBetween,
     distanceToSegment,
     ensureHandlesForType,
+    translatePathPoints,
     updateHandleSymmetry,
 } from '../utils/path';
 
@@ -409,24 +410,56 @@ export default function Canvas({
     const dragSnapshotRef = useRef(null);
     const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const handleDragStart = (id, e) => {
-        const node = shapesRef.current.find(s => s.id === id);
-        if (!node) return;
-        // We only need snapshotting for containers; others behave the same as before
-            if (!isContainerShape(node)) {
-                dragSnapshotRef.current = null;
-                return;
-                }
-        const startX = node.x || 0;
-        const startY = node.y || 0;
-        // Collect absolute positions of all descendants at drag start
-            const descendants = collectDescendantIds(shapesRef.current, id);
+        const shape = shapesRef.current.find((s) => s.id === id);
+        if (!shape) {
+            dragSnapshotRef.current = null;
+            return;
+        }
+
+        if (shape.type === 'path') {
+            const konvaNode = e?.target;
+            const startX = typeof konvaNode?.x === 'function' ? konvaNode.x() : 0;
+            const startY = typeof konvaNode?.y === 'function' ? konvaNode.y() : 0;
+            dragSnapshotRef.current = {
+                id,
+                type: 'path',
+                startX,
+                startY,
+                baseX: shape.x || 0,
+                baseY: shape.y || 0,
+                basePoints: getPathPoints(shape),
+                baseState: shapesRef.current.map((s) => ({ ...s })),
+            };
+            return;
+        }
+
+        if (!isContainerShape(shape)) {
+            dragSnapshotRef.current = null;
+            return;
+        }
+
+        const startX = shape.x || 0;
+        const startY = shape.y || 0;
+        const descendants = collectDescendantIds(shapesRef.current, id);
         const childPos = new Map();
+        const pathChildPoints = new Map();
         for (const childId of descendants) {
-            const c = shapesRef.current.find(s => s.id === childId);
-            if (!c) continue;
-            childPos.set(childId, { x: c.x || 0, y: c.y || 0 });
+            const childShape = shapesRef.current.find((s) => s.id === childId);
+            if (!childShape) continue;
+            childPos.set(childId, { x: childShape.x || 0, y: childShape.y || 0 });
+            if (childShape.type === 'path') {
+                pathChildPoints.set(childId, getPathPoints(childShape));
             }
-        dragSnapshotRef.current = { id, startX, startY, childPos };
+        }
+        dragSnapshotRef.current = {
+            id,
+            type: 'container',
+            startX,
+            startY,
+            childPos,
+            pathChildPoints,
+            baseState: shapesRef.current.map((s) => ({ ...s })),
+        };
     };
 
     const shapeCountersRef = useRef({
@@ -459,6 +492,7 @@ export default function Canvas({
     });
     const pathHandleDragRef = useRef(null);
     const [activePathSelection, setActivePathSelection] = useState(null);
+
 
     const [shapes, setShapes] = useState([]);
     const shapesRef = useRef(shapes);
@@ -664,7 +698,6 @@ export default function Canvas({
         }
         return inside;
     };
-
 
     const rectFromPoints = (start, end) => {
         if (!start || !end) return null;
@@ -1423,14 +1456,30 @@ export default function Canvas({
                 return { ...updated, points: scaledPoints };
             }
             case 'path': {
-                const points = Array.isArray(shape.points) ? [...shape.points] : [];
-                const scaledPoints = points.map((value, index) => {
-                    if (index % 2 === 0) {
-                        const absolute = value - prevX;
-                        return nextX + absolute * scaleX;
+                const points = getPathPoints(shape);
+                const scaledPoints = points.map((point) => {
+                    const nextPoint = clonePathPoint(point);
+                    nextPoint.x = nextX + (point.x - prevX) * scaleX;
+                    nextPoint.y = nextY + (point.y - prevY) * scaleY;
+                    if (point.handles) {
+                        nextPoint.handles = {};
+                        if (point.handles.left) {
+                            nextPoint.handles.left = {
+                                x: nextX + (point.handles.left.x - prevX) * scaleX,
+                                y: nextY + (point.handles.left.y - prevY) * scaleY,
+                            };
+                        }
+                        if (point.handles.right) {
+                            nextPoint.handles.right = {
+                                x: nextX + (point.handles.right.x - prevX) * scaleX,
+                                y: nextY + (point.handles.right.y - prevY) * scaleY,
+                            };
+                        }
+                        if (!nextPoint.handles.left && !nextPoint.handles.right) {
+                            delete nextPoint.handles;
+                        }
                     }
-                    const absolute = value - prevY;
-                    return nextY + absolute * scaleY;
+                    return nextPoint;
                 });
                 return { ...updated, points: scaledPoints };
             }
@@ -2235,6 +2284,15 @@ export default function Canvas({
         const desiredType = resolvedStrokeType;                      // e.g., 'solid'
         const desiredWidth = typeof strokeWidth === 'number' ? strokeWidth : 0;
 
+        const computeTargetStrokeWidth = (shape) => {
+            if (!shape) return desiredWidth;
+            if (desiredWidth <= 0 && (shape.type === 'line' || shape.type === 'path')) {
+                const currentWidth = typeof shape.strokeWidth === 'number' ? shape.strokeWidth : 0;
+                return currentWidth > 0 ? currentWidth : 1;
+            }
+            return desiredWidth;
+        };
+
         // Quick no-op guard: if nothing would change, bail
         const needsChange = (() => {
             const src = shapesRef.current;
@@ -2242,9 +2300,10 @@ export default function Canvas({
                 const s = src[i];
                 if (!selectedSet.has(s.id) || !supportsStroke.has(s.type)) continue;
                 const curWidth = typeof s.strokeWidth === 'number' ? s.strokeWidth : 0;
+                const targetWidth = computeTargetStrokeWidth(s);
                 const curStroke = typeof s.stroke === 'string' ? s.stroke : null;
                 const curType = typeof s.strokeType === 'string' ? s.strokeType : 'solid';
-                if (curWidth !== desiredWidth || curStroke !== desiredStroke || curType !== desiredType) {
+                if (curWidth !== targetWidth || curStroke !== desiredStroke || curType !== desiredType) {
                     return true;
                 }
             }
@@ -2263,7 +2322,7 @@ export default function Canvas({
                     ...s,
                     stroke: desiredStroke,
                     strokeType: desiredType,
-                    strokeWidth: desiredWidth,
+                    strokeWidth: computeTargetStrokeWidth(s),
                 };
             })
         );
@@ -2688,21 +2747,6 @@ export default function Canvas({
             const id = currentDrawingIdRef.current;
             if (!pos || !start || id == null) return;
 
-            // If using PEN, append points to the active stroke and return
-            if (selectedTool === 'path') {
-                setShapes((prev) => prev.map((s) => {
-                    if (s.id !== id || s.type !== 'path') return s;
-                    const pts = s.points || [];
-                    const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
-                    if (lx != null && ly != null) {
-                        const dx = pos.x - lx, dy = pos.y - ly;
-                        if (dx * dx + dy * dy < 0.25) return s; // <0.5px
-                    }
-                    return { ...s, points: [...pts, pos.x, pos.y] };
-                }));
-                return;
-            }
-
             setShapes((prev) =>
                 prev.map((s) => {
                     if (s.id !== id) return s;
@@ -2800,7 +2844,7 @@ export default function Canvas({
                     else if (s.type === 'circle') keep = s.radius >= 3;
                     else if (s.type === 'ellipse') keep = s.radiusX >= 3 && s.radiusY >= 3;
                     else if (s.type === 'line') keep = !(Math.abs(s.points[0] - s.points[2]) < 2 && Math.abs(s.points[1] - s.points[3]) < 2);
-                    else if (s.type === 'path') keep = Array.isArray(s.points) && s.points.length > 4;
+                    else if (s.type === 'path') keep = getPathPoints(s).length > 1;
                     if (!keep) removed = true;
                     return keep;
                 });
@@ -3035,33 +3079,83 @@ export default function Canvas({
     }, [selectedIds, selectedId, shapes, selectedTool]);
 
     const handleDragMove = (id, e) => {
-           const x = e.target.x();
-           const y = e.target.y();
-           const snap = dragSnapshotRef.current;
-           const current = shapesRef.current.find(s => s.id === id);
-        
-               // If no snapshot or not a container → behave like before for the node itself
-               if (!snap || snap.id !== id || !isContainerShape(current)) {
-                     setShapes(prev => prev.map(s => (s.id === id ? { ...s, x, y } : s)));
-                     return;
-                   }
-        
-               const dx = x - snap.startX;
-           const dy = y - snap.startY;
-        
-               setShapes(prev => prev.map(s => {
-                     if (s.id === id) return { ...s, x, y };
-                     if (snap.childPos.has(s.id)) {
-                           const base = snap.childPos.get(s.id);
-                           return { ...s, x: base.x + dx, y: base.y + dy };
-                         }
-                     return s;
-                   }));
-        };
+        const targetNode = e?.target;
+        const x = typeof targetNode?.x === 'function' ? targetNode.x() : 0;
+        const y = typeof targetNode?.y === 'function' ? targetNode.y() : 0;
+        const snap = dragSnapshotRef.current;
+        const current = shapesRef.current.find((s) => s.id === id) || null;
+
+        if (snap && snap.id === id && snap.type === 'path') {
+            const dx = x - snap.startX;
+            const dy = y - snap.startY;
+            const translated = translatePathPoints(snap.basePoints, dx, dy);
+            setShapes((prev) =>
+                prev.map((s) =>
+                    s.id === id
+                        ? { ...s, points: translated, x: (snap.baseX || 0) + dx, y: (snap.baseY || 0) + dy }
+                        : s
+                )
+            );
+            if (targetNode && typeof targetNode.position === 'function') {
+                targetNode.position({ x: snap.startX, y: snap.startY });
+            }
+            return;
+        }
+
+        if (snap && snap.id === id && snap.type === 'container' && current && isContainerShape(current)) {
+            const dx = x - snap.startX;
+            const dy = y - snap.startY;
+            setShapes((prev) =>
+                prev.map((s) => {
+                    if (s.id === id) {
+                        return { ...s, x, y };
+                    }
+                    if (snap.childPos?.has(s.id)) {
+                        const base = snap.childPos.get(s.id);
+                        let nextShape = { ...s, x: base.x + dx, y: base.y + dy };
+                        if (snap.pathChildPoints?.has(s.id)) {
+                            const basePoints = snap.pathChildPoints.get(s.id);
+                            nextShape = {
+                                ...nextShape,
+                                points: translatePathPoints(basePoints, dx, dy),
+                            };
+                        }
+                        return nextShape;
+                    }
+                    return s;
+                })
+            );
+            return;
+        }
+
+        setShapes((prev) => prev.map((s) => (s.id === id ? { ...s, x, y } : s)));
+    };
 
     const handleDragEnd = (id, e) => {
-        const x = e.target.x();
-        const y = e.target.y();
+        const targetNode = e?.target;
+        const x = typeof targetNode?.x === 'function' ? targetNode.x() : 0;
+        const y = typeof targetNode?.y === 'function' ? targetNode.y() : 0;
+        const snap = dragSnapshotRef.current;
+        if (snap && snap.id === id && snap.type === 'path') {
+            const dx = x - snap.startX;
+            const dy = y - snap.startY;
+            const translated = translatePathPoints(snap.basePoints, dx, dy);
+            applyChange(
+                (prev) =>
+                    prev.map((s) =>
+                        s.id === id
+                            ? { ...s, points: translated, x: (snap.baseX || 0) + dx, y: (snap.baseY || 0) + dy }
+                            : s
+                    ),
+                { baseState: snap.baseState }
+            );
+            if (targetNode && typeof targetNode.position === 'function') {
+                targetNode.position({ x: snap.startX, y: snap.startY });
+            }
+            dragSnapshotRef.current = null;
+            return;
+        }
+
         const snapshotShapes = shapesRef.current;
         const current = snapshotShapes.find((shape) => shape.id === id) || null;
         const pointer = getCanvasPointer();
@@ -3074,20 +3168,41 @@ export default function Canvas({
         const nextParentId = dropTarget ? dropTarget.id : null;
         const previousParentId = current?.parentId ?? null;
 
-        applyChange((prev) => {
-              // Finalize node position; children are already correct from handleDragMove snapshot path
-                  let positioned = prev.map((s) => (s.id === id ? { ...s, x, y } : s));
+        const dxFromSnapshot = snap && snap.id === id && snap.type === 'container' ? x - snap.startX : 0;
+        const dyFromSnapshot = snap && snap.id === id && snap.type === 'container' ? y - snap.startY : 0;
 
-            // if parent changed, move this node to TOP of new parent’s stack
-            if (current && nextParentId !== previousParentId) {
-                return moveShapeToParentTop(positioned, id, nextParentId);
-            }
-            return positioned;
-        });
+        applyChange(
+            (prev) => {
+                let positioned = prev.map((s) => {
+                    if (s.id === id) {
+                        return { ...s, x, y };
+                    }
+                    if (snap && snap.id === id && snap.type === 'container' && snap.childPos?.has(s.id)) {
+                        const base = snap.childPos.get(s.id);
+                        let nextShape = { ...s, x: base.x + dxFromSnapshot, y: base.y + dyFromSnapshot };
+                        if (snap.pathChildPoints?.has(s.id)) {
+                            const basePoints = snap.pathChildPoints.get(s.id);
+                            nextShape = {
+                                ...nextShape,
+                                points: translatePathPoints(basePoints, dxFromSnapshot, dyFromSnapshot),
+                            };
+                        }
+                        return nextShape;
+                    }
+                    return s;
+                });
+
+                if (current && nextParentId !== previousParentId) {
+                    return moveShapeToParentTop(positioned, id, nextParentId);
+                }
+                return positioned;
+            },
+            snap && snap.id === id ? { baseState: snap.baseState } : undefined
+        );
         // Clear snapshot after finishing
         if (dragSnapshotRef.current && dragSnapshotRef.current.id === id) {
-              dragSnapshotRef.current = null;
-            }
+            dragSnapshotRef.current = null;
+        }
     };
 
     // NEW: multi-select state. We'll still keep selectedId as the "primary".
@@ -4257,18 +4372,31 @@ export default function Canvas({
                         rotation={shape.rotation || 0}
                     />
                 );
-            case 'path':
+            case 'path': {
+                const pathPoints = getPathPoints(shape);
+                const pathData = buildSvgPath(pathPoints, !!shape.closed);
+                const strokeColor =
+                    typeof shape.stroke === 'string' && shape.stroke.trim().length
+                        ? shape.stroke
+                        : '#000000';
+                const strokeWidth =
+                    typeof shape.strokeWidth === 'number' && shape.strokeWidth > 0
+                        ? shape.strokeWidth
+                        : 1;
+                const pathFillProps = shape.closed ? fillProps : { fillEnabled: false };
                 return (
                     <Path
                         {...commonProps}
-                        ata={buildSvgPath(getPathPoints(shape), !!shape.closed)}
-                        stroke={shape.stroke}
-                        strokeWidth={shape.strokeWidth}
+                        data={pathData}
+                        stroke={strokeColor}
+                        strokeWidth={strokeWidth}
+                        strokeEnabled={strokeWidth > 0}
                         lineCap={shape.lineCap || 'round'}
                         lineJoin={shape.lineJoin || 'round'}
-                        {...fillProps}
+                        {...pathFillProps}
                     />
                 );
+            }
             case 'text':
                 return (
                     <Text
