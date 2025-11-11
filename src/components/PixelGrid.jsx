@@ -1,65 +1,66 @@
-﻿// src/components/PixelGrid.js
+// src/components/PixelGrid.js
 import React, { useMemo } from "react";
 import { Layer, Shape } from "react-konva";
 
-/**
- * Draws a 1px screen-space grid where each cell equals 1 world px.
- * Works by ignoring Stage transforms and using step = scale (screen px per world px).
- */
 const PixelGrid = ({
-    // Stage transform:
-    scale,            // world->screen (e.g., 1=100%, 8=800%)
-    stagePos,         // { x, y } in SCREEN px (Stage props x/y)
-    // Viewport size in SCREEN px (use Stage width/height)
-    viewport,         // { width, height }
+    scale,                 // Stage scale (1=100%, 8=800%, etc.)
+    stagePos,              // Stage x/y in SCREEN px (exactly what you pass to <Stage x y>)
+    viewport,              // { width, height } in SCREEN px (Stage size)
     minScaleToShow = 8,
-    color = "rgba(0,0,0,0.05)",
+    color = "rgba(0,0,0,1)",
 }) => {
     if (!scale || scale < minScaleToShow) return null;
 
-    // Screen-space step between lines = scale (screen px of 1 world px)
-    const { step, offsetX, offsetY, cols, rows } = useMemo(() => {
-        const step = Math.max(1, Math.floor(scale)); // screen pixels per world px
-        // Stage is translated by stagePos.x/y (screen px). We want grid lines to land
-        // on world integer coordinates, so we phase by stagePos modulo step.
-        const mod = (a, b) => ((a % b) + b) % b;
-        const offsetX = mod(stagePos.x, step);
-        const offsetY = mod(stagePos.y, step);
+    // Convert the visible screen rect to WORLD coordinates using Stage transform.
+    const { x0, x1, y0, y1, firstX, lastX, firstY, lastY } = useMemo(() => {
+        // screen -> world: w = (screen - stagePos) / scale
+        const x0 = (0 - stagePos.x) / scale;
+        const y0 = (0 - stagePos.y) / scale;
+        const x1 = (viewport.width - stagePos.x) / scale;
+        const y1 = (viewport.height - stagePos.y) / scale;
 
-        const cols = Math.ceil((viewport.width - offsetX) / step) + 1;
-        const rows = Math.ceil((viewport.height - offsetY) / step) + 1;
+        // Draw integer world coordinates that fall inside the view
+        const firstX = Math.floor(x0);
+        const lastX = Math.ceil(x1);
+        const firstY = Math.floor(y0);
+        const lastY = Math.ceil(y1);
 
-        return { step, offsetX, offsetY, cols, rows };
+        return { x0, x1, y0, y1, firstX, lastX, firstY, lastY };
     }, [scale, stagePos.x, stagePos.y, viewport.width, viewport.height]);
 
+    // Make screen thickness ≈0.1px at 8× and thinner as zoom increases:
+    // W_screen = k/scale, with k chosen so W_screen(8) = 0.1 => k = 0.8
+    const desiredScreenPx = 0.8 / scale;
+    // Convert to world units (Stage multiplies lineWidth by scale):
+    const worldLineWidth = Math.max(desiredScreenPx / scale, 0.0005);
+
     return (
-        <Layer
-            listening={false}
-            // Key trick: ignore Stage transforms so we draw in raw SCREEN pixels
-            transformsEnabled="none"
-        >
+        <Layer listening={false}>
             <Shape
                 listening={false}
                 sceneFunc={(ctx, shape) => {
                     ctx.save();
-                    ctx.lineWidth = 0.1;          // 1 real screen pixel
+                    ctx.lineWidth = worldLineWidth;
                     ctx.strokeStyle = color;
 
-                    // Verticals
+                    // Align to pixel centers in screen space => 0.5 screen px = 0.5/scale world units
+                    const align = 0.5 / scale;
+
+                    // Vertical lines at each integer X
                     ctx.beginPath();
-                    for (let i = 0; i < cols; i++) {
-                        const x = offsetX + i * step + 0.5; // 0.5 to land on pixel center
-                        ctx.moveTo(x, 0);
-                        ctx.lineTo(x, viewport.height);
+                    for (let x = firstX; x <= lastX; x++) {
+                        const wx = x + align;
+                        ctx.moveTo(wx, y0);
+                        ctx.lineTo(wx, y1);
                     }
                     ctx.stroke();
 
-                    // Horizontals
+                    // Horizontal lines at each integer Y
                     ctx.beginPath();
-                    for (let j = 0; j < rows; j++) {
-                        const y = offsetY + j * step + 0.5;
-                        ctx.moveTo(0, y);
-                        ctx.lineTo(viewport.width, y);
+                    for (let y = firstY; y <= lastY; y++) {
+                        const wy = y + align;
+                        ctx.moveTo(x0, wy);
+                        ctx.lineTo(x1, wy);
                     }
                     ctx.stroke();
 

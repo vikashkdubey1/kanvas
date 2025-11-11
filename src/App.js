@@ -182,7 +182,7 @@ export default function App() {
 
     const handlePropertiesResizeStart = useCallback(
         (event) => {
-            if (event.pointerType === 'mouse' && event.button !== 0) {
+if (event.pointerType === 'mouse' && event.button !== 0) {
                 return;
             }
             if (typeof event.clientX !== 'number') return;
