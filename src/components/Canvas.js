@@ -5767,7 +5767,7 @@ export default function Canvas({
                         scale={scale}
                         stagePos={stagePos}
                         viewport={{width: stageSize.width,
-    height: stageSize.height}}
+                        height: stageSize.height}}
                         minScaleToShow={8} // visible at 800%
                         //color={isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.22)"}
                     />
