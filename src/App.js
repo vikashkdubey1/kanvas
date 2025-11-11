@@ -35,6 +35,7 @@ export default function App() {
     const [fillStyle, setFillStyle] = useState(DEFAULT_FILL_STYLE);
     const [strokeStyle, setStrokeStyle] = useState(DEFAULT_STROKE_STYLE);
     const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
+    const [strokeWidthVersion, setStrokeWidthVersion] = useState(0);
     const [isGradientPickerOpen, setGradientPickerOpen] = useState(false);
     const gradientInteractionRef = useRef({ active: false });
     const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(
@@ -71,7 +72,8 @@ export default function App() {
                 s: 'select',
                 r: 'rectangle',
                 l: 'line',
-                p: 'pen',
+                p: 'path',
+                a: 'anchor',
                 o: 'ellipse',
                 h: 'hand',
                 f: 'frame',
@@ -119,7 +121,7 @@ export default function App() {
         if (typeof shape.strokeWidth === 'number' && !Number.isNaN(shape.strokeWidth)) {
             setStrokeWidth(shape.strokeWidth);
         } else {
-            setStrokeWidth(shape.type === 'line' || shape.type === 'pen' ? 1 : DEFAULT_STROKE_WIDTH);
+            setStrokeWidth(shape.type === 'line' || shape.type === 'path' ? 1 : DEFAULT_STROKE_WIDTH);
         }
 
         if (shape.type === 'text') {
@@ -250,6 +252,11 @@ export default function App() {
         });
     };
 
+    const handleStrokeWidthChange = useCallback((value) => {
+        setStrokeWidth(value);
+        setStrokeWidthVersion((prev) => prev + 1);
+    }, []);
+
     return (
     <>
         <style>
@@ -276,6 +283,7 @@ export default function App() {
                         fillStyle={fillStyle}
                         strokeStyle={strokeStyle}
                         strokeWidth={strokeWidth}
+                        strokeWidthVersion={strokeWidthVersion}
                         textOptions={textOptions}
                         onSelectionChange={handleSelectionChange}
                         showGradientHandles={isGradientPickerOpen}
@@ -318,7 +326,7 @@ export default function App() {
                     strokeStyle={strokeStyle}
                     onStrokeStyleChange={setStrokeStyle}
                     strokeWidth={strokeWidth}
-                    onStrokeWidthChange={setStrokeWidth}
+                    onStrokeWidthChange={handleStrokeWidthChange}
                     textFontFamily={textFontFamily}
                     onTextFontFamilyChange={setTextFontFamily}
                     textFontStyle={textFontStyle}
