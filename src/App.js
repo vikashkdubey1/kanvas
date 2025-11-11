@@ -79,7 +79,6 @@ export default function App() {
                 h: 'hand',
                 f: 'frame',
                 g: 'group',
-                t: 'text',
             };
 
             const nextTool = shortcutMap[key];
@@ -183,38 +182,7 @@ export default function App() {
 
     const handlePropertiesResizeStart = useCallback(
         (event) => {
-            if (event.pointerType === 'mouse' && event.button !== 0) {
-                return;
-            }
-            if (typeof event.clientX !== 'number') return;
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            const handleElement = event.currentTarget;
-            const pointerId = event.pointerId;
-            const startX = event.clientX;
-            const startWidth = propertiesPanelWidth;
-
-            const applyWidth = (clientX) => {
-                if (typeof clientX !== 'number') return;
-                const delta = startX - clientX;
-                const nextWidth = Math.min(
-                    Math.max(startWidth + delta, PROPERTIES_PANEL_MIN_WIDTH),
-                    PROPERTIES_PANEL_MAX_WIDTH
-                );
-                setPropertiesPanelWidth((current) =>
-                    Math.abs(current - nextWidth) < 0.5 ? current : nextWidth
-                );
-            };
-
-            const handlePointerMove = (moveEvent) => {
-                applyWidth(moveEvent.clientX);
-            };
-
-            const handlePointerEnd = () => {
-                if (typeof handleElement.releasePointerCapture === 'function') {
-                    try {
+@@ -198,147 +217,197 @@ export default function App() {
                         handleElement.releasePointerCapture(pointerId);
                     } catch (error) {
                         // ignore environments without pointer capture support
@@ -305,11 +273,6 @@ export default function App() {
         },
         [emitShapePropertyChange]
     );
-
-    const handleStrokeWidthChange = useCallback((value) => {
-        setStrokeWidth(value);
-        setStrokeWidthVersion((prev) => prev + 1);
-    }, []);
 
     const handleStrokeWidthChange = useCallback((value) => {
         setStrokeWidth(value);
