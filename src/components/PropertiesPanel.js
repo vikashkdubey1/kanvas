@@ -2938,6 +2938,7 @@ export default function PropertiesPanel({
     onOpacityChange,
     onCornerRadiusChange = () => { },
     onCornerSmoothingChange,
+    onPolygonSidesChange = () => {},
 }) {
         const isTextShape = shape?.type === 'text';
     const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
@@ -2976,10 +2977,14 @@ export default function PropertiesPanel({
     const isMultiSelect = selectedIds.length > 1;
     const hasSelection = Boolean(primaryShape);
     const supportsCornerRadius = Boolean(
-        primaryShape && ['rectangle', 'frame', 'group'].includes(primaryShape.type)
+        primaryShape && (
+            ['rectangle', 'frame', 'group', 'polygon'].includes(primaryShape.type) ||
+            (primaryShape.type === 'path' && primaryShape.closed)
+        )
     );
     const supportsDimensions = Boolean(
-        primaryShape && ['rectangle', 'frame', 'group', 'circle', 'ellipse', 'text'].includes(primaryShape.type)
+        primaryShape &&
+        ['rectangle', 'frame', 'group', 'circle', 'ellipse', 'polygon', 'line', 'path', 'text'].includes(primaryShape.type)
     );
 
     const [alignmentActive, setAlignmentActive] = useState(null);
@@ -3034,6 +3039,59 @@ export default function PropertiesPanel({
                         width: Math.max(0, (target.radiusX || 0) * 2),
                         height: Math.max(0, (target.radiusY || 0) * 2),
                     };
+                case 'polygon': {
+                    const radius = Math.max(0, target.radius || 0);
+                    return { width: radius * 2, height: radius * 2 };
+                }
+                case 'line': {
+                    if (!Array.isArray(target.points) || target.points.length < 2) {
+                        return { width: 0, height: 0 };
+                    }
+                    let minX = Number(target.points[0]) || 0;
+                    let maxX = minX;
+                    let minY = Number(target.points[1]) || 0;
+                    let maxY = minY;
+                    for (let i = 2; i < target.points.length; i += 2) {
+                        const px = Number(target.points[i]);
+                        const py = Number(target.points[i + 1]);
+                        if (!Number.isFinite(px) || !Number.isFinite(py)) {
+                            continue;
+                        }
+                        if (px < minX) minX = px;
+                        if (px > maxX) maxX = px;
+                        if (py < minY) minY = py;
+                        if (py > maxY) maxY = py;
+                    }
+                    return {
+                        width: Math.max(0, maxX - minX),
+                        height: Math.max(0, maxY - minY),
+                    };
+                }
+                case 'path': {
+                    if (!Array.isArray(target.points) || target.points.length === 0) {
+                        return { width: 0, height: 0 };
+                    }
+                    let minX = Number(target.points[0]?.x) || 0;
+                    let maxX = minX;
+                    let minY = Number(target.points[0]?.y) || 0;
+                    let maxY = minY;
+                    for (let i = 1; i < target.points.length; i += 1) {
+                        const point = target.points[i];
+                        const px = Number(point?.x);
+                        const py = Number(point?.y);
+                        if (!Number.isFinite(px) || !Number.isFinite(py)) {
+                            continue;
+                        }
+                        if (px < minX) minX = px;
+                        if (px > maxX) maxX = px;
+                        if (py < minY) minY = py;
+                        if (py > maxY) maxY = py;
+                    }
+                    return {
+                        width: Math.max(0, maxX - minX),
+                        height: Math.max(0, maxY - minY),
+                    };
+                }
                 case 'text':
                     return {
                         width: Math.max(0, target.width || 0),
@@ -3081,6 +3139,7 @@ export default function PropertiesPanel({
         primaryShape?.radius,
         primaryShape?.radiusX,
         primaryShape?.radiusY,
+        primaryShape?.points,
         primaryShape?.id,
         getShapeDimensionsForPanel,
         supportsDimensions,
@@ -3104,6 +3163,17 @@ export default function PropertiesPanel({
             setOpacityDraft('100');
         }
     }, [primaryShape?.opacity, primaryShape?.id]);
+
+    const [polygonSidesDraft, setPolygonSidesDraft] = useState('5');
+
+    useEffect(() => {
+        if (primaryShape?.type === 'polygon') {
+            const sides = Math.max(3, Math.floor(primaryShape.sides || 5));
+            setPolygonSidesDraft(String(sides));
+        } else {
+            setPolygonSidesDraft('5');
+        }
+    }, [primaryShape?.type, primaryShape?.sides, primaryShape?.id]);
 
     const [cornerRadiusDraft, setCornerRadiusDraft] = useState('0');
     const [cornerDetailDraft, setCornerDetailDraft] = useState({
@@ -3332,6 +3402,19 @@ export default function PropertiesPanel({
         if (!hasSelection || typeof onOpacityChange !== 'function') return;
         const n = Number(opacityDraft); if (Number.isNaN(n)) return;
         onOpacityChange(Math.min(100, Math.max(0, n)) / 100);
+    };
+
+    const commitPolygonSides = () => {
+        if (primaryShape?.type !== 'polygon' || typeof onPolygonSidesChange !== 'function') return;
+        const numeric = Number(polygonSidesDraft);
+        if (!Number.isFinite(numeric)) return;
+        const clamped = Math.max(3, Math.floor(numeric));
+        onPolygonSidesChange(clamped);
+        setPolygonSidesDraft(String(clamped));
+    };
+
+    const handlePolygonSidesInputChange = (value) => {
+        setPolygonSidesDraft(value);
     };
 
 
@@ -3952,6 +4035,21 @@ const subtitle = shape
                                 {isAspectLocked ? <LockClosedIcon /> : <LockOpenIcon />}
                             </button>
                         </div>
+                        {primaryShape?.type === 'polygon' ? (
+                            <div style={{ marginTop: 8 }}>
+                                <NumericField
+                                    label="Sides"
+                                    value={polygonSidesDraft}
+                                    onChange={handlePolygonSidesInputChange}
+                                    onBlur={commitPolygonSides}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') commitPolygonSides(); }}
+                                    step={1}
+                                    suffix=""
+                                    prefix=""
+                                    disabled={!hasSelection}
+                                />
+                            </div>
+                        ) : null}
                     </div>
                 </Section>
 

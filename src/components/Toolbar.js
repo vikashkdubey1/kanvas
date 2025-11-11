@@ -7,6 +7,15 @@ const Icon = {
             <path d="M4 4l7 14 2-5 5-2-14-7z" stroke="currentColor" strokeWidth="2" fill="none" />
         </svg>
     ),
+    anchor: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M12 4v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="2" fill="none" />
+            <path d="M7 10c0 2.761 2.239 5 5 5s5-2.239 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="M4 20c2-1 4.5-3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="M20 20c-2-1-4.5-3-5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+    ),
     hand: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M7 11V6a2 2 0 1 1 4 0v5" stroke="currentColor" strokeWidth="2" />
@@ -19,7 +28,7 @@ const Icon = {
             />
         </svg>
     ),
-    pen: (
+    path: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path
                 d="M3 21l3.5-1 12-12a2.8 2.8 0 0 0-4-4L6.5 16 5 19.5 3 21z"
@@ -32,6 +41,16 @@ const Icon = {
     rectangle: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <rect x="4" y="6" width="16" height="12" rx="1.5" stroke="currentColor" strokeWidth="2" />
+        </svg>
+    ),
+    polygon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+                d="M12 3l7.794 5.657-2.977 9.178H7.183L4.206 8.657 12 3z"
+                stroke="currentColor"
+                strokeWidth="2"
+                fill="none"
+            />
         </svg>
     ),
     circle: (
@@ -67,8 +86,10 @@ export default function Toolbar({ selectedTool, onSelect }) {
     const tools = [
         { id: 'select', icon: Icon.select, label: 'Select' },
         { id: 'hand', icon: Icon.hand, label: 'Hand' },
-        { id: 'pen', icon: Icon.pen, label: 'Pen' },
+        { id: 'path', icon: Icon.path, label: 'Path' },
+        { id: 'anchor', icon: Icon.anchor, label: 'Anchor' },
         { id: 'rectangle', icon: Icon.rectangle, label: 'Rectangle' },
+        { id: 'polygon', icon: Icon.polygon, label: 'Polygon' },
         { id: 'circle', icon: Icon.circle, label: 'Circle' },
         { id: 'ellipse', icon: Icon.ellipse, label: 'Ellipse' },
         { id: 'line', icon: Icon.line, label: 'Line' },

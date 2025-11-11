@@ -35,6 +35,7 @@ export default function App() {
     const [fillStyle, setFillStyle] = useState(DEFAULT_FILL_STYLE);
     const [strokeStyle, setStrokeStyle] = useState(DEFAULT_STROKE_STYLE);
     const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
+    const [strokeWidthVersion, setStrokeWidthVersion] = useState(0);
     const [isGradientPickerOpen, setGradientPickerOpen] = useState(false);
     const gradientInteractionRef = useRef({ active: false });
     const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(
@@ -51,6 +52,7 @@ export default function App() {
     const [textDecoration, setTextDecoration] = useState(DEFAULT_TEXT_PROPS.textDecoration);
 
     const [activeShape, setActiveShape] = useState(null);
+    const [shapePropertyRequest, setShapePropertyRequest] = useState(null);
 
     useEffect(() => {
         const handleKeyDown = (event) => {
@@ -71,7 +73,8 @@ export default function App() {
                 s: 'select',
                 r: 'rectangle',
                 l: 'line',
-                p: 'pen',
+                p: 'path',
+                a: 'anchor',
                 o: 'ellipse',
                 h: 'hand',
                 f: 'frame',
@@ -119,7 +122,7 @@ export default function App() {
         if (typeof shape.strokeWidth === 'number' && !Number.isNaN(shape.strokeWidth)) {
             setStrokeWidth(shape.strokeWidth);
         } else {
-            setStrokeWidth(shape.type === 'line' || shape.type === 'pen' ? 1 : DEFAULT_STROKE_WIDTH);
+            setStrokeWidth(shape.type === 'line' || shape.type === 'path' ? 1 : DEFAULT_STROKE_WIDTH);
         }
 
         if (shape.type === 'text') {
@@ -136,6 +139,22 @@ export default function App() {
             setTextVerticalAlign(shape.verticalAlign || DEFAULT_TEXT_PROPS.verticalAlign);
             setTextDecoration(shape.textDecoration || DEFAULT_TEXT_PROPS.textDecoration);
         }
+    }, []);
+
+    const emitShapePropertyChange = useCallback(
+        (type, value) => {
+            if (!activeShape || !activeShape.id) return;
+            setShapePropertyRequest({
+                version: Date.now(),
+                targetId: activeShape.id,
+                payload: { type, value },
+            });
+        },
+        [activeShape]
+    );
+
+    const handleShapePropertyRequestHandled = useCallback((version) => {
+        setShapePropertyRequest((prev) => (prev && prev.version === version ? null : prev));
     }, []);
 
     const textOptions = useMemo(
@@ -220,35 +239,76 @@ export default function App() {
         [propertiesPanelWidth]
     );
 
-    // 🟢 Handle Corner Radius changes coming from PropertiesPanel
-    const handleCornerRadiusChange = (v) => {
-        setActiveShape((prev) => {
-            if (!prev) return prev;
+    const handlePositionChange = useCallback(
+        (value) => {
+            if (!value) return;
+            const next = {
+                x: Number(value.x),
+                y: Number(value.y),
+            };
+            if (!Number.isFinite(next.x) || !Number.isFinite(next.y)) return;
+            emitShapePropertyChange('position', next);
+        },
+        [emitShapePropertyChange]
+    );
 
-            // Only apply to rectangles for now
-            if (prev.type !== 'rectangle') return prev;
+    const handleDimensionChange = useCallback(
+        (value) => {
+            if (!value) return;
+            const next = {
+                width: Number(value.width),
+                height: Number(value.height),
+            };
+            if (!Number.isFinite(next.width) || !Number.isFinite(next.height)) return;
+            emitShapePropertyChange('dimensions', next);
+        },
+        [emitShapePropertyChange]
+    );
 
-            // Uniform radius (number)
-            if (typeof v === 'number') {
-                return { ...prev, cornerRadius: Math.max(0, v) };
-            }
+    const handleRotationChange = useCallback(
+        (value) => {
+            const next = Number(value);
+            if (!Number.isFinite(next)) return;
+            emitShapePropertyChange('rotation', next);
+        },
+        [emitShapePropertyChange]
+    );
 
-            // Per-corner radius (object with topLeft, etc.)
-            if (v && typeof v === 'object') {
-                return {
-                    ...prev,
-                    cornerRadius: {
-                        topLeft: Math.max(0, Number(v.topLeft ?? 0)),
-                        topRight: Math.max(0, Number(v.topRight ?? 0)),
-                        bottomRight: Math.max(0, Number(v.bottomRight ?? 0)),
-                        bottomLeft: Math.max(0, Number(v.bottomLeft ?? 0)),
-                    },
-                };
-            }
+    const handleOpacityChange = useCallback(
+        (value) => {
+            const next = Number(value);
+            if (!Number.isFinite(next)) return;
+            emitShapePropertyChange('opacity', Math.min(1, Math.max(0, next)));
+        },
+        [emitShapePropertyChange]
+    );
 
-            return prev;
-        });
-    };
+    const handleCornerRadiusChange = useCallback(
+        (value) => {
+            emitShapePropertyChange('cornerRadius', value);
+        },
+        [emitShapePropertyChange]
+    );
+
+    const handleCornerSmoothingChange = useCallback(
+        (value) => {
+            emitShapePropertyChange('cornerSmoothing', value);
+        },
+        [emitShapePropertyChange]
+    );
+
+    const handlePolygonSidesChange = useCallback(
+        (value) => {
+            const next = Math.max(3, Math.floor(Number(value)) || 0);
+            emitShapePropertyChange('polygonSides', next);
+        },
+        [emitShapePropertyChange]
+    );
+
+    const handleStrokeWidthChange = useCallback((value) => {
+        setStrokeWidth(value);
+        setStrokeWidthVersion((prev) => prev + 1);
+    }, []);
 
     return (
     <>
@@ -276,10 +336,13 @@ export default function App() {
                         fillStyle={fillStyle}
                         strokeStyle={strokeStyle}
                         strokeWidth={strokeWidth}
+                        strokeWidthVersion={strokeWidthVersion}
                         textOptions={textOptions}
                         onSelectionChange={handleSelectionChange}
                         showGradientHandles={isGradientPickerOpen}
                         gradientInteractionRef={gradientInteractionRef}
+                        shapePropertyRequest={shapePropertyRequest}
+                        onShapePropertyRequestHandled={handleShapePropertyRequestHandled}
                     />
                 </div>
 
@@ -318,7 +381,7 @@ export default function App() {
                     strokeStyle={strokeStyle}
                     onStrokeStyleChange={setStrokeStyle}
                     strokeWidth={strokeWidth}
-                    onStrokeWidthChange={setStrokeWidth}
+                    onStrokeWidthChange={handleStrokeWidthChange}
                     textFontFamily={textFontFamily}
                     onTextFontFamilyChange={setTextFontFamily}
                     textFontStyle={textFontStyle}
@@ -335,7 +398,13 @@ export default function App() {
                     onTextVerticalAlignChange={setTextVerticalAlign}
                     textDecoration={textDecoration}
                     onTextDecorationChange={setTextDecoration}
+                    onPositionChange={handlePositionChange}
+                    onDimensionChange={handleDimensionChange}
+                    onRotationChange={handleRotationChange}
+                    onOpacityChange={handleOpacityChange}
                     onCornerRadiusChange={handleCornerRadiusChange}
+                    onCornerSmoothingChange={handleCornerSmoothingChange}
+                    onPolygonSidesChange={handlePolygonSidesChange}
                 />
             </div>
         </div>
