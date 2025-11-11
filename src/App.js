@@ -259,9 +259,9 @@ export default function App() {
     }, []);
 
     return (
-        <>
-            <style>
-                {`
+    <>
+        <style>
+            {`
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
           html, body, * {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -271,25 +271,7 @@ export default function App() {
             -moz-osx-font-smoothing: grayscale;
           }
         `}
-            </style>
-
-            <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
-                <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
-
-                <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <Canvas
-                            selectedTool={selectedTool}
-                            onToolChange={setSelectedTool}
-                            fillStyle={fillStyle}
-                            strokeStyle={strokeStyle}
-                            strokeWidth={strokeWidth}
-                            textOptions={textOptions}
-                            onSelectionChange={handleSelectionChange}
-                            showGradientHandles={isGradientPickerOpen}
-                            gradientInteractionRef={gradientInteractionRef}
-                        />
-                    </div>
+      </style>
 
         <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
             <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
@@ -326,58 +308,12 @@ export default function App() {
                     }}
                 >
                     <div
-                        role="separator"
-                        aria-orientation="vertical"
-                        onPointerDown={handlePropertiesResizeStart}
                         style={{
-                            flex: '0 0 auto',
-                            width: 1,
-                            padding: '0',
-                            cursor: 'col-resize',
-                            display: 'flex',
-                            alignItems: 'stretch',
-                            touchAction: 'none',
-                            background: 'transparent',
+                            flex: 1,
+                            borderLeft: '1px solid #dfe3eb',
+                            borderRight: '1px solid #dfe3eb',
+                            background: '#f3f5f9',
                         }}
-                    >
-                        <div
-                            style={{
-                                flex: 1,
-                                borderLeft: '1px solid #dfe3eb',
-                                borderRight: '1px solid #dfe3eb',
-                                background: '#f3f5f9',
-                            }}
-                        />
-                    </div>
-
-                    <PropertiesPanel
-                        panelWidth={propertiesPanelWidth}
-                        shape={activeShape}
-                        fillStyle={fillStyle}
-                        onFillStyleChange={setFillStyle}
-                        onGradientPickerToggle={setGradientPickerOpen}
-                        gradientInteractionRef={gradientInteractionRef}
-                        strokeStyle={strokeStyle}
-                        onStrokeStyleChange={setStrokeStyle}
-                        strokeWidth={strokeWidth}
-                        onStrokeWidthChange={setStrokeWidth}
-                        textFontFamily={textFontFamily}
-                        onTextFontFamilyChange={setTextFontFamily}
-                        textFontStyle={textFontStyle}
-                        onTextFontStyleChange={setTextFontStyle}
-                        textFontSize={textFontSize}
-                        onTextFontSizeChange={setTextFontSize}
-                        textLineHeight={textLineHeight}
-                        onTextLineHeightChange={setTextLineHeight}
-                        textLetterSpacing={textLetterSpacing}
-                        onTextLetterSpacingChange={setTextLetterSpacing}
-                        textAlign={textAlign}
-                        onTextAlignChange={setTextAlign}
-                        textVerticalAlign={textVerticalAlign}
-                        onTextVerticalAlignChange={setTextVerticalAlign}
-                        textDecoration={textDecoration}
-                        onTextDecorationChange={setTextDecoration}
-                        onCornerRadiusChange={handleCornerRadiusChange}
                     />
                 </div>
 
@@ -391,6 +327,7 @@ export default function App() {
                     strokeStyle={strokeStyle}
                     onStrokeStyleChange={setStrokeStyle}
                     strokeWidth={strokeWidth}
+                    onStrokeWidthChange={setStrokeWidth}
                     onStrokeWidthChange={handleStrokeWidthChange}
                     textFontFamily={textFontFamily}
                     onTextFontFamilyChange={setTextFontFamily}
@@ -411,6 +348,7 @@ export default function App() {
                     onCornerRadiusChange={handleCornerRadiusChange}
                 />
             </div>
+        </div>
         </>
     );
 }
