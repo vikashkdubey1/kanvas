@@ -86,6 +86,33 @@ const getPointsBoundingBox = (points) => {
     };
 };
 
+const getLineBoundingBox = (points) => {
+    if (!Array.isArray(points) || points.length < 2) {
+        return null;
+    }
+    let minX = Number(points[0]) || 0;
+    let maxX = minX;
+    let minY = Number(points[1]) || 0;
+    let maxY = minY;
+    for (let i = 2; i < points.length; i += 2) {
+        const x = Number(points[i]);
+        const y = Number(points[i + 1]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            continue;
+        }
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+    }
+    return {
+        left: minX,
+        right: maxX,
+        top: minY,
+        bottom: maxY,
+    };
+};
+
 const SHAPE_LABELS = {
     frame: 'Frame',
     group: 'Group',
@@ -122,6 +149,14 @@ const getShapeDimensions = (shape) => {
                 width: Math.max(0, (shape.radiusX || 0) * 2),
                 height: Math.max(0, (shape.radiusY || 0) * 2),
             };
+        case 'line': {
+            const bounds = getLineBoundingBox(shape.points);
+            if (!bounds) return { width: 0, height: 0 };
+            return {
+                width: Math.max(0, bounds.right - bounds.left),
+                height: Math.max(0, bounds.bottom - bounds.top),
+            };
+        }
         case 'polygon': {
             const radius = Math.max(0, shape.radius || 0);
             return { width: radius * 2, height: radius * 2 };
@@ -2562,12 +2597,112 @@ export default function Canvas({
                         if (shape.radiusX === radiusX && shape.radiusY === radiusY) return shape;
                         return { ...shape, radiusX, radiusY };
                     }
+                    if (shape.type === 'line') {
+                        const bounds = getLineBoundingBox(shape.points);
+                        if (!bounds) return shape;
+                        const currentWidth = Math.max(0, bounds.right - bounds.left);
+                        const currentHeight = Math.max(0, bounds.bottom - bounds.top);
+                        const targetWidth = Math.max(0, width);
+                        const targetHeight = Math.max(0, height);
+                        if (
+                            Math.abs(currentWidth - targetWidth) < 0.001 &&
+                            Math.abs(currentHeight - targetHeight) < 0.001
+                        ) {
+                            return shape;
+                        }
+                        const centerX = (bounds.left + bounds.right) / 2;
+                        const centerY = (bounds.top + bounds.bottom) / 2;
+                        const halfWidth = targetWidth / 2;
+                        const halfHeight = targetHeight / 2;
+                        const nextPoints = [];
+                        for (let i = 0; i < shape.points.length; i += 2) {
+                            const px = Number(shape.points[i]);
+                            const py = Number(shape.points[i + 1]);
+                            if (!Number.isFinite(px) || !Number.isFinite(py)) {
+                                nextPoints.push(px, py);
+                                continue;
+                            }
+                            const tx = currentWidth > 0 ? (px - bounds.left) / currentWidth : 0.5;
+                            const ty = currentHeight > 0 ? (py - bounds.top) / currentHeight : 0.5;
+                            const nextX = targetWidth > 0 ? centerX - halfWidth + tx * targetWidth : centerX;
+                            const nextY = targetHeight > 0 ? centerY - halfHeight + ty * targetHeight : centerY;
+                            nextPoints.push(nextX, nextY);
+                        }
+                        return { ...shape, points: nextPoints };
+                    }
                     if (shape.type === 'polygon') {
                         const radius = Math.max(1, Math.max(width, height) / 2);
                         if (shape.radius === radius) return shape;
                         const sides = Math.max(3, Math.floor(shape.sides || 5));
                         const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, radius, sides, shape.rotation || 0);
                         return { ...shape, radius, points };
+                    }
+                    if (shape.type === 'path') {
+                        const points = getPathPoints(shape);
+                        if (!points.length) return shape;
+                        const bounds = getPointsBoundingBox(points);
+                        if (!bounds) return shape;
+                        const currentWidth = Math.max(0, bounds.right - bounds.left);
+                        const currentHeight = Math.max(0, bounds.bottom - bounds.top);
+                        const targetWidth = Math.max(0, width);
+                        const targetHeight = Math.max(0, height);
+                        if (
+                            Math.abs(currentWidth - targetWidth) < 0.001 &&
+                            Math.abs(currentHeight - targetHeight) < 0.001
+                        ) {
+                            return shape;
+                        }
+                        const centerX = (bounds.left + bounds.right) / 2;
+                        const centerY = (bounds.top + bounds.bottom) / 2;
+                        const halfWidth = targetWidth / 2;
+                        const halfHeight = targetHeight / 2;
+                        const nextPoints = points.map((point) => {
+                            const ratioX = currentWidth > 0 ? (point.x - bounds.left) / currentWidth : 0.5;
+                            const ratioY = currentHeight > 0 ? (point.y - bounds.top) / currentHeight : 0.5;
+                            const nextPoint = clonePathPoint(point);
+                            nextPoint.x = targetWidth > 0 ? centerX - halfWidth + ratioX * targetWidth : centerX;
+                            nextPoint.y = targetHeight > 0 ? centerY - halfHeight + ratioY * targetHeight : centerY;
+                            if (point.handles) {
+                                nextPoint.handles = {};
+                                if (point.handles.left) {
+                                    const handleRatioX =
+                                        currentWidth > 0 ? (point.handles.left.x - bounds.left) / currentWidth : 0.5;
+                                    const handleRatioY =
+                                        currentHeight > 0 ? (point.handles.left.y - bounds.top) / currentHeight : 0.5;
+                                    nextPoint.handles.left = {
+                                        x:
+                                            targetWidth > 0
+                                                ? centerX - halfWidth + handleRatioX * targetWidth
+                                                : centerX,
+                                        y:
+                                            targetHeight > 0
+                                                ? centerY - halfHeight + handleRatioY * targetHeight
+                                                : centerY,
+                                    };
+                                }
+                                if (point.handles.right) {
+                                    const handleRatioX =
+                                        currentWidth > 0 ? (point.handles.right.x - bounds.left) / currentWidth : 0.5;
+                                    const handleRatioY =
+                                        currentHeight > 0 ? (point.handles.right.y - bounds.top) / currentHeight : 0.5;
+                                    nextPoint.handles.right = {
+                                        x:
+                                            targetWidth > 0
+                                                ? centerX - halfWidth + handleRatioX * targetWidth
+                                                : centerX,
+                                        y:
+                                            targetHeight > 0
+                                                ? centerY - halfHeight + handleRatioY * targetHeight
+                                                : centerY,
+                                    };
+                                }
+                                if (!nextPoint.handles.left && !nextPoint.handles.right) {
+                                    delete nextPoint.handles;
+                                }
+                            }
+                            return nextPoint;
+                        });
+                        return { ...shape, points: nextPoints };
                     }
                     return shape;
                 }

@@ -2983,7 +2983,8 @@ export default function PropertiesPanel({
         )
     );
     const supportsDimensions = Boolean(
-        primaryShape && ['rectangle', 'frame', 'group', 'circle', 'ellipse', 'polygon', 'text'].includes(primaryShape.type)
+        primaryShape &&
+        ['rectangle', 'frame', 'group', 'circle', 'ellipse', 'polygon', 'line', 'path', 'text'].includes(primaryShape.type)
     );
 
     const [alignmentActive, setAlignmentActive] = useState(null);
@@ -3038,6 +3039,59 @@ export default function PropertiesPanel({
                         width: Math.max(0, (target.radiusX || 0) * 2),
                         height: Math.max(0, (target.radiusY || 0) * 2),
                     };
+                case 'polygon': {
+                    const radius = Math.max(0, target.radius || 0);
+                    return { width: radius * 2, height: radius * 2 };
+                }
+                case 'line': {
+                    if (!Array.isArray(target.points) || target.points.length < 2) {
+                        return { width: 0, height: 0 };
+                    }
+                    let minX = Number(target.points[0]) || 0;
+                    let maxX = minX;
+                    let minY = Number(target.points[1]) || 0;
+                    let maxY = minY;
+                    for (let i = 2; i < target.points.length; i += 2) {
+                        const px = Number(target.points[i]);
+                        const py = Number(target.points[i + 1]);
+                        if (!Number.isFinite(px) || !Number.isFinite(py)) {
+                            continue;
+                        }
+                        if (px < minX) minX = px;
+                        if (px > maxX) maxX = px;
+                        if (py < minY) minY = py;
+                        if (py > maxY) maxY = py;
+                    }
+                    return {
+                        width: Math.max(0, maxX - minX),
+                        height: Math.max(0, maxY - minY),
+                    };
+                }
+                case 'path': {
+                    if (!Array.isArray(target.points) || target.points.length === 0) {
+                        return { width: 0, height: 0 };
+                    }
+                    let minX = Number(target.points[0]?.x) || 0;
+                    let maxX = minX;
+                    let minY = Number(target.points[0]?.y) || 0;
+                    let maxY = minY;
+                    for (let i = 1; i < target.points.length; i += 1) {
+                        const point = target.points[i];
+                        const px = Number(point?.x);
+                        const py = Number(point?.y);
+                        if (!Number.isFinite(px) || !Number.isFinite(py)) {
+                            continue;
+                        }
+                        if (px < minX) minX = px;
+                        if (px > maxX) maxX = px;
+                        if (py < minY) minY = py;
+                        if (py > maxY) maxY = py;
+                    }
+                    return {
+                        width: Math.max(0, maxX - minX),
+                        height: Math.max(0, maxY - minY),
+                    };
+                }
                 case 'text':
                     return {
                         width: Math.max(0, target.width || 0),
@@ -3085,6 +3139,7 @@ export default function PropertiesPanel({
         primaryShape?.radius,
         primaryShape?.radiusX,
         primaryShape?.radiusY,
+        primaryShape?.points,
         primaryShape?.id,
         getShapeDimensionsForPanel,
         supportsDimensions,
