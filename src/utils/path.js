@@ -210,4 +210,234 @@ export const PATH_NODE_TYPE_LIST = [
     PATH_NODE_TYPES.DISCONNECTED,
 ];
 
+const ELLIPSE_KAPPA = 0.5522847498307936;
+
+const rotatePointAround = (point, center, angle) => {
+    if (!point || !center || !Number.isFinite(angle)) return point;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    return {
+        x: center.x + dx * cos - dy * sin,
+        y: center.y + dx * sin + dy * cos,
+    };
+};
+
+const rotatePathPoint = (point, center, angle) => {
+    if (!point || Math.abs(angle) < 0.000001) {
+        return point;
+    }
+    const rotated = clonePathPoint(point);
+    const pivot = center || { x: 0, y: 0 };
+    const anchor = rotatePointAround({ x: rotated.x, y: rotated.y }, pivot, angle);
+    rotated.x = anchor.x;
+    rotated.y = anchor.y;
+    if (rotated.handles) {
+        if (rotated.handles.left) {
+            rotated.handles.left = rotatePointAround(rotated.handles.left, pivot, angle);
+        }
+        if (rotated.handles.right) {
+            rotated.handles.right = rotatePointAround(rotated.handles.right, pivot, angle);
+        }
+        if (!rotated.handles.left && !rotated.handles.right) {
+            delete rotated.handles;
+        }
+    }
+    return rotated;
+};
+
+const buildRectanglePath = (shape) => {
+    const width = Math.max(0, shape.width || 0);
+    const height = Math.max(0, shape.height || 0);
+    if (!width || !height) return null;
+    const center = { x: shape.x || 0, y: shape.y || 0 };
+    const halfW = width / 2;
+    const halfH = height / 2;
+    const corners = [
+        createPathPoint({ x: center.x - halfW, y: center.y - halfH, type: PATH_NODE_TYPES.CORNER }),
+        createPathPoint({ x: center.x + halfW, y: center.y - halfH, type: PATH_NODE_TYPES.CORNER }),
+        createPathPoint({ x: center.x + halfW, y: center.y + halfH, type: PATH_NODE_TYPES.CORNER }),
+        createPathPoint({ x: center.x - halfW, y: center.y + halfH, type: PATH_NODE_TYPES.CORNER }),
+    ];
+    const rotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
+    const rotated = rotation ? corners.map((pt) => rotatePathPoint(pt, center, rotation)) : corners;
+    return {
+        points: rotated,
+        closed: true,
+        lineJoin: shape.lineJoin || 'miter',
+    };
+};
+
+const buildEllipsePath = (shape, radiusX, radiusY) => {
+    if (!radiusX || !radiusY) return null;
+    const center = { x: shape.x || 0, y: shape.y || 0 };
+    const top = createPathPoint({
+        x: center.x,
+        y: center.y - radiusY,
+        type: PATH_NODE_TYPES.SMOOTH,
+        handles: {
+            left: { x: center.x - radiusX * ELLIPSE_KAPPA, y: center.y - radiusY },
+            right: { x: center.x + radiusX * ELLIPSE_KAPPA, y: center.y - radiusY },
+        },
+    });
+    const right = createPathPoint({
+        x: center.x + radiusX,
+        y: center.y,
+        type: PATH_NODE_TYPES.SMOOTH,
+        handles: {
+            left: { x: center.x + radiusX, y: center.y - radiusY * ELLIPSE_KAPPA },
+            right: { x: center.x + radiusX, y: center.y + radiusY * ELLIPSE_KAPPA },
+        },
+    });
+    const bottom = createPathPoint({
+        x: center.x,
+        y: center.y + radiusY,
+        type: PATH_NODE_TYPES.SMOOTH,
+        handles: {
+            left: { x: center.x + radiusX * ELLIPSE_KAPPA, y: center.y + radiusY },
+            right: { x: center.x - radiusX * ELLIPSE_KAPPA, y: center.y + radiusY },
+        },
+    });
+    const left = createPathPoint({
+        x: center.x - radiusX,
+        y: center.y,
+        type: PATH_NODE_TYPES.SMOOTH,
+        handles: {
+            left: { x: center.x - radiusX, y: center.y + radiusY * ELLIPSE_KAPPA },
+            right: { x: center.x - radiusX, y: center.y - radiusY * ELLIPSE_KAPPA },
+        },
+    });
+    const rotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
+    const nodes = [top, right, bottom, left];
+    const rotated = rotation ? nodes.map((pt) => rotatePathPoint(pt, center, rotation)) : nodes;
+    return {
+        points: rotated,
+        closed: true,
+        lineJoin: shape.lineJoin || 'round',
+    };
+};
+
+const buildLinePath = (shape) => {
+    if (!Array.isArray(shape.points) || shape.points.length < 4) return null;
+    const nodes = [];
+    for (let i = 0; i < shape.points.length - 1; i += 2) {
+        const x = shape.points[i];
+        const y = shape.points[i + 1];
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        nodes.push(createPathPoint({ x, y, type: PATH_NODE_TYPES.CORNER }));
+    }
+    if (nodes.length < 2) return null;
+    return {
+        points: nodes,
+        closed: false,
+        lineCap: shape.lineCap || 'round',
+        lineJoin: shape.lineJoin || 'miter',
+    };
+};
+
+const buildPolygonPath = (shape) => {
+    if (!Array.isArray(shape.points) || shape.points.length < 6) return null;
+    const baseX = shape.x || 0;
+    const baseY = shape.y || 0;
+    const nodes = [];
+    for (let i = 0; i < shape.points.length - 1; i += 2) {
+        let px = shape.points[i];
+        let py = shape.points[i + 1];
+        if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+        if (shape.absolute === false) {
+            px += baseX;
+            py += baseY;
+        }
+        nodes.push(createPathPoint({ x: px, y: py, type: PATH_NODE_TYPES.CORNER }));
+    }
+    if (nodes.length < 3) return null;
+    const rotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
+    const center = { x: shape.x || 0, y: shape.y || 0 };
+    const rotated = rotation ? nodes.map((pt) => rotatePathPoint(pt, center, rotation)) : nodes;
+    return {
+        points: rotated,
+        closed: true,
+        lineJoin: shape.lineJoin || 'miter',
+    };
+};
+
+const buildStarPath = (shape) => {
+    const numPoints = Math.max(2, Math.floor(shape.numPoints || 0));
+    const outerRadius = Math.max(0, shape.outerRadius || shape.radius || 0);
+    if (!numPoints || !outerRadius) return null;
+    const innerRadius = Math.max(0, shape.innerRadius || outerRadius / 2);
+    const center = { x: shape.x || 0, y: shape.y || 0 };
+    const baseRotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
+    const step = Math.PI / numPoints;
+    const nodes = [];
+    for (let i = 0; i < numPoints * 2; i += 1) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = baseRotation + i * step - Math.PI / 2;
+        nodes.push(
+            createPathPoint({
+                x: center.x + Math.cos(angle) * radius,
+                y: center.y + Math.sin(angle) * radius,
+                type: PATH_NODE_TYPES.CORNER,
+            })
+        );
+    }
+    return {
+        points: nodes,
+        closed: true,
+        lineJoin: shape.lineJoin || 'miter',
+    };
+};
+
+export const canConvertShapeToPath = (shape) => {
+    if (!shape) return false;
+    switch (shape.type) {
+        case 'rectangle':
+            return Math.max(0, shape.width || 0) > 0 && Math.max(0, shape.height || 0) > 0;
+        case 'circle':
+            return Math.max(0, shape.radius || 0) > 0;
+        case 'ellipse':
+            return Math.max(0, shape.radiusX || 0) > 0 && Math.max(0, shape.radiusY || 0) > 0;
+        case 'line':
+            return Array.isArray(shape.points) && shape.points.length >= 4;
+        case 'polygon':
+            return Array.isArray(shape.points) && shape.points.length >= 6;
+        case 'star':
+            return (
+                (Math.max(0, shape.outerRadius || shape.radius || 0) > 0 &&
+                    Math.max(2, Math.floor(shape.numPoints || 0)) >= 2) ||
+                (Array.isArray(shape.points) && shape.points.length >= 6)
+            );
+        default:
+            return false;
+    }
+};
+
+export const shapeToPath = (shape) => {
+    if (!shape) return null;
+    switch (shape.type) {
+        case 'rectangle':
+            return buildRectanglePath(shape);
+        case 'circle':
+            return buildEllipsePath(shape, Math.max(0, shape.radius || 0), Math.max(0, shape.radius || 0));
+        case 'ellipse':
+            return buildEllipsePath(
+                shape,
+                Math.max(0, shape.radiusX || 0),
+                Math.max(0, shape.radiusY || 0)
+            );
+        case 'line':
+            return buildLinePath(shape);
+        case 'polygon':
+            return buildPolygonPath(shape);
+        case 'star':
+            if (Array.isArray(shape.points) && shape.points.length >= 6) {
+                return buildPolygonPath(shape);
+            }
+            return buildStarPath(shape);
+        default:
+            return null;
+    }
+};
+
 export default PATH_NODE_TYPES;

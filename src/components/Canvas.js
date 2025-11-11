@@ -17,12 +17,14 @@ import PATH_NODE_TYPES, {
     MAX_POINTS_PER_PATH,
     MIN_SEGMENT_LENGTH,
     buildSvgPath,
+    canConvertShapeToPath,
     clonePathPoint,
     clonePathPoints,
     createPathPoint,
     distanceBetween,
     distanceToSegment,
     ensureHandlesForType,
+    shapeToPath,
     translatePathPoints,
     updateHandleSymmetry,
 } from '../utils/path';
@@ -420,6 +422,8 @@ export default function Canvas({
             const konvaNode = e?.target;
             const startX = typeof konvaNode?.x === 'function' ? konvaNode.x() : 0;
             const startY = typeof konvaNode?.y === 'function' ? konvaNode.y() : 0;
+            const stage = stageRef.current;
+            const pointer = stage?.getPointerPosition?.() || null;
             dragSnapshotRef.current = {
                 id,
                 type: 'path',
@@ -429,6 +433,10 @@ export default function Canvas({
                 baseY: shape.y || 0,
                 basePoints: getPathPoints(shape),
                 baseState: shapesRef.current.map((s) => ({ ...s })),
+                dx: 0,
+                dy: 0,
+                startPointer: pointer ? { x: pointer.x, y: pointer.y } : null,
+                lastPointer: pointer ? { x: pointer.x, y: pointer.y } : null,
             };
             return;
         }
@@ -1292,6 +1300,43 @@ export default function Canvas({
             );
         },
         [updatePathShape]
+    );
+
+    const convertShapeToPath = useCallback(
+        (shapeId) => {
+            if (!shapeId) return null;
+            const currentShapes = shapesRef.current;
+            const index = currentShapes.findIndex((shape) => shape.id === shapeId);
+            if (index === -1) return null;
+            const shape = currentShapes[index];
+            if (!shape || shape.type === 'path') return shape;
+            if (!canConvertShapeToPath(shape)) return null;
+            const derived = shapeToPath(shape);
+            if (!derived || !Array.isArray(derived.points) || derived.points.length === 0) {
+                return null;
+            }
+            const nextPoints = derived.points.map((point) => clonePathPoint(point));
+            const nextShape = {
+                ...shape,
+                type: 'path',
+                points: nextPoints,
+                closed:
+                    derived.closed != null
+                        ? derived.closed
+                        : shape.type !== 'line' && nextPoints.length > 2,
+            };
+            if (derived.lineCap) nextShape.lineCap = derived.lineCap;
+            if (derived.lineJoin) nextShape.lineJoin = derived.lineJoin;
+            delete nextShape.width;
+            delete nextShape.height;
+            delete nextShape.radius;
+            delete nextShape.radiusX;
+            delete nextShape.radiusY;
+            const nextState = currentShapes.map((s, idx) => (idx === index ? nextShape : s));
+            applyChange(() => nextState, { baseState: currentShapes });
+            return nextShape;
+        },
+        [applyChange]
     );
 
     const getParentShape = (shape, source = activeShapesRef.current) => {
@@ -2422,10 +2467,28 @@ export default function Canvas({
                     return Number.isFinite(parsed) ? parsed : null;
                 })();
                 if (hitShapeId != null) {
-                    const candidate = shapesRef.current.find(
-                        (shape) => shape.id === hitShapeId && shape.type === 'path'
-                    );
-                    if (candidate) targetPathShape = candidate;
+                    const candidate = shapesRef.current.find((shape) => shape.id === hitShapeId);
+                    if (candidate) {
+                        if (candidate.type === 'path') {
+                            targetPathShape = candidate;
+                        } else if (canConvertShapeToPath(candidate)) {
+                            const converted = convertShapeToPath(candidate.id);
+                            if (converted) {
+                                targetPathShape = converted;
+                                setSelectedId(converted.id);
+                                setSelectedIds([converted.id]);
+                                setActivePathSelection(null);
+                                pathInteractionRef.current = {
+                                    shapeId: converted.id,
+                                    pendingPoint: null,
+                                    draggingHandle: null,
+                                    baseState: null,
+                                    containerId: containerId ?? null,
+                                };
+                                return;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2462,6 +2525,13 @@ export default function Canvas({
                         setActivePathSelection({ shapeId: targetPathShape.id, index: bestIndex + 1 });
                         return;
                     }
+                }
+            }
+
+            if (!existingShape && targetPathShape) {
+                if (!selectedIds.includes(targetPathShape.id)) {
+                    setSelectedId(targetPathShape.id);
+                    setSelectedIds([targetPathShape.id]);
                 }
             }
 
@@ -3086,8 +3156,17 @@ export default function Canvas({
         const current = shapesRef.current.find((s) => s.id === id) || null;
 
         if (snap && snap.id === id && snap.type === 'path') {
-            const dx = x - snap.startX;
-            const dy = y - snap.startY;
+            let dx = x - snap.startX;
+            let dy = y - snap.startY;
+            const stage = stageRef.current;
+            const pointer = stage?.getPointerPosition?.() || null;
+            if (pointer && snap.startPointer) {
+                dx = pointer.x - snap.startPointer.x;
+                dy = pointer.y - snap.startPointer.y;
+                snap.lastPointer = { x: pointer.x, y: pointer.y };
+            }
+            snap.dx = dx;
+            snap.dy = dy;
             const translated = translatePathPoints(snap.basePoints, dx, dy);
             setShapes((prev) =>
                 prev.map((s) =>
@@ -3137,8 +3216,12 @@ export default function Canvas({
         const y = typeof targetNode?.y === 'function' ? targetNode.y() : 0;
         const snap = dragSnapshotRef.current;
         if (snap && snap.id === id && snap.type === 'path') {
-            const dx = x - snap.startX;
-            const dy = y - snap.startY;
+            let dx = snap.dx != null ? snap.dx : x - snap.startX;
+            let dy = snap.dy != null ? snap.dy : y - snap.startY;
+            if (snap.startPointer && snap.lastPointer) {
+                dx = snap.lastPointer.x - snap.startPointer.x;
+                dy = snap.lastPointer.y - snap.startPointer.y;
+            }
             const translated = translatePathPoints(snap.basePoints, dx, dy);
             applyChange(
                 (prev) =>
@@ -3207,6 +3290,32 @@ export default function Canvas({
 
     // NEW: multi-select state. We'll still keep selectedId as the "primary".
     const [selectedIds, setSelectedIds] = useState([]);
+
+    useEffect(() => {
+        if (selectedTool !== 'path') return;
+        const ids = selectedIds.length ? selectedIds : selectedId != null ? [selectedId] : [];
+        if (!ids.length) return;
+        let convertedAny = false;
+        ids.forEach((id) => {
+            const shape = shapesRef.current.find((s) => s.id === id);
+            if (shape && shape.type !== 'path' && canConvertShapeToPath(shape)) {
+                const result = convertShapeToPath(id);
+                if (result) {
+                    convertedAny = true;
+                }
+            }
+        });
+        if (convertedAny) {
+            setActivePathSelection(null);
+            pathInteractionRef.current = {
+                shapeId: null,
+                pendingPoint: null,
+                draggingHandle: null,
+                baseState: null,
+                containerId: null,
+            };
+        }
+    }, [selectedTool, selectedId, selectedIds, convertShapeToPath]);
 
     useEffect(() => {
         setSelectedId(null);
