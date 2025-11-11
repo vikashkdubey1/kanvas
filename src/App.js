@@ -35,6 +35,7 @@ export default function App() {
     const [fillStyle, setFillStyle] = useState(DEFAULT_FILL_STYLE);
     const [strokeStyle, setStrokeStyle] = useState(DEFAULT_STROKE_STYLE);
     const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
+    const [strokeWidthVersion, setStrokeWidthVersion] = useState(0);
     const [isGradientPickerOpen, setGradientPickerOpen] = useState(false);
     const gradientInteractionRef = useRef({ active: false });
     const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(
@@ -72,6 +73,7 @@ export default function App() {
                 r: 'rectangle',
                 l: 'line',
                 p: 'path',
+                a: 'anchor',
                 o: 'ellipse',
                 h: 'hand',
                 f: 'frame',
@@ -251,6 +253,11 @@ export default function App() {
         });
     };
 
+    const handleStrokeWidthChange = useCallback((value) => {
+        setStrokeWidth(value);
+        setStrokeWidthVersion((prev) => prev + 1);
+    }, []);
+
     return (
         <>
             <style>
@@ -284,6 +291,40 @@ export default function App() {
                         />
                     </div>
 
+        <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
+            <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
+
+            <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <Canvas
+                        selectedTool={selectedTool}
+                        onToolChange={setSelectedTool}
+                        fillStyle={fillStyle}
+                        strokeStyle={strokeStyle}
+                        strokeWidth={strokeWidth}
+                        strokeWidthVersion={strokeWidthVersion}
+                        textOptions={textOptions}
+                        onSelectionChange={handleSelectionChange}
+                        showGradientHandles={isGradientPickerOpen}
+                        gradientInteractionRef={gradientInteractionRef}
+                    />
+                </div>
+
+                <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    onPointerDown={handlePropertiesResizeStart}
+                    style={{
+                        flex: '0 0 auto',
+                        width: 1,
+                        padding: '0',
+                        cursor: 'col-resize',
+                        display: 'flex',
+                        alignItems: 'stretch',
+                        touchAction: 'none',
+                        background: 'transparent',
+                    }}
+                >
                     <div
                         role="separator"
                         aria-orientation="vertical"
@@ -339,6 +380,36 @@ export default function App() {
                         onCornerRadiusChange={handleCornerRadiusChange}
                     />
                 </div>
+
+                <PropertiesPanel
+                    panelWidth={propertiesPanelWidth}
+                    shape={activeShape}
+                    fillStyle={fillStyle}
+                    onFillStyleChange={setFillStyle}
+                    onGradientPickerToggle={setGradientPickerOpen}
+                    gradientInteractionRef={gradientInteractionRef}
+                    strokeStyle={strokeStyle}
+                    onStrokeStyleChange={setStrokeStyle}
+                    strokeWidth={strokeWidth}
+                    onStrokeWidthChange={handleStrokeWidthChange}
+                    textFontFamily={textFontFamily}
+                    onTextFontFamilyChange={setTextFontFamily}
+                    textFontStyle={textFontStyle}
+                    onTextFontStyleChange={setTextFontStyle}
+                    textFontSize={textFontSize}
+                    onTextFontSizeChange={setTextFontSize}
+                    textLineHeight={textLineHeight}
+                    onTextLineHeightChange={setTextLineHeight}
+                    textLetterSpacing={textLetterSpacing}
+                    onTextLetterSpacingChange={setTextLetterSpacing}
+                    textAlign={textAlign}
+                    onTextAlignChange={setTextAlign}
+                    textVerticalAlign={textVerticalAlign}
+                    onTextVerticalAlignChange={setTextVerticalAlign}
+                    textDecoration={textDecoration}
+                    onTextDecorationChange={setTextDecoration}
+                    onCornerRadiusChange={handleCornerRadiusChange}
+                />
             </div>
         </>
     );

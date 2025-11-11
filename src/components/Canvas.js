@@ -390,6 +390,7 @@ export default function Canvas({
     fillStyle,
     strokeStyle,
     strokeWidth = 0,
+    strokeWidthVersion = 0,
     textOptions = {},
     onSelectionChange,
     showGradientHandles = false,
@@ -411,6 +412,7 @@ export default function Canvas({
     const idCounterRef = useRef(1); // stable id generator
     const dragSnapshotRef = useRef(null);
     const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isSelectLikeTool = selectedTool === 'select' || selectedTool === 'anchor';
     const handleDragStart = (id, e) => {
         const shape = shapesRef.current.find((s) => s.id === id);
         if (!shape) {
@@ -499,6 +501,7 @@ export default function Canvas({
         containerId: null,
     });
     const pathHandleDragRef = useRef(null);
+    const strokeWidthVersionRef = useRef(strokeWidthVersion);
     const [activePathSelection, setActivePathSelection] = useState(null);
 
 
@@ -1339,6 +1342,46 @@ export default function Canvas({
         [applyChange]
     );
 
+    const ensureAnchorEditableShape = useCallback(
+        (shapeId) => {
+            if (!shapeId) return null;
+            const current = shapesRef.current.find((shape) => shape.id === shapeId) || null;
+            if (!current) return null;
+            if (current.type === 'path') {
+                return current;
+            }
+            if (!canConvertShapeToPath(current)) {
+                return null;
+            }
+            return convertShapeToPath(shapeId);
+        },
+        [convertShapeToPath]
+    );
+
+    const enterAnchorModeForShape = useCallback(
+        (shapeId) => {
+            if (!shapeId) return null;
+            const editable = ensureAnchorEditableShape(shapeId);
+            if (!editable) return null;
+            const targetId = editable.id;
+            setSelectedId(targetId);
+            setSelectedIds([targetId]);
+            setActivePathSelection((prev) => (prev?.shapeId === targetId ? prev : null));
+            if (typeof onToolChange === 'function') {
+                onToolChange('anchor');
+            }
+            pathInteractionRef.current = {
+                shapeId: targetId,
+                pendingPoint: null,
+                draggingHandle: null,
+                baseState: null,
+                containerId: editable.parentId ?? null,
+            };
+            return editable;
+        },
+        [ensureAnchorEditableShape, onToolChange]
+    );
+
     const getParentShape = (shape, source = activeShapesRef.current) => {
         if (!shape || shape.parentId == null) return null;
         return getShapeById(shape.parentId, source);
@@ -1933,10 +1976,10 @@ export default function Canvas({
     const [selectedId, setSelectedId] = useState(null);
 
     useEffect(() => {
-        if (selectedTool === 'select' || selectedId == null) return;
+        if (isSelectLikeTool || selectedId == null) return;
         if (isDrawingRef.current) return;
         setSelectedId(null);
-    }, [selectedTool, selectedId]);
+    }, [isSelectLikeTool, selectedId, selectedTool]);
 
     useEffect(() => {
         if (fillPreviewRef.current?.isPreview) return;
@@ -1963,6 +2006,34 @@ export default function Canvas({
             }
 
             const ctrlOrMeta = e.ctrlKey || e.metaKey;
+
+            if (e.key === 'Enter' && isSelectLikeTool) {
+                const primaryId = selectedId ?? (selectedIds.length ? selectedIds[selectedIds.length - 1] : null);
+                if (primaryId) {
+                    const shape = shapesRef.current.find((s) => s.id === primaryId);
+                    if (shape && (shape.type === 'path' || canConvertShapeToPath(shape))) {
+                        e.preventDefault();
+                        enterAnchorModeForShape(primaryId);
+                        return;
+                    }
+                }
+            }
+
+            if (e.key === 'Escape' && selectedTool === 'anchor') {
+                e.preventDefault();
+                if (typeof onToolChange === 'function') {
+                    onToolChange('select');
+                }
+                setActivePathSelection(null);
+                pathInteractionRef.current = {
+                    shapeId: null,
+                    pendingPoint: null,
+                    draggingHandle: null,
+                    baseState: null,
+                    containerId: null,
+                };
+                return;
+            }
 
             if ((e.key === 'Enter' || e.key === 'Escape') && selectedTool === 'path') {
                 const state = pathInteractionRef.current;
@@ -2200,6 +2271,8 @@ export default function Canvas({
         undo,
         ungroupSelectedLayers,
         updatePathShape,
+        enterAnchorModeForShape,
+        onToolChange,
     ]);
 
     useEffect(() => {
@@ -2214,7 +2287,14 @@ export default function Canvas({
     }, [selectedId, shapes]);
 
     useEffect(() => {
-        if (selectedTool !== 'path') {
+        if (selectedTool !== 'anchor') return;
+        const primaryId = selectedId ?? (selectedIds.length ? selectedIds[selectedIds.length - 1] : null);
+        if (!primaryId) return;
+        enterAnchorModeForShape(primaryId);
+    }, [enterAnchorModeForShape, selectedId, selectedIds, selectedTool]);
+
+    useEffect(() => {
+        if (selectedTool !== 'path' && selectedTool !== 'anchor') {
             pathInteractionRef.current = {
                 shapeId: null,
                 pendingPoint: null,
@@ -2316,6 +2396,9 @@ export default function Canvas({
     ]);
 
     useEffect(() => {
+        const prevStrokeVersion = strokeWidthVersionRef.current;
+        strokeWidthVersionRef.current = strokeWidthVersion;
+
         // Active selection (multi preferred, else single)
         const ids = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
         if (!ids.length) return;
@@ -2328,6 +2411,11 @@ export default function Canvas({
         const desiredStroke = resolvedStrokeColor;                     // string like '#000000'
         const desiredType = resolvedStrokeType;                      // e.g., 'solid'
         const desiredWidth = typeof strokeWidth === 'number' ? strokeWidth : 0;
+
+        const strokeMeta = strokeStyle && typeof strokeStyle === 'object' ? strokeStyle.meta || null : null;
+        const versionChanged = prevStrokeVersion !== strokeWidthVersion;
+        const shouldApply = Boolean(strokeMeta) || versionChanged;
+        if (!shouldApply) return;
 
         const computeTargetStrokeWidth = (shape) => {
             if (!shape) return desiredWidth;
@@ -2377,7 +2465,8 @@ export default function Canvas({
         resolvedStrokeColor,   // color from panel
         resolvedStrokeType,    // 'solid' etc.
         strokeWidth,           // numeric width
-        selectedIds, selectedId
+        selectedIds, selectedId,
+        strokeStyle?.meta
     ]);
 
     useEffect(() => {
@@ -2426,7 +2515,7 @@ export default function Canvas({
         const clickedOnEmpty = targetNode === stage;
         const shiftKey = !!(e?.evt?.shiftKey || e?.shiftKey);
 
-        if (selectedTool === 'select' && clickedOnEmpty) {
+        if (isSelectLikeTool && clickedOnEmpty) {
             setSelectedId(null);
             setSelectedIds([]);
             const pointer = getCanvasPointer();
@@ -2920,7 +3009,7 @@ export default function Canvas({
                 });
                 return next;
             });
-            if (!removed && selectedTool !== 'path' && selectedTool !== 'select') {
+            if (!removed && selectedTool !== 'path' && !isSelectLikeTool) {
                 if (typeof onToolChange === 'function') onToolChange('select');
             }
 
@@ -2967,12 +3056,12 @@ export default function Canvas({
             const { start, end } = marqueeStateRef.current;
             resetMarquee();
             if (!start || !end) {
-                if (selectedTool === 'select') setStageCursor('default');
+                if (isSelectLikeTool) setStageCursor('default');
                 return;
             }
             const rect = rectFromPoints(start, end);
             if (!rect || rect.width < 2 || rect.height < 2) {
-                if (selectedTool === 'select') setStageCursor('default');
+                if (isSelectLikeTool) setStageCursor('default');
                 return;
             }
 
@@ -3037,7 +3126,7 @@ export default function Canvas({
                     lastLayerAnchorIndexRef.current = null;
                 }
             }
-            if (selectedTool === 'select') setStageCursor('default');
+            if (isSelectLikeTool) setStageCursor('default');
             return;
         }
 
@@ -3074,7 +3163,7 @@ export default function Canvas({
         const container = stage.container();
         if (!container) return;
 
-        if (selectedTool === 'select') {
+        if (isSelectLikeTool) {
             container.style.cursor = 'default';
         } else if (selectedTool === 'hand') {
             container.style.cursor = isPanningRef.current ? 'grabbing' : 'grab';
@@ -3091,7 +3180,7 @@ export default function Canvas({
         const stage = stageRef.current;
         if (!tr || !stage) return;
 
-        if (selectedTool !== 'select') {
+        if (!isSelectLikeTool) {
             if (typeof tr.nodes === 'function') tr.nodes([]);
             const trLayer = typeof tr.getLayer === 'function' ? tr.getLayer() : null;
             if (trLayer && typeof trLayer.batchDraw === 'function') trLayer.batchDraw();
@@ -3611,6 +3700,39 @@ export default function Canvas({
             // lines are transformed by points; for simplicity just update points
             const rotation = node.rotation() || 0;
             applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, points: node.points(), rotation: snapAngle(rotation) } : s)));
+        } else if (shape.type === 'path') {
+            const transform = typeof node.getTransform === 'function' ? node.getTransform().copy() : null;
+            if (!transform) return;
+            const mapPoint = (pt) => {
+                const mapped = transform.point({ x: pt.x, y: pt.y });
+                const nextPoint = clonePathPoint(pt) || createPathPoint({ x: mapped.x, y: mapped.y });
+                nextPoint.x = mapped.x;
+                nextPoint.y = mapped.y;
+                if (pt.handles) {
+                    nextPoint.handles = {};
+                    if (pt.handles.left) {
+                        const left = transform.point({ x: pt.handles.left.x, y: pt.handles.left.y });
+                        nextPoint.handles.left = left;
+                    }
+                    if (pt.handles.right) {
+                        const right = transform.point({ x: pt.handles.right.x, y: pt.handles.right.y });
+                        nextPoint.handles.right = right;
+                    }
+                    if (!nextPoint.handles.left && !nextPoint.handles.right) {
+                        delete nextPoint.handles;
+                    }
+                }
+                return nextPoint;
+            };
+            const basePoints = getPathPoints(shape);
+            const nextPoints = basePoints.map(mapPoint);
+            node.position({ x: 0, y: 0 });
+            node.scaleX(1);
+            node.scaleY(1);
+            node.rotation(0);
+            applyChange((prev) =>
+                prev.map((s) => (s.id === id ? { ...s, points: nextPoints } : s))
+            );
         } else if (shape.type === 'text') {
             const rotation = node.rotation() || 0;
             applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, x: node.x(), y: node.y(), rotation: snapAngle(rotation) } : s)));
@@ -3829,14 +3951,14 @@ export default function Canvas({
             }
         }
 
-        if (nearCorner && selectedTool === 'select') {
+        if (nearCorner && isSelectLikeTool) {
             // show rotation cursor when hovering a corner in select mode
             setStageCursor('crosshair');
         } else {
             // restore based on tool
             if (selectedTool === 'hand') {
                 setStageCursor(isPanningRef.current ? 'grabbing' : 'grab');
-            } else if (selectedTool === 'select') {
+            } else if (isSelectLikeTool) {
                 setStageCursor('default');
             } else {
                 setStageCursor('crosshair');
@@ -3847,7 +3969,7 @@ export default function Canvas({
     const handleShapeMouseLeave = () => {
         if (selectedTool === 'hand') {
             setStageCursor(isPanningRef.current ? 'grabbing' : 'grab');
-        } else if (selectedTool === 'select') {
+        } else if (isSelectLikeTool) {
             setStageCursor('default');
         } else {
             setStageCursor('crosshair');
@@ -3861,11 +3983,17 @@ export default function Canvas({
                 event.cancelBubble = true;
             }
         } catch { }
-        if (selectedTool !== 'select') return;
+        if (!isSelectLikeTool) return;
         if (shape?.locked) return;
 
         const shift = !!(event?.evt?.shiftKey || event?.shiftKey);
         const ctrlLike = !!(event?.evt?.metaKey || event?.evt?.ctrlKey || event?.metaKey || event?.ctrlKey);
+
+        if (selectedTool === 'anchor') {
+            enterAnchorModeForShape(shape.id);
+            return;
+        }
+
         if (shift || ctrlLike) {
             // Toggle this shape in the multi-select set
             toggleSelect(shape.id);
@@ -3902,7 +4030,7 @@ export default function Canvas({
         if (shape.locked) return;
         if (event && typeof event.cancelBubble !== 'undefined') event.cancelBubble = true;
         try { event?.target?.stopDrag?.(); } catch { } // kill any drag that may have started
-        if (selectedTool !== 'select') return;
+        if (!isSelectLikeTool) return;
 
         const stage = stageRef.current;
         const pointer = stage?.getPointerPosition?.() || null;
@@ -3931,7 +4059,11 @@ export default function Canvas({
             const path = getContainerPathForId(containerAncestor.id, shapesRef.current);
             setActiveContainerPath([null, ...path]);
         }
-        selectSingle(shape.id);
+        if (shape.type === 'path' || canConvertShapeToPath(shape)) {
+            enterAnchorModeForShape(shape.id);
+        } else {
+            selectSingle(shape.id);
+        }
     };
 
 
@@ -4362,7 +4494,7 @@ export default function Canvas({
             1
         );
         const blendMode = BLEND_MODE_TO_COMPOSITE[shape.blendMode] || 'source-over';
-        const isSelectable = selectedTool === 'select';
+        const isSelectable = isSelectLikeTool;
         const isLocked = !!shape.locked;
         const canDragThis = isSelectable && !isLocked && Array.isArray(selectedIds) && selectedIds.includes(shape.id); // ✅ drag only if selected
         const commonProps = {
@@ -4438,6 +4570,7 @@ export default function Canvas({
                         width={shape.width}
                         height={shape.height}
                         offset={{ x: shape.width / 2, y: shape.height / 2 }}
+                        cornerRadius={Math.max(0, shape.cornerRadius || 0)}
                         {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
@@ -4880,7 +5013,7 @@ export default function Canvas({
     };
 
     const renderPathEditor = () => {
-        const allowEditing = selectedTool === 'path' || selectedTool === 'select';
+        const allowEditing = selectedTool === 'path' || selectedTool === 'select' || selectedTool === 'anchor';
         if (!allowEditing) return null;
         const primaryShape = selectedId
             ? shapes.find((s) => s.id === selectedId && s.type === 'path')
@@ -4895,7 +5028,10 @@ export default function Canvas({
         const elements = [];
         const handleColor = '#38bdf8';
         const anchorColor = '#2563eb';
-        const anchorSize = 8;
+        const stageScale = stageRef.current ? stageRef.current.scaleX() : scale;
+        const zoomSafeScale = stageScale || 1;
+        const anchorSize = 8 / zoomSafeScale;
+        const handleRadius = 4 / zoomSafeScale;
 
         const beginDrag = (shapeId, payload) => {
             pathHandleDragRef.current = {
@@ -4928,7 +5064,7 @@ export default function Canvas({
                         key={`handle-left-${anchorKey}`}
                         x={left.x}
                         y={left.y}
-                        radius={4}
+                        radius={handleRadius}
                         fill="#ffffff"
                         stroke={handleColor}
                         strokeWidth={1}
@@ -4980,7 +5116,7 @@ export default function Canvas({
                         key={`handle-right-${anchorKey}`}
                         x={right.x}
                         y={right.y}
-                        radius={4}
+                        radius={handleRadius}
                         fill="#ffffff"
                         stroke={handleColor}
                         strokeWidth={1}
@@ -5065,6 +5201,123 @@ export default function Canvas({
         });
 
         return <Group key={`path-editor-${primaryShape.id}`}>{elements}</Group>;
+    };
+
+    const renderCornerRadiusHandles = () => {
+        if (!isSelectLikeTool) return null;
+        if (!selectedId) return null;
+        const shape = shapes.find((s) => s.id === selectedId);
+        if (!shape || shape.type !== 'rectangle') return null;
+        const width = Math.max(0, shape.width || 0);
+        const height = Math.max(0, shape.height || 0);
+        if (!width || !height) return null;
+        const stageScale = stageRef.current ? stageRef.current.scaleX() : scale;
+        const zoomSafeScale = stageScale || 1;
+        const handleRadius = 6 / zoomSafeScale;
+        const halfW = width / 2;
+        const halfH = height / 2;
+        const maxRadius = Math.min(halfW, halfH);
+        const currentRadiusRaw = typeof shape.cornerRadius === 'number' ? shape.cornerRadius : 0;
+        const currentRadius = clampValue(currentRadiusRaw, 0, maxRadius);
+        const insetBase = Math.min(maxRadius, Math.max(currentRadius, 12 / zoomSafeScale));
+        const rotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
+        const center = { x: shape.x || 0, y: shape.y || 0 };
+        const toGlobal = (local) => ({
+            x: center.x + local.x * cos - local.y * sin,
+            y: center.y + local.x * sin + local.y * cos,
+        });
+        const toLocal = (global) => {
+            const dx = global.x - center.x;
+            const dy = global.y - center.y;
+            return {
+                x: dx * cos + dy * sin,
+                y: -dx * sin + dy * cos,
+            };
+        };
+        const updateCornerRadius = (nextRadius, { commit = false } = {}) => {
+            const clamped = clampValue(nextRadius, 0, maxRadius);
+            if (commit) {
+                applyChange((prev) =>
+                    prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
+                );
+            } else {
+                setShapes((prev) =>
+                    prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
+                );
+            }
+            return clamped;
+        };
+
+        const handleConfigs = [
+            { key: 'top-left', sx: -1, sy: -1 },
+            { key: 'top-right', sx: 1, sy: -1 },
+            { key: 'bottom-right', sx: 1, sy: 1 },
+            { key: 'bottom-left', sx: -1, sy: 1 },
+        ];
+
+        return (
+            <Group key={`corner-radius-${shape.id}`} listening={true}>
+                {handleConfigs.map(({ key, sx, sy }) => {
+                    const local = {
+                        x: sx * (halfW - insetBase),
+                        y: sy * (halfH - insetBase),
+                    };
+                    const position = toGlobal(local);
+                    return (
+                        <Circle
+                            key={`corner-radius-handle-${shape.id}-${key}`}
+                            x={position.x}
+                            y={position.y}
+                            radius={handleRadius}
+                            fill="#1d4ed8"
+                            stroke="#ffffff"
+                            strokeWidth={1 / zoomSafeScale}
+                            draggable
+                            onDragMove={(evt) => {
+                                evt.cancelBubble = true;
+                                const stage = evt.target.getStage();
+                                const pointer = stage?.getPointerPosition();
+                                if (!pointer) return;
+                                const localPointer = toLocal(pointer);
+                                const corner = { x: sx * halfW, y: sy * halfH };
+                                const dx = Math.abs(corner.x - localPointer.x);
+                                const dy = Math.abs(corner.y - localPointer.y);
+                                const candidate = Math.min(dx, dy);
+                                const applied = updateCornerRadius(candidate, { commit: false });
+                                const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                                const updatedLocal = {
+                                    x: sx * (halfW - inset),
+                                    y: sy * (halfH - inset),
+                                };
+                                const updatedGlobal = toGlobal(updatedLocal);
+                                evt.target.absolutePosition(updatedGlobal);
+                            }}
+                            onDragEnd={(evt) => {
+                                evt.cancelBubble = true;
+                                const stage = evt.target.getStage();
+                                const pointer = stage?.getPointerPosition();
+                                if (!pointer) return;
+                                const localPointer = toLocal(pointer);
+                                const corner = { x: sx * halfW, y: sy * halfH };
+                                const dx = Math.abs(corner.x - localPointer.x);
+                                const dy = Math.abs(corner.y - localPointer.y);
+                                const candidate = Math.min(dx, dy);
+                                const applied = updateCornerRadius(candidate, { commit: true });
+                                const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                                const updatedLocal = {
+                                    x: sx * (halfW - inset),
+                                    y: sy * (halfH - inset),
+                                };
+                                const updatedGlobal = toGlobal(updatedLocal);
+                                evt.target.absolutePosition(updatedGlobal);
+                            }}
+                        />
+                    );
+                })}
+            </Group>
+        );
     };
 
     const toggleLayerCollapse = useCallback((shapeId) => {
@@ -5759,10 +6012,11 @@ export default function Canvas({
                             />
                         )}
                     </Layer>
-                    <Layer listening={selectedTool === 'path' || selectedTool === 'select'}>
+                    <Layer listening={selectedTool === 'path' || isSelectLikeTool}>
                         {renderPathEditor()}
                     </Layer>
-                    <Layer listening={selectedTool === 'select'}>{renderGradientHandles()}</Layer>
+                    <Layer listening={isSelectLikeTool}>{renderCornerRadiusHandles()}</Layer>
+                    <Layer listening={isSelectLikeTool}>{renderGradientHandles()}</Layer>
                     <PixelGrid
                         scale={scale}
                         stagePos={stagePos}
