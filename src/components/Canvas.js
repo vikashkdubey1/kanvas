@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer, Path } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer, Path, RegularPolygon } from 'react-konva';
 import PagesPanel from './PagesPanel';
 import LayersPanel from './LayersPanel';
 import PropertiesPanel from './PropertiesPanel';
@@ -122,6 +122,10 @@ const getShapeDimensions = (shape) => {
                 width: Math.max(0, (shape.radiusX || 0) * 2),
                 height: Math.max(0, (shape.radiusY || 0) * 2),
             };
+        case 'polygon': {
+            const radius = Math.max(0, shape.radius || 0);
+            return { width: radius * 2, height: radius * 2 };
+        }
         case 'path': {
             const bounds = getPointsBoundingBox(getPathPoints(shape));
             if (!bounds) return { width: 0, height: 0 };
@@ -186,6 +190,17 @@ const getShapeBoundingBox = (shape) => {
                 bottom: centerY + radiusY,
             };
         }
+        case 'polygon': {
+            const radius = Math.max(0, shape.radius || 0);
+            const centerX = shape.x || 0;
+            const centerY = shape.y || 0;
+            return {
+                left: centerX - radius,
+                right: centerX + radius,
+                top: centerY - radius,
+                bottom: centerY + radius,
+            };
+        }
         case 'line': {
             const points = Array.isArray(shape.points) ? shape.points : [];
             if (points.length < 2) {
@@ -239,6 +254,21 @@ const getShapeBoundingBox = (shape) => {
         default:
             return null;
     }
+};
+
+const buildRegularPolygonPoints = (center, radius, sides, rotationDegrees = 0) => {
+    const resolvedSides = Math.max(3, Math.floor(sides || 0));
+    const resolvedRadius = Math.max(0, radius || 0);
+    const rotation = (Number.isFinite(rotationDegrees) ? rotationDegrees : 0) * (Math.PI / 180);
+    const baseAngle = rotation - Math.PI / 2;
+    const step = (Math.PI * 2) / resolvedSides;
+    const points = [];
+    for (let index = 0; index < resolvedSides; index += 1) {
+        const angle = baseAngle + index * step;
+        points.push(center.x + Math.cos(angle) * resolvedRadius);
+        points.push(center.y + Math.sin(angle) * resolvedRadius);
+    }
+    return points;
 };
 
 const unionBoundingBoxes = (boxes) => {
@@ -395,6 +425,8 @@ export default function Canvas({
     onSelectionChange,
     showGradientHandles = false,
     gradientInteractionRef = null,
+    shapePropertyRequest = null,
+    onShapePropertyRequestHandled = null,
 }) {
     const resolvedFillType = fillStyle?.type || 'solid';
     const resolvedFillGradient = useMemo(
@@ -478,6 +510,7 @@ export default function Canvas({
         rectangle: 1,
         circle: 1,
         ellipse: 1,
+        polygon: 1,
         line: 1,
         path: 1,
         text: 1,
@@ -2310,7 +2343,7 @@ export default function Canvas({
         if (!ids.length) return;
 
         // Only apply on shapes that can have fills
-        const supportsFill = new Set(['rectangle', 'circle', 'ellipse', 'text', 'frame', 'path']);
+        const supportsFill = new Set(['rectangle', 'circle', 'ellipse', 'polygon', 'text', 'frame', 'path']);
         const idsSet = new Set(ids);
 
         // Respect live-preview metadata (prevents color ping-pong)
@@ -2404,7 +2437,7 @@ export default function Canvas({
         if (!ids.length) return;
 
         // Shapes that can have stroke
-        const supportsStroke = new Set(['rectangle', 'circle', 'ellipse', 'line', 'path', 'text', 'frame']);
+        const supportsStroke = new Set(['rectangle', 'circle', 'ellipse', 'polygon', 'line', 'path', 'text', 'frame']);
         const selectedSet = new Set(ids);
 
         // Desired stroke from the panel
@@ -2467,6 +2500,164 @@ export default function Canvas({
         strokeWidth,           // numeric width
         selectedIds, selectedId,
         strokeStyle?.meta
+    ]);
+
+    useEffect(() => {
+        if (!shapePropertyRequest) return;
+        const { version, targetId, payload } = shapePropertyRequest;
+        if (!targetId || !payload || !payload.type) {
+            if (typeof onShapePropertyRequestHandled === 'function') {
+                onShapePropertyRequestHandled(version ?? null, false);
+            }
+            return;
+        }
+
+        const applyForShape = (shape) => {
+            const { type, value } = payload;
+            switch (type) {
+                case 'position': {
+                    const nextX = Number.isFinite(value?.x) ? value.x : shape.x;
+                    const nextY = Number.isFinite(value?.y) ? value.y : shape.y;
+                    if (shape.type === 'path') {
+                        const dx = (Number.isFinite(nextX) ? nextX : 0) - (shape.x || 0);
+                        const dy = (Number.isFinite(nextY) ? nextY : 0) - (shape.y || 0);
+                        if (!dx && !dy) return shape;
+                        const points = translatePathPoints(getPathPoints(shape), dx, dy);
+                        return { ...shape, x: nextX, y: nextY, points };
+                    }
+                    if (shape.type === 'polygon') {
+                        if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) return shape;
+                        if (shape.x === nextX && shape.y === nextY) return shape;
+                        const sides = Math.max(3, Math.floor(shape.sides || 5));
+                        const points = buildRegularPolygonPoints(
+                            { x: nextX, y: nextY },
+                            shape.radius || 0,
+                            sides,
+                            shape.rotation || 0
+                        );
+                        return { ...shape, x: nextX, y: nextY, points };
+                    }
+                    if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+                        return shape;
+                    }
+                    if (shape.x === nextX && shape.y === nextY) return shape;
+                    return { ...shape, x: nextX, y: nextY };
+                }
+                case 'dimensions': {
+                    const width = Number.isFinite(value?.width) ? Math.max(0, value.width) : null;
+                    const height = Number.isFinite(value?.height) ? Math.max(0, value.height) : null;
+                    if (width == null || height == null) return shape;
+                    if (shape.type === 'rectangle' || shape.type === 'frame' || shape.type === 'group') {
+                        if (shape.width === width && shape.height === height) return shape;
+                        return { ...shape, width, height };
+                    }
+                    if (shape.type === 'circle') {
+                        const radius = Math.max(1, Math.min(width, height) / 2);
+                        if (shape.radius === radius) return shape;
+                        return { ...shape, radius };
+                    }
+                    if (shape.type === 'ellipse') {
+                        const radiusX = Math.max(1, width / 2);
+                        const radiusY = Math.max(1, height / 2);
+                        if (shape.radiusX === radiusX && shape.radiusY === radiusY) return shape;
+                        return { ...shape, radiusX, radiusY };
+                    }
+                    if (shape.type === 'polygon') {
+                        const radius = Math.max(1, Math.max(width, height) / 2);
+                        if (shape.radius === radius) return shape;
+                        const sides = Math.max(3, Math.floor(shape.sides || 5));
+                        const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, radius, sides, shape.rotation || 0);
+                        return { ...shape, radius, points };
+                    }
+                    return shape;
+                }
+                case 'rotation': {
+                    if (!Number.isFinite(value)) return shape;
+                    const nextRotation = value % 360;
+                    if (shape.rotation === nextRotation) return shape;
+                    if (shape.type === 'polygon') {
+                        const sides = Math.max(3, Math.floor(shape.sides || 5));
+                        const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, shape.radius || 0, sides, nextRotation);
+                        return { ...shape, rotation: nextRotation, points };
+                    }
+                    return { ...shape, rotation: nextRotation };
+                }
+                case 'opacity': {
+                    if (!Number.isFinite(value)) return shape;
+                    const nextOpacity = clampValue(value, 0, 1);
+                    if (shape.opacity === nextOpacity) return shape;
+                    return { ...shape, opacity: nextOpacity };
+                }
+                case 'cornerRadius': {
+                    if (
+                        shape.type === 'rectangle' ||
+                        shape.type === 'frame' ||
+                        shape.type === 'group'
+                    ) {
+                        if (value && typeof value === 'object') {
+                            const details = {
+                                topLeft: Math.max(0, Number(value.topLeft) || 0),
+                                topRight: Math.max(0, Number(value.topRight) || 0),
+                                bottomRight: Math.max(0, Number(value.bottomRight) || 0),
+                                bottomLeft: Math.max(0, Number(value.bottomLeft) || 0),
+                            };
+                            const current = shape.cornerRadius || {};
+                            const same =
+                                current.topLeft === details.topLeft &&
+                                current.topRight === details.topRight &&
+                                current.bottomRight === details.bottomRight &&
+                                current.bottomLeft === details.bottomLeft;
+                            if (same) return shape;
+                            return { ...shape, cornerRadius: details };
+                        }
+                        const nextRadius = Math.max(0, Number(value) || 0);
+                        if (shape.cornerRadius === nextRadius) return shape;
+                        return { ...shape, cornerRadius: nextRadius };
+                    }
+                    if (shape.type === 'polygon' || shape.type === 'path') {
+                        const nextRadius = Math.max(0, Number(value) || 0);
+                        if (shape.cornerRadius === nextRadius) return shape;
+                        return { ...shape, cornerRadius: nextRadius };
+                    }
+                    return shape;
+                }
+                case 'cornerSmoothing': {
+                    if (!Number.isFinite(value)) return shape;
+                    const nextSmoothing = clampValue(value, 0, 1);
+                    if (shape.cornerSmoothing === nextSmoothing) return shape;
+                    return { ...shape, cornerSmoothing: nextSmoothing };
+                }
+                case 'polygonSides': {
+                    if (shape.type !== 'polygon') return shape;
+                    const sides = Math.max(3, Math.floor(value));
+                    if (shape.sides === sides) return shape;
+                    const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, shape.radius || 0, sides, shape.rotation || 0);
+                    return { ...shape, sides, points };
+                }
+                default:
+                    return shape;
+            }
+        };
+
+        let didApply = false;
+        applyChange((prev) =>
+            prev.map((shape) => {
+                if (shape.id !== targetId) return shape;
+                const nextShape = applyForShape(shape);
+                if (nextShape !== shape) {
+                    didApply = true;
+                }
+                return nextShape;
+            })
+        );
+
+        if (typeof onShapePropertyRequestHandled === 'function') {
+            onShapePropertyRequestHandled(version, didApply);
+        }
+    }, [
+        applyChange,
+        onShapePropertyRequestHandled,
+        shapePropertyRequest,
     ]);
 
     useEffect(() => {
@@ -2707,7 +2898,7 @@ export default function Canvas({
         }
 
         // start drag-create for supported tools
-        const dragTools = ['rectangle', 'circle', 'ellipse', 'line', 'frame', 'group'];
+        const dragTools = ['rectangle', 'circle', 'ellipse', 'polygon', 'line', 'frame', 'group'];
         if (dragTools.includes(selectedTool)) {
             const pos = getCanvasPointer();
             if (!pos) return;
@@ -2729,6 +2920,21 @@ export default function Canvas({
                     stroke: resolvedStrokeColor,
                     strokeType: resolvedStrokeType,
                     strokeWidth: strokeWidth || 0,
+                });
+            } else if (selectedTool === 'polygon') {
+                const sides = 5;
+                newShape = createShape('polygon', {
+                    ...baseProps,
+                    radius: 1,
+                    sides,
+                    cornerRadius: 0,
+                    fill: '#d9d9d9',
+                    fillType: resolvedFillType,
+                    fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
+                    stroke: resolvedStrokeColor,
+                    strokeType: resolvedStrokeType,
+                    strokeWidth: strokeWidth || 0,
+                    points: buildRegularPolygonPoints({ x: pos.x, y: pos.y }, 1, sides, baseProps.rotation || 0),
                 });
             } else if (selectedTool === 'circle') {
                 newShape = createShape('circle', {
@@ -2942,6 +3148,17 @@ export default function Canvas({
                         const cy = start.y + dy / 2;
                         return { ...s, x: cx, y: cy, radiusX: rx, radiusY: ry };
                     }
+                    if (s.type === 'polygon') {
+                        const dx = pos.x - start.x;
+                        const dy = pos.y - start.y;
+                        const radius = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+                        const sides = Math.max(3, Math.floor(s.sides || 5));
+                        return {
+                            ...s,
+                            radius,
+                            points: buildRegularPolygonPoints({ x: s.x || start.x, y: s.y || start.y }, radius, sides, s.rotation || 0),
+                        };
+                    }
                     if (s.type === 'line') {
                         return { ...s, points: [start.x, start.y, pos.x, pos.y] };
                     }
@@ -3002,6 +3219,7 @@ export default function Canvas({
                     else if (s.type === 'frame' || s.type === 'group') keep = s.width >= 5 && s.height >= 5;
                     else if (s.type === 'circle') keep = s.radius >= 3;
                     else if (s.type === 'ellipse') keep = s.radiusX >= 3 && s.radiusY >= 3;
+                    else if (s.type === 'polygon') keep = s.radius >= 3;
                     else if (s.type === 'line') keep = !(Math.abs(s.points[0] - s.points[2]) < 2 && Math.abs(s.points[1] - s.points[3]) < 2);
                     else if (s.type === 'path') keep = getPathPoints(s).length > 1;
                     if (!keep) removed = true;
@@ -3696,6 +3914,34 @@ export default function Canvas({
             node.scaleX(1);
             node.scaleY(1);
             applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, radiusX: newRadiusX, radiusY: newRadiusY, x: node.x(), y: node.y(), rotation: snapAngle(rotation) } : s)));
+        } else if (shape.type === 'polygon') {
+            const scaleVal = node.scaleX();
+            const newRadius = Math.max(1, node.radius() * scaleVal);
+            const rotation = node.rotation() || 0;
+            node.scaleX(1);
+            node.scaleY(1);
+            const sides = Math.max(3, Math.floor(shape.sides || 5));
+            const snappedRotation = snapAngle(rotation);
+            const updatedPoints = buildRegularPolygonPoints(
+                { x: node.x(), y: node.y() },
+                newRadius,
+                sides,
+                snappedRotation
+            );
+            applyChange((prev) =>
+                prev.map((s) =>
+                    s.id === id
+                        ? {
+                              ...s,
+                              radius: newRadius,
+                              x: node.x(),
+                              y: node.y(),
+                              rotation: snappedRotation,
+                              points: updatedPoints,
+                          }
+                        : s
+                )
+            );
         } else if (shape.type === 'line') {
             // lines are transformed by points; for simplicity just update points
             const rotation = node.rotation() || 0;
@@ -4604,9 +4850,27 @@ export default function Canvas({
                         rotation={shape.rotation || 0}
                     />
                 );
+            case 'polygon': {
+                const radius = Math.max(1, shape.radius || 0);
+                const sides = Math.max(3, Math.floor(shape.sides || 5));
+                return (
+                    <RegularPolygon
+                        {...commonProps}
+                        x={shape.x}
+                        y={shape.y}
+                        radius={radius}
+                        sides={sides}
+                        cornerRadius={Math.max(0, shape.cornerRadius || 0)}
+                        {...fillProps}
+                        stroke={shape.stroke}
+                        strokeWidth={shape.strokeWidth}
+                        rotation={shape.rotation || 0}
+                    />
+                );
+            }
             case 'line':
                 return (
-                    <Line
+                    <Path
                         {...commonProps}
                         points={shape.points}
                         stroke={shape.stroke}
@@ -5207,69 +5471,173 @@ export default function Canvas({
         if (!isSelectLikeTool) return null;
         if (!selectedId) return null;
         const shape = shapes.find((s) => s.id === selectedId);
-        if (!shape || shape.type !== 'rectangle') return null;
-        const width = Math.max(0, shape.width || 0);
-        const height = Math.max(0, shape.height || 0);
-        if (!width || !height) return null;
+        if (!shape) return null;
+        if (!('cornerRadius' in shape)) return null;
+
         const stageScale = stageRef.current ? stageRef.current.scaleX() : scale;
         const zoomSafeScale = stageScale || 1;
         const handleRadius = 6 / zoomSafeScale;
-        const halfW = width / 2;
-        const halfH = height / 2;
-        const maxRadius = Math.min(halfW, halfH);
-        const currentRadiusRaw = typeof shape.cornerRadius === 'number' ? shape.cornerRadius : 0;
-        const currentRadius = clampValue(currentRadiusRaw, 0, maxRadius);
-        const insetBase = Math.min(maxRadius, Math.max(currentRadius, 12 / zoomSafeScale));
-        const rotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
-        const cos = Math.cos(rotation);
-        const sin = Math.sin(rotation);
-        const center = { x: shape.x || 0, y: shape.y || 0 };
-        const toGlobal = (local) => ({
-            x: center.x + local.x * cos - local.y * sin,
-            y: center.y + local.x * sin + local.y * cos,
-        });
-        const toLocal = (global) => {
-            const dx = global.x - center.x;
-            const dy = global.y - center.y;
-            return {
-                x: dx * cos + dy * sin,
-                y: -dx * sin + dy * cos,
+
+        if (shape.type === 'rectangle') {
+            const width = Math.max(0, shape.width || 0);
+            const height = Math.max(0, shape.height || 0);
+            if (!width || !height) return null;
+            const halfW = width / 2;
+            const halfH = height / 2;
+            const maxRadius = Math.min(halfW, halfH);
+            const currentRadiusRaw = typeof shape.cornerRadius === 'number' ? shape.cornerRadius : 0;
+            const currentRadius = clampValue(currentRadiusRaw, 0, maxRadius);
+            const insetBase = Math.min(maxRadius, Math.max(currentRadius, 12 / zoomSafeScale));
+            const rotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
+            const cos = Math.cos(rotation);
+            const sin = Math.sin(rotation);
+            const center = { x: shape.x || 0, y: shape.y || 0 };
+            const toGlobal = (local) => ({
+                x: center.x + local.x * cos - local.y * sin,
+                y: center.y + local.x * sin + local.y * cos,
+            });
+            const toLocal = (global) => {
+                const dx = global.x - center.x;
+                const dy = global.y - center.y;
+                return {
+                    x: dx * cos + dy * sin,
+                    y: -dx * sin + dy * cos,
+                };
             };
-        };
-        const updateCornerRadius = (nextRadius, { commit = false } = {}) => {
-            const clamped = clampValue(nextRadius, 0, maxRadius);
-            if (commit) {
-                applyChange((prev) =>
-                    prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
-                );
-            } else {
-                setShapes((prev) =>
-                    prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
-                );
+            const updateCornerRadius = (nextRadius, { commit = false } = {}) => {
+                const clamped = clampValue(nextRadius, 0, maxRadius);
+                if (commit) {
+                    applyChange((prev) =>
+                        prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
+                    );
+                } else {
+                    setShapes((prev) =>
+                        prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
+                    );
+                }
+                return clamped;
+            };
+
+            const handleConfigs = [
+                { key: 'top-left', sx: -1, sy: -1 },
+                { key: 'top-right', sx: 1, sy: -1 },
+                { key: 'bottom-right', sx: 1, sy: 1 },
+                { key: 'bottom-left', sx: -1, sy: 1 },
+            ];
+
+            return (
+                <Group key={`corner-radius-${shape.id}`} listening={true}>
+                    {handleConfigs.map(({ key, sx, sy }) => {
+                        const local = {
+                            x: sx * (halfW - insetBase),
+                            y: sy * (halfH - insetBase),
+                        };
+                        const position = toGlobal(local);
+                        return (
+                            <Circle
+                                key={`corner-radius-handle-${shape.id}-${key}`}
+                                x={position.x}
+                                y={position.y}
+                                radius={handleRadius}
+                                fill="#1d4ed8"
+                                stroke="#ffffff"
+                                strokeWidth={1 / zoomSafeScale}
+                                draggable
+                                onDragMove={(evt) => {
+                                    evt.cancelBubble = true;
+                                    const stage = evt.target.getStage();
+                                    const pointer = stage?.getPointerPosition();
+                                    if (!pointer) return;
+                                    const localPointer = toLocal(pointer);
+                                    const corner = { x: sx * halfW, y: sy * halfH };
+                                    const dx = Math.abs(corner.x - localPointer.x);
+                                    const dy = Math.abs(corner.y - localPointer.y);
+                                    const candidate = Math.min(dx, dy);
+                                    const applied = updateCornerRadius(candidate, { commit: false });
+                                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                                    const updatedLocal = {
+                                        x: sx * (halfW - inset),
+                                        y: sy * (halfH - inset),
+                                    };
+                                    const updatedGlobal = toGlobal(updatedLocal);
+                                    evt.target.absolutePosition(updatedGlobal);
+                                }}
+                                onDragEnd={(evt) => {
+                                    evt.cancelBubble = true;
+                                    const stage = evt.target.getStage();
+                                    const pointer = stage?.getPointerPosition();
+                                    if (!pointer) return;
+                                    const localPointer = toLocal(pointer);
+                                    const corner = { x: sx * halfW, y: sy * halfH };
+                                    const dx = Math.abs(corner.x - localPointer.x);
+                                    const dy = Math.abs(corner.y - localPointer.y);
+                                    const candidate = Math.min(dx, dy);
+                                    const applied = updateCornerRadius(candidate, { commit: true });
+                                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                                    const updatedLocal = {
+                                        x: sx * (halfW - inset),
+                                        y: sy * (halfH - inset),
+                                    };
+                                    const updatedGlobal = toGlobal(updatedLocal);
+                                    evt.target.absolutePosition(updatedGlobal);
+                                }}
+                            />
+                        );
+                    })}
+                </Group>
+            );
+        }
+
+        if (shape.type === 'polygon') {
+            const radius = Math.max(0, shape.radius || 0);
+            if (!radius) return null;
+            const sides = Math.max(3, Math.floor(shape.sides || 5));
+            const maxRadius = radius;
+            const currentRadius = clampValue(Number(shape.cornerRadius) || 0, 0, maxRadius);
+            const center = { x: shape.x || 0, y: shape.y || 0 };
+            const vertices =
+                Array.isArray(shape.points) && shape.points.length >= sides * 2
+                    ? shape.points
+                    : buildRegularPolygonPoints(center, radius, sides, shape.rotation || 0);
+
+            const updateCornerRadius = (nextRadius, { commit = false } = {}) => {
+                const clamped = clampValue(nextRadius, 0, maxRadius);
+                if (commit) {
+                    applyChange((prev) =>
+                        prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
+                    );
+                } else {
+                    setShapes((prev) =>
+                        prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
+                    );
+                }
+                return clamped;
+            };
+
+            const handleNodes = [];
+            for (let index = 0; index < vertices.length; index += 2) {
+                const vx = vertices[index];
+                const vy = vertices[index + 1];
+                if (!Number.isFinite(vx) || !Number.isFinite(vy)) continue;
+                const vec = { x: vx - center.x, y: vy - center.y };
+                const length = Math.sqrt(vec.x * vec.x + vec.y * vec.y);
+                if (!length) continue;
+                const unit = { x: vec.x / length, y: vec.y / length };
+                handleNodes.push({ key: index / 2, unit, vertexLength: length });
             }
-            return clamped;
-        };
 
-        const handleConfigs = [
-            { key: 'top-left', sx: -1, sy: -1 },
-            { key: 'top-right', sx: 1, sy: -1 },
-            { key: 'bottom-right', sx: 1, sy: 1 },
-            { key: 'bottom-left', sx: -1, sy: 1 },
-        ];
-
-        return (
-            <Group key={`corner-radius-${shape.id}`} listening={true}>
-                {handleConfigs.map(({ key, sx, sy }) => {
-                    const local = {
-                        x: sx * (halfW - insetBase),
-                        y: sy * (halfH - insetBase),
-                    };
-                    const position = toGlobal(local);
-                    return (
+            return (
+                <Group key={`corner-radius-${shape.id}`} listening={true}>
+                    {handleNodes.map((node) => {
+                        const inset = Math.min(maxRadius, Math.max(currentRadius, 12 / zoomSafeScale));
+                        const distance = Math.max(0, node.vertexLength - inset);
+                        const baseX = center.x + node.unit.x * distance;
+                        const baseY = center.y + node.unit.y * distance;
+                        return (
                         <Circle
-                            key={`corner-radius-handle-${shape.id}-${key}`}
-                            x={position.x}
-                            y={position.y}
+                            key={`corner-radius-handle-${shape.id}-${node.key}`}
+                            x={baseX}
+                            y={baseY}
                             radius={handleRadius}
                             fill="#1d4ed8"
                             stroke="#ffffff"
@@ -5280,44 +5648,43 @@ export default function Canvas({
                                 const stage = evt.target.getStage();
                                 const pointer = stage?.getPointerPosition();
                                 if (!pointer) return;
-                                const localPointer = toLocal(pointer);
-                                const corner = { x: sx * halfW, y: sy * halfH };
-                                const dx = Math.abs(corner.x - localPointer.x);
-                                const dy = Math.abs(corner.y - localPointer.y);
-                                const candidate = Math.min(dx, dy);
+                                const dx = pointer.x - center.x;
+                                const dy = pointer.y - center.y;
+                                const pointerLength = Math.sqrt(dx * dx + dy * dy);
+                                const candidate = clampValue(radius - pointerLength, 0, maxRadius);
                                 const applied = updateCornerRadius(candidate, { commit: false });
                                 const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
-                                const updatedLocal = {
-                                    x: sx * (halfW - inset),
-                                    y: sy * (halfH - inset),
-                                };
-                                const updatedGlobal = toGlobal(updatedLocal);
-                                evt.target.absolutePosition(updatedGlobal);
+                                const distance = Math.max(0, node.vertexLength - inset);
+                                evt.target.absolutePosition({
+                                    x: center.x + node.unit.x * distance,
+                                    y: center.y + node.unit.y * distance,
+                                });
                             }}
                             onDragEnd={(evt) => {
                                 evt.cancelBubble = true;
                                 const stage = evt.target.getStage();
                                 const pointer = stage?.getPointerPosition();
                                 if (!pointer) return;
-                                const localPointer = toLocal(pointer);
-                                const corner = { x: sx * halfW, y: sy * halfH };
-                                const dx = Math.abs(corner.x - localPointer.x);
-                                const dy = Math.abs(corner.y - localPointer.y);
-                                const candidate = Math.min(dx, dy);
+                                const dx = pointer.x - center.x;
+                                const dy = pointer.y - center.y;
+                                const pointerLength = Math.sqrt(dx * dx + dy * dy);
+                                const candidate = clampValue(radius - pointerLength, 0, maxRadius);
                                 const applied = updateCornerRadius(candidate, { commit: true });
                                 const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
-                                const updatedLocal = {
-                                    x: sx * (halfW - inset),
-                                    y: sy * (halfH - inset),
-                                };
-                                const updatedGlobal = toGlobal(updatedLocal);
-                                evt.target.absolutePosition(updatedGlobal);
+                                const distance = Math.max(0, node.vertexLength - inset);
+                                evt.target.absolutePosition({
+                                    x: center.x + node.unit.x * distance,
+                                    y: center.y + node.unit.y * distance,
+                                });
                             }}
                         />
                     );
-                })}
-            </Group>
-        );
+                    })}
+                </Group>
+            );
+        }
+
+        return null;
     };
 
     const toggleLayerCollapse = useCallback((shapeId) => {
