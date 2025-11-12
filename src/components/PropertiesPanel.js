@@ -63,6 +63,14 @@ const DEFAULT_GRADIENT_ANGLES = {
     diamond: 0,
 };
 
+const scheduleFrame = (callback) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(callback);
+    } else {
+        setTimeout(callback, 16);
+    }
+};
+
 const basePanelStyle = {
     borderLeft: '1px solid #d9dee7',
     background: '#f7f8fb',
@@ -2848,29 +2856,154 @@ const NumberControl = ({
     step = 1,
     suffix = 'px',
     disabled = false,
-}) => (
-    <div style={{ ...fieldStyle, opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
-        <span style={sectionSubheadingStyle}>{label}</span>
-        <div style={numberInputWrapperStyle}>
-            <input
-                type="number"
-                min={min}
-                max={max}
-                step={step}
-                value={typeof value === 'number' && !Number.isNaN(value) ? value : 0}
-                onChange={(event) => {
-                    const numeric = Number(event.target.value);
-                    if (typeof onChange === 'function') {
-                        onChange(Number.isNaN(numeric) ? 0 : numeric);
-                    }
-                }}
-                style={numberInputStyle}
-                disabled={disabled}
-            />
-            <span style={suffixStyle}>{suffix}</span>
+}) => {
+    const inputRef = useRef(null);
+    const allowBlurRef = useRef(false);
+    const focusValueRef = useRef(
+        typeof value === 'number' && !Number.isNaN(value) ? value : 0
+    );
+    const latestValueRef = useRef(
+        typeof value === 'number' && !Number.isNaN(value) ? value : focusValueRef.current
+    );
+
+    useEffect(() => {
+        if (typeof value === 'number' && !Number.isNaN(value)) {
+            latestValueRef.current = value;
+            const isFocused =
+                typeof document !== 'undefined' && inputRef.current === document.activeElement;
+            if (!isFocused) {
+                focusValueRef.current = value;
+            }
+        }
+    }, [value]);
+
+    const clampValue = useCallback(
+        (numeric) => {
+            let next = numeric;
+            if (typeof min === 'number') {
+                next = Math.max(min, next);
+            }
+            if (typeof max === 'number') {
+                next = Math.min(max, next);
+            }
+            return next;
+        },
+        [min, max]
+    );
+
+    const resolvedStep = useMemo(() => {
+        const numericStep = typeof step === 'number' ? step : Number(step);
+        return Number.isFinite(numericStep) && numericStep !== 0 ? numericStep : 1;
+    }, [step]);
+
+    const handleInternalChange = useCallback(
+        (event) => {
+            const numeric = Number(event.target.value);
+            if (typeof onChange === 'function') {
+                if (!Number.isNaN(numeric)) {
+                    latestValueRef.current = numeric;
+                }
+                onChange(Number.isNaN(numeric) ? 0 : numeric);
+            }
+        },
+        [onChange]
+    );
+
+    const adjustValue = useCallback(
+        (direction, multiplier) => {
+            const current =
+                typeof latestValueRef.current === 'number' && !Number.isNaN(latestValueRef.current)
+                    ? latestValueRef.current
+                    : focusValueRef.current;
+            const delta = resolvedStep * multiplier * direction;
+            const next = clampValue(current + delta);
+            focusValueRef.current = next;
+            latestValueRef.current = next;
+            if (typeof onChange === 'function') {
+                onChange(next);
+            }
+        },
+        [clampValue, onChange, resolvedStep]
+    );
+
+    const handleFocus = useCallback((event) => {
+        allowBlurRef.current = false;
+        focusValueRef.current =
+            typeof latestValueRef.current === 'number' && !Number.isNaN(latestValueRef.current)
+                ? latestValueRef.current
+                : focusValueRef.current;
+        event.target.select?.();
+    }, []);
+
+    const handleBlur = useCallback((event) => {
+        if (!allowBlurRef.current) {
+            event.preventDefault();
+            const node = inputRef.current;
+            scheduleFrame(() => {
+                node?.focus();
+                node?.select?.();
+            });
+            return;
+        }
+        allowBlurRef.current = false;
+    }, []);
+
+    const handleKeyDown = useCallback(
+        (event) => {
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                event.preventDefault();
+                adjustValue(event.key === 'ArrowUp' ? 1 : -1, event.shiftKey ? 10 : 1);
+                return;
+            }
+
+            if (event.key === 'Enter' || event.key === 'Escape') {
+                allowBlurRef.current = true;
+                if (event.key === 'Escape' && typeof onChange === 'function') {
+                    const original =
+                        typeof focusValueRef.current === 'number' && !Number.isNaN(focusValueRef.current)
+                            ? focusValueRef.current
+                            : latestValueRef.current;
+                    latestValueRef.current = original;
+                    onChange(original);
+                }
+                scheduleFrame(() => {
+                    inputRef.current?.blur();
+                });
+                return;
+            }
+
+            if (event.key === 'Tab') {
+                allowBlurRef.current = true;
+            }
+        },
+        [adjustValue, onChange]
+    );
+
+    return (
+        <div
+            style={{ ...fieldStyle, opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}
+        >
+            <span style={sectionSubheadingStyle}>{label}</span>
+            <div style={numberInputWrapperStyle}>
+                <input
+                    ref={inputRef}
+                    type="number"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={typeof value === 'number' && !Number.isNaN(value) ? value : 0}
+                    onChange={handleInternalChange}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    onKeyDown={handleKeyDown}
+                    style={numberInputStyle}
+                    disabled={disabled}
+                />
+                <span style={suffixStyle}>{suffix}</span>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const SelectControl = ({ label, value, onChange, options }) => {
     const normalizedOptions = options.map((option) =>
@@ -2997,6 +3130,7 @@ export default function PropertiesPanel({
 
     const positionRef = useRef({ x: 0, y: 0 });
     const [positionDraft, setPositionDraft] = useState({ x: '', y: '' });
+    const positionDraftRef = useRef({ x: '', y: '' });
     const positionEditingRef = useRef(false);
 
     useEffect(() => {
@@ -3004,7 +3138,9 @@ export default function PropertiesPanel({
         const committedX = formatNumeric(currentX /* from selected shape */);
         const committedY = formatNumeric(currentY /* from selected shape */);
         positionRef.current = { x: Number(committedX) || 0, y: Number(committedY) || 0 };
-        setPositionDraft({ x: committedX, y: committedY });
+        const nextDraft = { x: committedX, y: committedY };
+        positionDraftRef.current = nextDraft;
+        setPositionDraft(nextDraft);
     }, [currentX, currentY, hasSelection]);
 
     useEffect(() => {
@@ -3012,10 +3148,14 @@ export default function PropertiesPanel({
             const nextX = typeof primaryShape.x === 'number' ? primaryShape.x : 0;
             const nextY = typeof primaryShape.y === 'number' ? primaryShape.y : 0;
             positionRef.current = { x: nextX, y: nextY };
-            setPositionDraft({ x: formatNumeric(nextX), y: formatNumeric(nextY) });
+            const nextDraft = { x: formatNumeric(nextX), y: formatNumeric(nextY) };
+            positionDraftRef.current = nextDraft;
+            setPositionDraft(nextDraft);
         } else {
             positionRef.current = { x: 0, y: 0 };
-            setPositionDraft({ x: '', y: '' });
+            const resetDraft = { x: '', y: '' };
+            positionDraftRef.current = resetDraft;
+            setPositionDraft(resetDraft);
         }
     }, [primaryShape?.x, primaryShape?.y, primaryShape?.id]);
 
@@ -3106,6 +3246,7 @@ export default function PropertiesPanel({
 
     const dimensionRef = useRef({ width: 0, height: 0 });
     const [dimensionDraft, setDimensionDraft] = useState({ width: '', height: '' });
+    const dimensionDraftRef = useRef({ width: '', height: '' });
     const aspectRatioRef = useRef(1);
     const dimensionEditingRef = useRef(false);
     const [isAspectLocked, setAspectLocked] = useState(true);
@@ -3115,7 +3256,9 @@ export default function PropertiesPanel({
         const committedW = formatNumeric(currentW /* from selected shape */);
         const committedH = formatNumeric(currentH /* from selected shape */);
         dimensionRef.current = { width: Number(committedW) || 0, height: Number(committedH) || 0 };
-        setDimensionDraft({ width: committedW, height: committedH });
+        const nextDraft = { width: committedW, height: committedH };
+        dimensionDraftRef.current = nextDraft;
+        setDimensionDraft(nextDraft);
     }, [currentW, currentH, hasSelection]);
 
     useEffect(() => {
@@ -3125,13 +3268,17 @@ export default function PropertiesPanel({
             if (dims.height > 0) {
                 aspectRatioRef.current = dims.width / dims.height;
             }
-            setDimensionDraft({
+            const nextDraft = {
                 width: dims.width ? formatNumeric(dims.width) : '0',
                 height: dims.height ? formatNumeric(dims.height) : '0',
-            });
+            };
+            dimensionDraftRef.current = nextDraft;
+            setDimensionDraft(nextDraft);
         } else {
             dimensionRef.current = { width: 0, height: 0 };
-            setDimensionDraft({ width: '', height: '' });
+            const resetDraft = { width: '', height: '' };
+            dimensionDraftRef.current = resetDraft;
+            setDimensionDraft(resetDraft);
         }
     }, [
         primaryShape?.width,
@@ -3269,7 +3416,9 @@ export default function PropertiesPanel({
     };
 
     const handlePositionFieldChange = (axis, rawValue) => {
-        setPositionDraft((prev) => ({ ...prev, [axis]: rawValue }));
+        const nextDraft = { ...positionDraftRef.current, [axis]: rawValue };
+        positionDraftRef.current = nextDraft;
+        setPositionDraft(nextDraft);
         /*if (!hasSelection || typeof onPositionChange !== 'function') return;
         const numeric = Number(rawValue);
         if (Number.isNaN(numeric)) return;
@@ -3278,20 +3427,38 @@ export default function PropertiesPanel({
         onPositionChange(next);*/
     };
 
-    const commitPositionDraft = () => {
+    const commitPositionDraft = (axis, overrideValue) => {
+        if (typeof axis === 'string' && typeof overrideValue !== 'undefined') {
+            const nextDraft = { ...positionDraftRef.current, [axis]: overrideValue };
+            positionDraftRef.current = nextDraft;
+            setPositionDraft(nextDraft);
+        }
+
+        positionEditingRef.current = false;
         if (!hasSelection || typeof onPositionChange !== 'function') return;
-        const xNum = Number(positionDraft.x);
-        const yNum = Number(positionDraft.y);
+        const { x, y } = positionDraftRef.current;
+        const xNum = Number(x);
+        const yNum = Number(y);
         if (!Number.isNaN(xNum) && !Number.isNaN(yNum)) {
             positionRef.current = { x: xNum, y: yNum };
             onPositionChange(positionRef.current);
+            const normalized = { x: formatNumeric(xNum), y: formatNumeric(yNum) };
+            positionDraftRef.current = normalized;
+            setPositionDraft(normalized);
         }
     };
 
-    const commitDimensionDraft = () => {
+    const commitDimensionDraft = (axis, overrideValue) => {
+        if (typeof axis === 'string' && typeof overrideValue !== 'undefined') {
+            const nextDraft = { ...dimensionDraftRef.current, [axis]: overrideValue };
+            dimensionDraftRef.current = nextDraft;
+            setDimensionDraft(nextDraft);
+        }
+
+        dimensionEditingRef.current = false;
         if (!supportsDimensions || typeof onDimensionChange !== 'function') return;
-        let w = Number(dimensionDraft.width);
-        let h = Number(dimensionDraft.height);
+        let w = Number(dimensionDraftRef.current.width);
+        let h = Number(dimensionDraftRef.current.height);
         if (Number.isNaN(w) || Number.isNaN(h)) return;
 
         if (isAspectLocked && w > 0 && h > 0) {
@@ -3314,11 +3481,15 @@ export default function PropertiesPanel({
         onDimensionChange({ width: w, height: h });
 
         // normalize drafts so the UI shows clean numbers after commit
-        setDimensionDraft({ width: String(Math.round(w * 100) / 100), height: String(Math.round(h * 100) / 100) });
+        const normalized = { width: formatNumeric(w), height: formatNumeric(h) };
+        dimensionDraftRef.current = normalized;
+        setDimensionDraft(normalized);
     };
 
     const handleDimensionFieldChange = (axis, rawValue) => {
-        setDimensionDraft((prev) => ({ ...prev, [axis]: rawValue }));
+        const nextDraft = { ...dimensionDraftRef.current, [axis]: rawValue };
+        dimensionDraftRef.current = nextDraft;
+        setDimensionDraft(nextDraft);
         /*if (!supportsDimensions || typeof onDimensionChange !== 'function') return;
         const numeric = Number(rawValue);
         if (Number.isNaN(numeric)) return;
@@ -3392,21 +3563,30 @@ export default function PropertiesPanel({
         const clampedPercent = clamp(numeric, 0, 100);
         onOpacityChange(clampedPercent / 100);
     };
-    const commitRotation = () => {
+    const commitRotation = (nextValue) => {
         if (!hasSelection || typeof onRotationChange !== 'function') return;
-        const n = Number(rotationDraft); if (Number.isNaN(n)) return;
+        const raw = typeof nextValue === 'string' ? nextValue : rotationDraft;
+        const n = Number(raw);
+        if (Number.isNaN(n)) return;
+        rotationRef.current = n;
         onRotationChange(n);
+        setRotationDraft(formatNumeric(n, 1));
     };
 
-    const commitOpacity = () => {
+    const commitOpacity = (nextValue) => {
         if (!hasSelection || typeof onOpacityChange !== 'function') return;
-        const n = Number(opacityDraft); if (Number.isNaN(n)) return;
-        onOpacityChange(Math.min(100, Math.max(0, n)) / 100);
+        const raw = typeof nextValue === 'string' ? nextValue : opacityDraft;
+        const n = Number(raw);
+        if (Number.isNaN(n)) return;
+        const clamped = Math.min(100, Math.max(0, n));
+        onOpacityChange(clamped / 100);
+        setOpacityDraft(String(clamped));
     };
 
-    const commitPolygonSides = () => {
+    const commitPolygonSides = (nextValue) => {
         if (primaryShape?.type !== 'polygon' || typeof onPolygonSidesChange !== 'function') return;
-        const numeric = Number(polygonSidesDraft);
+        const raw = typeof nextValue === 'string' ? nextValue : polygonSidesDraft;
+        const numeric = Number(raw);
         if (!Number.isFinite(numeric)) return;
         const clamped = Math.max(3, Math.floor(numeric));
         onPolygonSidesChange(clamped);
@@ -3488,9 +3668,10 @@ export default function PropertiesPanel({
     };
 
     // Commit a uniform corner radius from the single input
-    const commitCornerRadius = () => {
+    const commitCornerRadius = (nextValue) => {
         if (!supportsCornerRadius || typeof onCornerRadiusChange !== 'function') return;
-        const numeric = Number(cornerRadiusDraft);
+        const raw = typeof nextValue === 'string' ? nextValue : cornerRadiusDraft;
+        const numeric = Number(raw);
         if (Number.isNaN(numeric)) return;
         const clamped = Math.max(0, numeric);
         // keep the detail ref in sync
@@ -3503,6 +3684,7 @@ export default function PropertiesPanel({
             bottomRight: formatNumeric(clamped),
             bottomLeft: formatNumeric(clamped),
         });
+        setCornerRadiusDraft(formatNumeric(clamped));
         onCornerRadiusChange(clamped);
     };
 
@@ -3619,7 +3801,8 @@ export default function PropertiesPanel({
         label,
         value,
         onChange,
-        onBlur,
+        onCommit,
+        onBlur: onBlurProp,
         onKeyDown,
         onFocus,
         suffix = 'px',
@@ -3628,35 +3811,206 @@ export default function PropertiesPanel({
         min = undefined,
         max = undefined,
         disabled = false,
-    }) => (
-        <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
-            <span style={sectionSubheadingStyle}>{label}</span>
-            <div
+    }) => {
+        const inputRef = useRef(null);
+        const allowBlurRef = useRef(false);
+        const focusValueRef = useRef(value);
+        const latestValueRef = useRef(value);
 
-                style={{
-                    ...numericInputWrapperInlineStyle,
-                    pointerEvents: disabled ? 'none' : 'auto',
-                }}
-            >
-                {prefix ? <span style={unitPrefixStyle}>{prefix}</span> : null}
-                <input
-                    type="text"
-                    inputMode="decimal"
-                    value={value}
-                    step={step}
-                    min={min}
-                    max={max}
-                    onChange={(event) => onChange(event.target.value)}
-                    onFocus={(event) => event.target.select?.()}
-                    onBlur={onBlur}
-                    onKeyDown={onKeyDown}
-                    style={numericInputFieldStyle}
-                    disabled={disabled}
-                />
-                {suffix ? <span style={unitSuffixStyle}>{suffix}</span> : null}
-            </div>
-        </label>
-    );
+        useEffect(() => {
+            latestValueRef.current = value;
+            const isFocused =
+                typeof document !== 'undefined' && inputRef.current === document.activeElement;
+            if (!isFocused) {
+                focusValueRef.current = value;
+            }
+        }, [value]);
+
+        const commitHandler = useCallback(
+            (event, overrideValue) => {
+                const handler = onCommit ?? onBlurProp;
+                if (typeof handler === 'function') {
+                    const valueToCommit =
+                        typeof overrideValue !== 'undefined' ? overrideValue : latestValueRef.current;
+                    handler(valueToCommit, event);
+                }
+            },
+            [onBlurProp, onCommit]
+        );
+
+        const resolvedStep = useMemo(() => {
+            const numericStep = typeof step === 'number' ? step : Number(step);
+            return Number.isFinite(numericStep) && numericStep !== 0 ? numericStep : 1;
+        }, [step]);
+
+        const precision = useMemo(() => {
+            const stepString = String(resolvedStep);
+            const decimalIndex = stepString.indexOf('.');
+            return decimalIndex >= 0 ? stepString.length - decimalIndex - 1 : 0;
+        }, [resolvedStep]);
+
+        const clampValue = useCallback(
+            (numeric) => {
+                let next = numeric;
+                if (typeof min === 'number') {
+                    next = Math.max(min, next);
+                }
+                if (typeof max === 'number') {
+                    next = Math.min(max, next);
+                }
+                return next;
+            },
+            [min, max]
+        );
+
+        const parseValue = useCallback(() => {
+            const numeric = Number(value);
+            if (Number.isNaN(numeric)) {
+                const fallback = Number(latestValueRef.current);
+                return Number.isNaN(fallback) ? 0 : fallback;
+            }
+            return numeric;
+        }, [value]);
+
+        const formatValue = useCallback(
+            (numeric) => formatNumeric(clampValue(numeric), precision),
+            [clampValue, precision]
+        );
+
+        const commitSoon = useCallback(() => {
+            if (typeof (onCommit ?? onBlurProp) !== 'function') return;
+            const pendingValue = latestValueRef.current;
+            scheduleFrame(() => {
+                commitHandler(undefined, pendingValue);
+            });
+        }, [commitHandler, onBlurProp, onCommit]);
+
+        const adjustValue = useCallback(
+            (direction, multiplier) => {
+                const base = parseValue();
+                const next = base + resolvedStep * multiplier * direction;
+                const formatted = formatValue(next);
+                latestValueRef.current = formatted;
+                if (typeof onChange === 'function') {
+                    onChange(formatted);
+                }
+                commitSoon();
+            },
+            [commitSoon, formatValue, onChange, parseValue, resolvedStep]
+        );
+
+        const handleFocus = useCallback(
+            (event) => {
+                allowBlurRef.current = false;
+                focusValueRef.current = latestValueRef.current ?? value;
+                event.target.select?.();
+                if (typeof onFocus === 'function') {
+                    onFocus(event);
+                }
+            },
+            [onFocus, value]
+        );
+
+        const handleBlur = useCallback(
+            (event) => {
+                if (!allowBlurRef.current) {
+                    event.preventDefault();
+                    const node = inputRef.current;
+                    scheduleFrame(() => {
+                        node?.focus();
+                        node?.select?.();
+                    });
+                    return;
+                }
+                allowBlurRef.current = false;
+                commitHandler(event, latestValueRef.current);
+            },
+            [commitHandler]
+        );
+
+        const handleChange = useCallback(
+            (event) => {
+                const nextValue = event.target.value;
+                latestValueRef.current = nextValue;
+                if (typeof onChange === 'function') {
+                    onChange(nextValue);
+                }
+            },
+            [onChange]
+        );
+
+        const handleKeyDownInternal = useCallback(
+            (event) => {
+                if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    adjustValue(event.key === 'ArrowUp' ? 1 : -1, event.shiftKey ? 10 : 1);
+                    return;
+                }
+
+                if (event.key === 'Enter') {
+                    allowBlurRef.current = true;
+                    commitSoon();
+                    scheduleFrame(() => {
+                        inputRef.current?.blur();
+                    });
+                    return;
+                }
+
+                if (event.key === 'Escape') {
+                    allowBlurRef.current = true;
+                    if (typeof onChange === 'function') {
+                        onChange(focusValueRef.current ?? '');
+                    }
+                    latestValueRef.current = focusValueRef.current ?? latestValueRef.current;
+                    commitSoon();
+                    scheduleFrame(() => {
+                        inputRef.current?.blur();
+                    });
+                    return;
+                }
+
+                if (event.key === 'Tab') {
+                    allowBlurRef.current = true;
+                    commitSoon();
+                }
+
+                if (typeof onKeyDown === 'function') {
+                    onKeyDown(event);
+                }
+            },
+            [adjustValue, commitSoon, onChange, onKeyDown]
+        );
+
+        return (
+            <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
+                <span style={sectionSubheadingStyle}>{label}</span>
+                <div
+                    style={{
+                        ...numericInputWrapperInlineStyle,
+                        pointerEvents: disabled ? 'none' : 'auto',
+                    }}
+                >
+                    {prefix ? <span style={unitPrefixStyle}>{prefix}</span> : null}
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        inputMode="decimal"
+                        value={value}
+                        step={step}
+                        min={min}
+                        max={max}
+                        onChange={handleChange}
+                        onFocus={handleFocus}
+                        onBlur={handleBlur}
+                        onKeyDown={handleKeyDownInternal}
+                        style={numericInputFieldStyle}
+                        disabled={disabled}
+                    />
+                    {suffix ? <span style={unitSuffixStyle}>{suffix}</span> : null}
+                </div>
+            </label>
+        );
+    };
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 
@@ -3923,8 +4277,7 @@ const subtitle = shape
                                 value={positionDraft.x}
                                 onChange={(value) => handlePositionFieldChange('x', value)}
                                 onFocus={() => { positionEditingRef.current = true; }}
-                                onBlur={commitPositionDraft}
-                                onKeyDown={(e) => { if (e.key === 'Enter') commitPositionDraft(); }}
+                                onCommit={(nextValue) => commitPositionDraft('x', nextValue)}
                                 step={1}
                                 prefix="X"
                                 suffix="px"
@@ -3934,8 +4287,7 @@ const subtitle = shape
                                 value={positionDraft.y}
                                 onChange={(value) => handlePositionFieldChange('y', value)}
                                 onFocus={() => { positionEditingRef.current = true; }}
-                                onBlur={commitPositionDraft}
-                                onKeyDown={(e) => { if (e.key === 'Enter') commitPositionDraft(); }}
+                                onCommit={(nextValue) => commitPositionDraft('y', nextValue)}
                                 step={1}
                                 prefix="Y"
                                 suffix="px"
@@ -3950,8 +4302,7 @@ const subtitle = shape
                                 label=""
                                 value={rotationDraft}
                                 onChange={handleRotationInputChange}
-                                onBlur={commitRotation}
-                                onKeyDown={(e) => { if (e.key === 'Enter') commitRotation(); }}
+                                onCommit={commitRotation}
                                 prefix=""
                                 suffix="°"
                                 step={1}
@@ -3999,8 +4350,7 @@ const subtitle = shape
                                 value={dimensionDraft.width}
                                 onChange={(value) => handleDimensionFieldChange('width', value)}
                                 onFocus={() => { dimensionEditingRef.current = true; }}
-                                onBlur={commitDimensionDraft}
-                                onKeyDown={(e) => { if (e.key === 'Enter') commitDimensionDraft(); }}
+                                onCommit={(nextValue) => commitDimensionDraft('width', nextValue)}
                                 step={1}
                                 suffix="px"
                                 prefix="W"
@@ -4011,8 +4361,7 @@ const subtitle = shape
                                 value={dimensionDraft.height}
                                 onChange={(value) => handleDimensionFieldChange('height', value)}
                                 onFocus={() => { dimensionEditingRef.current = true; }}
-                                onBlur={commitDimensionDraft}
-                                onKeyDown={(e) => { if (e.key === 'Enter') commitDimensionDraft(); }}
+                                onCommit={(nextValue) => commitDimensionDraft('height', nextValue)}
                                 step={1}
                                 suffix="px"
                                 prefix="H"
@@ -4041,8 +4390,7 @@ const subtitle = shape
                                     label="Sides"
                                     value={polygonSidesDraft}
                                     onChange={handlePolygonSidesInputChange}
-                                    onBlur={commitPolygonSides}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') commitPolygonSides(); }}
+                                    onCommit={commitPolygonSides}
                                     step={1}
                                     suffix=""
                                     prefix=""
@@ -4062,8 +4410,7 @@ const subtitle = shape
                                 label="Opacity"
                                 value={opacityDraft}
                                 onChange={handleOpacityInputChange}
-                                onBlur={commitOpacity}
-                                onKeyDown={(e) => { if (e.key === 'Enter') commitOpacity(); }}
+                                onCommit={commitOpacity}
                                 min={0}
                                 max={100}
                                 suffix="%"
@@ -4075,8 +4422,7 @@ const subtitle = shape
                                 value={cornerRadiusDraft}
                                 onChange={handleCornerRadiusInputChange}
                                 //onChange={(value) => setCornerRadiusDraft(value)}
-                                onBlur={commitCornerRadius}
-                                onKeyDown={(e) => { if (e.key === 'Enter') commitCornerRadius(); }}
+                                onCommit={commitCornerRadius}
                                 step={1}
                                 suffix="px"
                                 prefix=""
@@ -4105,8 +4451,7 @@ const subtitle = shape
                                     label="Top-Left"
                                     value={cornerDetailDraft.topLeft || cornerRadiusDraft}
                                     onChange={(value) => handleCornerDetailInputChange('topLeft', value)}
-                                    onBlur={() => commitCornerDetail('topLeft')}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('topLeft'); }}
+                                    onCommit={() => commitCornerDetail('topLeft')}
                                     step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
@@ -4115,8 +4460,7 @@ const subtitle = shape
                                     label="Top-Right"
                                     value={cornerDetailDraft.topRight}
                                     onChange={(value) => handleCornerDetailInputChange('topRight', value)}
-                                    onBlur={() => commitCornerDetail('topRight')}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('topRight'); }}
+                                    onCommit={() => commitCornerDetail('topRight')}
                                     step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
@@ -4125,8 +4469,7 @@ const subtitle = shape
                                     label="Bottom-Right"
                                     value={cornerDetailDraft.bottomRight}
                                     onChange={(value) => handleCornerDetailInputChange('bottomRight', value)}
-                                    onBlur={() => commitCornerDetail('bottomRight')}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('bottomRight') }}
+                                    onCommit={() => commitCornerDetail('bottomRight')}
                                     step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
@@ -4135,8 +4478,7 @@ const subtitle = shape
                                     label="Bottom-Left"
                                     value={cornerDetailDraft.bottomLeft}
                                     onChange={(value) => handleCornerDetailInputChange('bottomLeft', value)}
-                                    onBlur={() => commitCornerDetail('bottomLeft')}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') commitCornerDetail('bottomLeft'); }}
+                                    onCommit={() => commitCornerDetail('bottomLeft')}
                                     step={1}
                                     suffix="px"
                                     disabled={!supportsCornerRadius || !hasSelection}
