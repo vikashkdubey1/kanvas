@@ -434,34 +434,34 @@ const formatTypeLabel = (t) => {
     return map[t] || (t?.charAt(0).toUpperCase() + t?.slice(1));
 };
 
-     const getNextName = (type) => {
-         const key = String(type || 'Shape');
-         const label = formatTypeLabel(key);
-         const n = nameCounters.get(key) ?? 0;
-         nameCounters.set(key, n + 1);
-         return `${label} ${n}`;
-         };
+const getNextName = (type) => {
+    const key = String(type || 'Shape');
+    const label = formatTypeLabel(key);
+    const n = nameCounters.get(key) ?? 0;
+    nameCounters.set(key, n + 1);
+    return `${label} ${n}`;
+};
 
 function cloneShape(shape, shapesMap, opts = { preserveName: false }) {
-       const { preserveName = false } = opts;
-       const newId = nanoid();
-       const cloneName =
-             preserveName && shape.name
-                   ? shape.name                              // keep original name on clipboard paste
-               : getNextName(shape.type);               // still use incremental names for other flows
-       const clone = {
-     ...shape,
-         id: newId,
-             name: cloneName,
-               };
-   if (shape.type === 'group' || shape.type === 'frame') {
-         const children = shapesMap
-               .filter((s) => s.parentId === shape.id)
-               .map((child) => cloneShape(child, shapesMap, { preserveName }));
-         return [clone, ...children.map((c) => ({ ...c, parentId: newId }))];
-       }
-   return [clone];
- }
+    const { preserveName = false } = opts;
+    const newId = nanoid();
+    const cloneName =
+        preserveName && shape.name
+            ? shape.name                              // keep original name on clipboard paste
+            : getNextName(shape.type);               // still use incremental names for other flows
+    const clone = {
+        ...shape,
+        id: newId,
+        name: cloneName,
+    };
+    if (shape.type === 'group' || shape.type === 'frame') {
+        const children = shapesMap
+            .filter((s) => s.parentId === shape.id)
+            .map((child) => cloneShape(child, shapesMap, { preserveName }));
+        return [clone, ...children.map((c) => ({ ...c, parentId: newId }))];
+    }
+    return [clone];
+}
 
 export default function Canvas({
     selectedTool,
@@ -646,8 +646,8 @@ export default function Canvas({
                 window.removeEventListener('mouseup', restoreIfNeeded);
                 window.removeEventListener('touchend', restoreIfNeeded);
             };
-              // remember exactly which layer we touched
-                  dragCtxRef.current = { active: true, node, cached: false, disabledHit: !!lyr, layer: lyr || null };
+            // remember exactly which layer we touched
+            dragCtxRef.current = { active: true, node, cached: false, disabledHit: !!lyr, layer: lyr || null };
             if (lyr && typeof lyr.listening === 'function') lyr.listening(false);
 
             // 2) Cache the node if it’s complex
@@ -675,7 +675,7 @@ export default function Canvas({
         const onDragEnd = (e) => {
             const node = e.target;
             const lyr = dragCtxRef.current.layer;
-               if (lyr && lyr.listening) lyr.listening(true);
+            if (lyr && lyr.listening) lyr.listening(true);
             if (dragCtxRef.current.cached) {
                 try { node.clearCache(); } catch { }
             }
@@ -984,24 +984,24 @@ export default function Canvas({
     // Tracks the "anchor" row for Shift-range selection in the panel
     const lastLayerAnchorIndexRef = useRef(null);
 
-     // ---- Smooth drag (global) ----
-         const dragRAFRef = useRef(0);            // active requestAnimationFrame id
-     const lastDragUpdateRef = useRef(0);     // throttle state writes during drag
-     const dragCtxRef = useRef({
- active: false,
-           node: null,
-           cached: false,
-           disabledHit: false,
-         });
+    // ---- Smooth drag (global) ----
+    const dragRAFRef = useRef(0);            // active requestAnimationFrame id
+    const lastDragUpdateRef = useRef(0);     // throttle state writes during drag
+    const dragCtxRef = useRef({
+        active: false,
+        node: null,
+        cached: false,
+        disabledHit: false,
+    });
 
-     const rafBatchDraw = () => {
-           if (dragRAFRef.current) return;
-           dragRAFRef.current = requestAnimationFrame(() => {
-                 dragRAFRef.current = 0;
-                 // Batch-draw all layers at once (Konva Stage has batchDraw)
-                     stageRef.current?.batchDraw?.();
-               });
-         };
+    const rafBatchDraw = () => {
+        if (dragRAFRef.current) return;
+        dragRAFRef.current = requestAnimationFrame(() => {
+            dragRAFRef.current = 0;
+            // Batch-draw all layers at once (Konva Stage has batchDraw)
+            stageRef.current?.batchDraw?.();
+        });
+    };
 
     // Build an array of the layer order *as shown in the panel*
     // (You already create layerList = [{shape, depth}, ...])
@@ -2312,75 +2312,75 @@ export default function Canvas({
             // Cut
             if ((e.key === 'x' || e.key === 'X') && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                                if (!selectedIds?.length) return;
-                
-                                    // 1) Put current selection in clipboard (shallow copies are fine)
-                                    const selectedShapes = shapesRef.current.filter(s =>
-                                            selectedIds.includes(s.id)
-                                        );
-                                clipboardRef.current = selectedShapes.map(s => ({ ...s }));
-                
-                                    // 2) Build a removal set that includes descendants (for groups/frames)
-                                    const toRemove = new Set(selectedIds);
-                                const snapshot = shapesRef.current;
-                                selectedIds.forEach(id => {
-                                        collectDescendantIds(snapshot, id).forEach(cid => toRemove.add(cid));
-                                    });
-                
-                                    // 3) Remove immediately in a single history entry
-                                    applyChange(prev => prev.filter(s => !toRemove.has(s.id)));
-                
-                                    // 4) Clear selection (nothing remains on canvas)
-                                    setSelectedIds([]);
-                
-                                    // 5) We don't need cutPendingRef anymore since originals are gone
+                if (!selectedIds?.length) return;
+
+                // 1) Put current selection in clipboard (shallow copies are fine)
+                const selectedShapes = shapesRef.current.filter(s =>
+                    selectedIds.includes(s.id)
+                );
+                clipboardRef.current = selectedShapes.map(s => ({ ...s }));
+
+                // 2) Build a removal set that includes descendants (for groups/frames)
+                const toRemove = new Set(selectedIds);
+                const snapshot = shapesRef.current;
+                selectedIds.forEach(id => {
+                    collectDescendantIds(snapshot, id).forEach(cid => toRemove.add(cid));
+                });
+
+                // 3) Remove immediately in a single history entry
+                applyChange(prev => prev.filter(s => !toRemove.has(s.id)));
+
+                // 4) Clear selection (nothing remains on canvas)
+                setSelectedIds([]);
+
+                // 5) We don't need cutPendingRef anymore since originals are gone
                 cutPendingRef.current = null;
                 clipboardMetaRef.current = { mode: 'cut' };
-                                return;
+                return;
             }
 
             // Paste
             if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                                const clip = clipboardRef.current;
-                                if (!clip || !clip.length) return;
-                
-                                const newIds = [];
+                const clip = clipboardRef.current;
+                if (!clip || !clip.length) return;
+
+                const newIds = [];
                 const wasCut = clipboardMetaRef.current?.mode === 'cut'; // ✅ reliable
-                
-                                    applyChange((prev) => {
-                                            let next = [...prev];
-                        
-                                                // 1) Add clones (based on the latest prev, not shapesRef)
-                                                clip.forEach((shape) => {
-                                                    const clones = cloneShape(shape, prev, { preserveName: wasCut }); // cut = preserve, copy = re-number
-                                                        clones.forEach((clone) => {
-                                                                // slight offset so paste is visible
-                                                                    clone.x = (clone.x || 0) + 20;
-                                                                clone.y = (clone.y || 0) + 20;
-                                                                next.push(clone);
-                                                                newIds.push(clone.id);
-                                                            });
-                                                    });
-                        
-                                                // 2) If this was a cut, remove originals (and their descendants)
-                                                if (wasCut) {
-                                                        const originals = new Set(cutPendingRef.current);
-                                                        // also remove their descendants to avoid orphans
-                                                            for (const id of Array.from(originals)) {
-                                                                    collectDescendantIds(prev, id).forEach((cid) => originals.add(cid));
-                                                                }
-                                                        next = next.filter((s) => !originals.has(s.id));
-                                                    }
-                        
-                                                return next;
-                                        });
-                
-                                    // 3) Clear cut flag and select the new clones
+
+                applyChange((prev) => {
+                    let next = [...prev];
+
+                    // 1) Add clones (based on the latest prev, not shapesRef)
+                    clip.forEach((shape) => {
+                        const clones = cloneShape(shape, prev, { preserveName: wasCut }); // cut = preserve, copy = re-number
+                        clones.forEach((clone) => {
+                            // slight offset so paste is visible
+                            clone.x = (clone.x || 0) + 20;
+                            clone.y = (clone.y || 0) + 20;
+                            next.push(clone);
+                            newIds.push(clone.id);
+                        });
+                    });
+
+                    // 2) If this was a cut, remove originals (and their descendants)
+                    if (wasCut) {
+                        const originals = new Set(cutPendingRef.current);
+                        // also remove their descendants to avoid orphans
+                        for (const id of Array.from(originals)) {
+                            collectDescendantIds(prev, id).forEach((cid) => originals.add(cid));
+                        }
+                        next = next.filter((s) => !originals.has(s.id));
+                    }
+
+                    return next;
+                });
+
+                // 3) Clear cut flag and select the new clones
                 if (wasCut) { clipboardMetaRef.current = { mode: 'copy' }; }
-                                setSelectedIds(newIds);
-                                return;
-                            }
+                setSelectedIds(newIds);
+                return;
+            }
 
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -3296,9 +3296,9 @@ export default function Canvas({
             return;
         }
         // Other tools: only add when clicking on empty canvas
-                if (!clickedOnEmpty) return;
-                const pointerPos = getCanvasPointer();
-                if (!pointerPos) return;
+        if (!clickedOnEmpty) return;
+        const pointerPos = getCanvasPointer();
+        if (!pointerPos) return;
     };
 
 
@@ -3706,14 +3706,48 @@ export default function Canvas({
         if (trLayer && typeof trLayer.batchDraw === 'function') trLayer.batchDraw();
         // prefer multi-select if present; else fall back to single
         const ids = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
-        const nodes = ids
-            .map((id) => stage.findOne(`#shape-${id}`))
-            .filter(Boolean);
 
         tr.nodes(nodes);
         if (typeof tr.setAttrs === 'function') {
             tr.setAttrs(transformerConfig);
         }
+
+        // Build the raw selected id list (supports single or multi-select)
+        const rawIds = selectedIds?.length ? selectedIds : (selectedId ? [selectedId] : []);
+
+        // Map to shape models from your store/ref
+        const allShapes = (shapesRef?.current || shapes) || [];
+        const selShapes = rawIds
+            .map(id => allShapes.find(sh => sh.id === id))
+            .filter(Boolean);
+
+        // Partition selection into lines vs others
+        const lineShapes = selShapes.filter(s => s.type === 'line');
+        const otherShapes = selShapes.filter(s => s.type !== 'line');
+
+        // Decide which shapes get a Transformer attached
+        let attachIds = [];
+        if (otherShapes.length > 0) {
+            // If any non-line is selected, show transformer for those (hide it for lines)
+            attachIds = otherShapes.map(s => s.id);
+        } else if (lineShapes.length > 1) {
+            // Only when more than one line is selected
+            attachIds = lineShapes.map(s => s.id);
+        } else {
+            // Single line or empty selection: no transformer box
+            attachIds = [];
+        }
+
+        // Resolve nodes and attach
+        const nodes = attachIds
+            .map(id => stage.findOne(`#shape-${id}`))
+            .filter(Boolean);
+
+        if (typeof tr.nodes === 'function') tr.nodes(nodes);
+        if (typeof tr.setAttrs === 'function') tr.setAttrs(transformerConfig);
+        tr.getLayer()?.batchDraw?.();
+
+
         tr.getLayer()?.batchDraw?.();
     }, [selectedIds, selectedId, shapes, selectedTool]);
 
@@ -4244,13 +4278,13 @@ export default function Canvas({
                 prev.map((s) =>
                     s.id === id
                         ? {
-                              ...s,
-                              radius: newRadius,
-                              x: node.x(),
-                              y: node.y(),
-                              rotation: snappedRotation,
-                              points: updatedPoints,
-                          }
+                            ...s,
+                            radius: newRadius,
+                            x: node.x(),
+                            y: node.y(),
+                            rotation: snappedRotation,
+                            points: updatedPoints,
+                        }
                         : s
                 )
             );
@@ -4323,16 +4357,16 @@ export default function Canvas({
                 prev.map((s) =>
                     s.id === id
                         ? {
-                              ...s,
-                              x: node.x(),
-                              y: node.y(),
-                              width: newWidth,
-                              height: newHeight,
-                              rotation: snapAngle(rotation),
-                          }
+                            ...s,
+                            x: node.x(),
+                            y: node.y(),
+                            width: newWidth,
+                            height: newHeight,
+                            rotation: snapAngle(rotation),
+                        }
                         : s
                 )
-            );
+            )
         }
     };
 
@@ -4347,7 +4381,7 @@ export default function Canvas({
         const textNode = stage.findOne(`#shape-${shape.id}`);
         if (!textNode) return;
 
-        selectSingle(shape.id);
+        selectSingle(shape.id)
 
         const originalText = typeof shape.text === 'string' ? shape.text : '';
         const originalHeight =
@@ -4356,6 +4390,7 @@ export default function Canvas({
                 : Math.max(1, typeof textNode.height === 'function' ? textNode.height() : 0);
         const beforeState = shapesRef.current.map((s) => ({ ...s }));
 
+        // create textarea and style it
         const textarea = document.createElement('textarea');
         textarea.value = originalText;
         textarea.setAttribute('aria-label', 'Edit text');
@@ -4390,26 +4425,26 @@ export default function Canvas({
             typeof shape.fontSize === 'number'
                 ? shape.fontSize
                 : typeof textNode.fontSize === 'function'
-                ? textNode.fontSize()
-                : 16;
+                    ? textNode.fontSize()
+                    : 16;
         const lineHeightValue =
             typeof shape.lineHeight === 'number'
                 ? shape.lineHeight
                 : typeof textNode.lineHeight === 'function'
-                ? textNode.lineHeight()
-                : 1.2;
+                    ? textNode.lineHeight()
+                    : 1.2;
         const letterSpacingValue =
             typeof shape.letterSpacing === 'number'
                 ? shape.letterSpacing
                 : typeof textNode.letterSpacing === 'function'
-                ? textNode.letterSpacing()
-                : 0;
+                    ? textNode.letterSpacing()
+                    : 0;
         const textAlignValue =
             typeof shape.align === 'string'
                 ? shape.align
                 : typeof textNode.align === 'function'
-                ? textNode.align()
-                : 'left';
+                    ? textNode.align()
+                    : 'left';
         textarea.style.textAlign = textAlignValue;
 
         const fillColor = (() => {
@@ -4428,8 +4463,8 @@ export default function Canvas({
             typeof shape.rotation === 'number'
                 ? shape.rotation
                 : typeof textNode.rotation === 'function'
-                ? textNode.rotation()
-                : 0;
+                    ? textNode.rotation()
+                    : 0;
 
         let currentWidth =
             typeof shape.width === 'number'
@@ -4485,10 +4520,10 @@ export default function Canvas({
                 prev.map((s) =>
                     s.id === shape.id
                         ? {
-                              ...s,
-                              text: value,
-                              height: nextHeight,
-                          }
+                            ...s,
+                            text: value,
+                            height: nextHeight,
+                        }
                         : s
                 )
             );
@@ -4547,10 +4582,10 @@ export default function Canvas({
                     prev.map((s) =>
                         s.id === shape.id
                             ? {
-                                  ...s,
-                                  text: originalText,
-                                  height: originalHeight,
-                              }
+                                ...s,
+                                text: originalText,
+                                height: originalHeight,
+                            }
                             : s
                     )
                 );
@@ -4630,18 +4665,18 @@ export default function Canvas({
 
 
 
-     // Initialize counters from current doc once (so numbering continues from what exists)
-     useEffect(() => {
-         nameCounters.clear();
-                    for (const s of shapesRef.current || []) {
-                              const key = String(s.type || 'Shape');
-                              const label = formatTypeLabel(key);
-                              // allow multi-digit suffixes
-                                  const m = typeof s.name === 'string' ? s.name.match(new RegExp(`^${label} (\\d+)$`)) : null;
-                              const nextIdx = m ? parseInt(m[1], 10) + 1 : 0;
-                              nameCounters.set(key, Math.max(nameCounters.get(key) ?? 0, nextIdx));
-                        }
-             }, []);
+    // Initialize counters from current doc once (so numbering continues from what exists)
+    useEffect(() => {
+        nameCounters.clear();
+        for (const s of shapesRef.current || []) {
+            const key = String(s.type || 'Shape');
+            const label = formatTypeLabel(key);
+            // allow multi-digit suffixes
+            const m = typeof s.name === 'string' ? s.name.match(new RegExp(`^${label} (\\d+)$`)) : null;
+            const nextIdx = m ? parseInt(m[1], 10) + 1 : 0;
+            nameCounters.set(key, Math.max(nameCounters.get(key) ?? 0, nextIdx));
+        }
+    }, []);
 
     const setGradientHandleInteraction = useCallback(
         (active) => {
@@ -5273,8 +5308,8 @@ export default function Canvas({
 
             onDragStart: (e) => {
                 if (!canDragThis) { try { e.cancelBubble = true; e.target.stopDrag(); } catch { }; return; }
-                 handleDragStart(shape.id, e);
-                },
+                handleDragStart(shape.id, e);
+            },
 
             onDragMove: (e) => handleDragMove(shape.id, e),
             onDragEnd: (e) => handleDragEnd(shape.id, e),
@@ -5891,7 +5926,7 @@ export default function Canvas({
     };
 
     const renderPathEditor = () => {
-        const allowEditing = selectedTool === 'path' || selectedTool === 'select' || selectedTool === 'anchor';
+        const allowEditing = selectedTool === 'path' || selectedTool === 'anchor';
         if (!allowEditing) return null;
         const primaryShape = selectedId
             ? shapes.find((s) => s.id === selectedId && s.type === 'path')
@@ -6248,51 +6283,51 @@ export default function Canvas({
                         const baseX = center.x + node.unit.x * distance;
                         const baseY = center.y + node.unit.y * distance;
                         return (
-                        <Circle
-                            key={`corner-radius-handle-${shape.id}-${node.key}`}
-                            x={baseX}
-                            y={baseY}
-                            radius={handleRadius}
-                            fill="#1d4ed8"
-                            stroke="#ffffff"
-                            strokeWidth={1 / zoomSafeScale}
-                            draggable
-                            onDragMove={(evt) => {
-                                evt.cancelBubble = true;
-                                const stage = evt.target.getStage();
-                                const pointer = stage?.getPointerPosition();
-                                if (!pointer) return;
-                                const dx = pointer.x - center.x;
-                                const dy = pointer.y - center.y;
-                                const pointerLength = Math.sqrt(dx * dx + dy * dy);
-                                const candidate = clampValue(radius - pointerLength, 0, maxRadius);
-                                const applied = updateCornerRadius(candidate, { commit: false });
-                                const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
-                                const distance = Math.max(0, node.vertexLength - inset);
-                                evt.target.absolutePosition({
-                                    x: center.x + node.unit.x * distance,
-                                    y: center.y + node.unit.y * distance,
-                                });
-                            }}
-                            onDragEnd={(evt) => {
-                                evt.cancelBubble = true;
-                                const stage = evt.target.getStage();
-                                const pointer = stage?.getPointerPosition();
-                                if (!pointer) return;
-                                const dx = pointer.x - center.x;
-                                const dy = pointer.y - center.y;
-                                const pointerLength = Math.sqrt(dx * dx + dy * dy);
-                                const candidate = clampValue(radius - pointerLength, 0, maxRadius);
-                                const applied = updateCornerRadius(candidate, { commit: true });
-                                const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
-                                const distance = Math.max(0, node.vertexLength - inset);
-                                evt.target.absolutePosition({
-                                    x: center.x + node.unit.x * distance,
-                                    y: center.y + node.unit.y * distance,
-                                });
-                            }}
-                        />
-                    );
+                            <Circle
+                                key={`corner-radius-handle-${shape.id}-${node.key}`}
+                                x={baseX}
+                                y={baseY}
+                                radius={handleRadius}
+                                fill="#1d4ed8"
+                                stroke="#ffffff"
+                                strokeWidth={1 / zoomSafeScale}
+                                draggable
+                                onDragMove={(evt) => {
+                                    evt.cancelBubble = true;
+                                    const stage = evt.target.getStage();
+                                    const pointer = stage?.getPointerPosition();
+                                    if (!pointer) return;
+                                    const dx = pointer.x - center.x;
+                                    const dy = pointer.y - center.y;
+                                    const pointerLength = Math.sqrt(dx * dx + dy * dy);
+                                    const candidate = clampValue(radius - pointerLength, 0, maxRadius);
+                                    const applied = updateCornerRadius(candidate, { commit: false });
+                                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                                    const distance = Math.max(0, node.vertexLength - inset);
+                                    evt.target.absolutePosition({
+                                        x: center.x + node.unit.x * distance,
+                                        y: center.y + node.unit.y * distance,
+                                    });
+                                }}
+                                onDragEnd={(evt) => {
+                                    evt.cancelBubble = true;
+                                    const stage = evt.target.getStage();
+                                    const pointer = stage?.getPointerPosition();
+                                    if (!pointer) return;
+                                    const dx = pointer.x - center.x;
+                                    const dy = pointer.y - center.y;
+                                    const pointerLength = Math.sqrt(dx * dx + dy * dy);
+                                    const candidate = clampValue(radius - pointerLength, 0, maxRadius);
+                                    const applied = updateCornerRadius(candidate, { commit: true });
+                                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                                    const distance = Math.max(0, node.vertexLength - inset);
+                                    evt.target.absolutePosition({
+                                        x: center.x + node.unit.x * distance,
+                                        y: center.y + node.unit.y * distance,
+                                    });
+                                }}
+                            />
+                        );
                     })}
                 </Group>
             );
@@ -7004,10 +7039,12 @@ export default function Canvas({
                     <PixelGrid
                         scale={scale}
                         stagePos={stagePos}
-                        viewport={{width: stageSize.width,
-                        height: stageSize.height}}
+                        viewport={{
+                            width: stageSize.width,
+                            height: stageSize.height
+                        }}
                         minScaleToShow={8} // visible at 800%
-                        //color={isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.22)"}
+                    //color={isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.22)"}
                     />
                 </Stage>
                 {/* Zoom percentage display */}
