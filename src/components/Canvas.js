@@ -113,6 +113,20 @@ const getLineBoundingBox = (points) => {
     };
 };
 
+const translateLinePoints = (points, dx = 0, dy = 0) => {
+    if (!Array.isArray(points) || points.length === 0) {
+        return [];
+    }
+    const next = new Array(points.length);
+    for (let i = 0; i < points.length; i += 2) {
+        const px = Number(points[i]);
+        const py = Number(points[i + 1]);
+        next[i] = Number.isFinite(px) ? px + dx : px;
+        next[i + 1] = Number.isFinite(py) ? py + dy : py;
+    }
+    return next;
+};
+
 const SHAPE_LABELS = {
     frame: 'Frame',
     group: 'Group',
@@ -510,6 +524,27 @@ export default function Canvas({
             return;
         }
 
+        if (shape.type === 'line') {
+            const konvaNode = e?.target;
+            const startX = typeof konvaNode?.x === 'function' ? konvaNode.x() : 0;
+            const startY = typeof konvaNode?.y === 'function' ? konvaNode.y() : 0;
+            const stage = stageRef.current;
+            const pointer = stage?.getPointerPosition?.() || null;
+            dragSnapshotRef.current = {
+                id,
+                type: 'line',
+                startX,
+                startY,
+                basePoints: Array.isArray(shape.points) ? [...shape.points] : [],
+                baseState: shapesRef.current.map((s) => ({ ...s })),
+                dx: 0,
+                dy: 0,
+                startPointer: pointer ? { x: pointer.x, y: pointer.y } : null,
+                lastPointer: pointer ? { x: pointer.x, y: pointer.y } : null,
+            };
+            return;
+        }
+
         if (!isContainerShape(shape)) {
             dragSnapshotRef.current = null;
             return;
@@ -569,6 +604,7 @@ export default function Canvas({
         containerId: null,
     });
     const pathHandleDragRef = useRef(null);
+    const lineAnchorDragRef = useRef(null);
     const strokeWidthVersionRef = useRef(strokeWidthVersion);
     const [activePathSelection, setActivePathSelection] = useState(null);
 
@@ -1310,6 +1346,87 @@ export default function Canvas({
         },
         [updatePathShape]
     );
+
+    const beginLineAnchorDrag = useCallback((shapeId, pointIndex) => {
+        if (!shapeId) return;
+        const shape = shapesRef.current.find((s) => s.id === shapeId && s.type === 'line');
+        if (!shape) return;
+        const basePoints = Array.isArray(shape.points) ? [...shape.points] : [];
+        lineAnchorDragRef.current = {
+            shapeId,
+            pointIndex,
+            basePoints,
+            baseState: shapesRef.current.map((s) => ({ ...s })),
+            hasChanged: false,
+        };
+    }, []);
+
+    const updateLineAnchorFromPointer = useCallback((shapeId, pointIndex, pointer) => {
+        if (!shapeId || !pointer) return;
+        setShapes((prev) =>
+            prev.map((shape) => {
+                if (shape.id !== shapeId || shape.type !== 'line') return shape;
+                const ctx = lineAnchorDragRef.current;
+                const sourcePoints = ctx && ctx.shapeId === shapeId
+                    ? ctx.basePoints
+                    : Array.isArray(shape.points)
+                        ? shape.points
+                        : [];
+                const nextPoints = sourcePoints.slice();
+                const idx = pointIndex * 2;
+                if (idx >= nextPoints.length) {
+                    return shape;
+                }
+                const nextX = pointer.x;
+                const nextY = pointer.y;
+                if (ctx && ctx.shapeId === shapeId) {
+                    const prevX = Number(sourcePoints[idx]);
+                    const prevY = Number(sourcePoints[idx + 1]);
+                    if (
+                        !ctx.hasChanged &&
+                        (Math.abs((Number.isFinite(prevX) ? prevX : 0) - nextX) > 0.01 ||
+                            Math.abs((Number.isFinite(prevY) ? prevY : 0) - nextY) > 0.01)
+                    ) {
+                        ctx.hasChanged = true;
+                    }
+                    ctx.pointIndex = pointIndex;
+                }
+                nextPoints[idx] = nextX;
+                nextPoints[idx + 1] = nextY;
+                if (ctx && ctx.shapeId === shapeId) {
+                    ctx.previewPoints = nextPoints;
+                }
+                return { ...shape, points: nextPoints, x: 0, y: 0 };
+            })
+        );
+    }, []);
+
+    const commitLineAnchorDrag = useCallback(() => {
+        const ctx = lineAnchorDragRef.current;
+        if (!ctx) return;
+        lineAnchorDragRef.current = null;
+        if (!ctx.hasChanged) {
+            return;
+        }
+        const finalShape = shapesRef.current.find((s) => s.id === ctx.shapeId && s.type === 'line');
+        const finalPoints = Array.isArray(finalShape?.points) ? finalShape.points : [];
+        let changed = false;
+        if (finalPoints.length !== ctx.basePoints.length) {
+            changed = true;
+        } else {
+            for (let i = 0; i < finalPoints.length; i += 1) {
+                if (Math.abs(finalPoints[i] - ctx.basePoints[i]) > 0.01) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (!changed) {
+            return;
+        }
+        const snapshot = shapesRef.current.map((shape) => ({ ...shape }));
+        applyChange(snapshot, { baseState: ctx.baseState });
+    }, [applyChange]);
 
     const movePathAnchor = useCallback(
         (shapeId, index, position, options = {}) => {
@@ -2079,10 +2196,17 @@ export default function Canvas({
                 const primaryId = selectedId ?? (selectedIds.length ? selectedIds[selectedIds.length - 1] : null);
                 if (primaryId) {
                     const shape = shapesRef.current.find((s) => s.id === primaryId);
-                    if (shape && (shape.type === 'path' || canConvertShapeToPath(shape))) {
-                        e.preventDefault();
-                        enterAnchorModeForShape(primaryId);
-                        return;
+                    if (shape) {
+                        if (shape.type === 'text') {
+                            e.preventDefault();
+                            openTextEditor(shape.id);
+                            return;
+                        }
+                        if (shape.type === 'path' || canConvertShapeToPath(shape)) {
+                            e.preventDefault();
+                            enterAnchorModeForShape(primaryId);
+                            return;
+                        }
                     }
                 }
             }
@@ -3318,6 +3442,9 @@ export default function Canvas({
     const handleStageMouseUp = (e) => {
         const stage = stageRef.current;
         if (!stage) return;
+        if (lineAnchorDragRef.current) {
+            commitLineAnchorDrag();
+        }
         if (selectedTool === 'path') {
             const state = pathInteractionRef.current;
             if (state && state.shapeId && state.pendingPoint) {
@@ -3623,6 +3750,32 @@ export default function Canvas({
             return;
         }
 
+        if (snap && snap.id === id && snap.type === 'line') {
+            let dx = x - snap.startX;
+            let dy = y - snap.startY;
+            const stage = stageRef.current;
+            const pointer = stage?.getPointerPosition?.() || null;
+            if (pointer && snap.startPointer) {
+                dx = pointer.x - snap.startPointer.x;
+                dy = pointer.y - snap.startPointer.y;
+                snap.lastPointer = { x: pointer.x, y: pointer.y };
+            }
+            snap.dx = dx;
+            snap.dy = dy;
+            const translated = translateLinePoints(snap.basePoints, dx, dy);
+            setShapes((prev) =>
+                prev.map((s) =>
+                    s.id === id
+                        ? { ...s, points: translated, x: 0, y: 0 }
+                        : s
+                )
+            );
+            if (targetNode && typeof targetNode.position === 'function') {
+                targetNode.position({ x: snap.startX, y: snap.startY });
+            }
+            return;
+        }
+
         if (snap && snap.id === id && snap.type === 'container' && current && isContainerShape(current)) {
             const dx = x - snap.startX;
             const dy = y - snap.startY;
@@ -3670,6 +3823,30 @@ export default function Canvas({
                     prev.map((s) =>
                         s.id === id
                             ? { ...s, points: translated, x: (snap.baseX || 0) + dx, y: (snap.baseY || 0) + dy }
+                            : s
+                    ),
+                { baseState: snap.baseState }
+            );
+            if (targetNode && typeof targetNode.position === 'function') {
+                targetNode.position({ x: snap.startX, y: snap.startY });
+            }
+            dragSnapshotRef.current = null;
+            return;
+        }
+
+        if (snap && snap.id === id && snap.type === 'line') {
+            let dx = snap.dx != null ? snap.dx : x - snap.startX;
+            let dy = snap.dy != null ? snap.dy : y - snap.startY;
+            if (snap.startPointer && snap.lastPointer) {
+                dx = snap.lastPointer.x - snap.startPointer.x;
+                dy = snap.lastPointer.y - snap.startPointer.y;
+            }
+            const translated = translateLinePoints(snap.basePoints, dx, dy);
+            applyChange(
+                (prev) =>
+                    prev.map((s) =>
+                        s.id === id
+                            ? { ...s, points: translated, x: 0, y: 0 }
                             : s
                     ),
                 { baseState: snap.baseState }
@@ -4078,9 +4255,29 @@ export default function Canvas({
                 )
             );
         } else if (shape.type === 'line') {
-            // lines are transformed by points; for simplicity just update points
             const rotation = node.rotation() || 0;
-            applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, points: node.points(), rotation: snapAngle(rotation) } : s)));
+            const transform = typeof node.getTransform === 'function' ? node.getTransform().copy() : null;
+            if (!transform) return;
+            const rawPoints = typeof node.points === 'function' ? node.points() : [];
+            const mappedPoints = [];
+            for (let i = 0; i + 1 < rawPoints.length; i += 2) {
+                const px = Number(rawPoints[i]);
+                const py = Number(rawPoints[i + 1]);
+                const mapped = transform.point({ x: Number.isFinite(px) ? px : 0, y: Number.isFinite(py) ? py : 0 });
+                mappedPoints.push(mapped.x, mapped.y);
+            }
+            if (typeof node.position === 'function') {
+                node.position({ x: 0, y: 0 });
+            }
+            if (typeof node.scaleX === 'function') node.scaleX(1);
+            if (typeof node.scaleY === 'function') node.scaleY(1);
+            applyChange((prev) =>
+                prev.map((s) =>
+                    s.id === id
+                        ? { ...s, points: mappedPoints, rotation: snapAngle(rotation), x: 0, y: 0 }
+                        : s
+                )
+            );
         } else if (shape.type === 'path') {
             const transform = typeof node.getTransform === 'function' ? node.getTransform().copy() : null;
             if (!transform) return;
@@ -4115,8 +4312,27 @@ export default function Canvas({
                 prev.map((s) => (s.id === id ? { ...s, points: nextPoints } : s))
             );
         } else if (shape.type === 'text') {
+            const scaleX = node.scaleX();
+            const scaleY = node.scaleY();
+            const newWidth = Math.max(1, node.width() * scaleX);
+            const newHeight = Math.max(1, node.height() * scaleY);
             const rotation = node.rotation() || 0;
-            applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, x: node.x(), y: node.y(), rotation: snapAngle(rotation) } : s)));
+            node.scaleX(1);
+            node.scaleY(1);
+            applyChange((prev) =>
+                prev.map((s) =>
+                    s.id === id
+                        ? {
+                              ...s,
+                              x: node.x(),
+                              y: node.y(),
+                              width: newWidth,
+                              height: newHeight,
+                              rotation: snapAngle(rotation),
+                          }
+                        : s
+                )
+            );
         }
     };
 
@@ -4126,98 +4342,259 @@ export default function Canvas({
         if (!stage) return;
         const shape = shapesRef.current.find((s) => s.id === shapeId && s.type === 'text');
         if (!shape) return;
-        const node = stage.findOne(`#shape-${shapeId}`);
-        if (!node) return;
+        const host = stageContainerRef.current || stage.container();
+        if (!host) return;
+        const textNode = stage.findOne(`#shape-${shape.id}`);
+        if (!textNode) return;
 
-        const stageBox = stage.container().getBoundingClientRect();
-        const stageScale = stage.scaleX();
-        const stageX = stage.x();
-        const stageY = stage.y();
-        const absPos = node.getAbsolutePosition();
+        selectSingle(shape.id);
 
-        const areaPosition = {
-            x: stageBox.left + stageX + absPos.x * stageScale,
-            y: stageBox.top + stageY + absPos.y * stageScale,
-        };
+        const originalText = typeof shape.text === 'string' ? shape.text : '';
+        const originalHeight =
+            typeof shape.height === 'number'
+                ? Math.max(1, shape.height)
+                : Math.max(1, typeof textNode.height === 'function' ? textNode.height() : 0);
+        const beforeState = shapesRef.current.map((s) => ({ ...s }));
 
-        // create textarea and style it
         const textarea = document.createElement('textarea');
-        document.body.appendChild(textarea);
-
-        const currentFontStyle = shape.fontStyle || textFontStyle;
-        const currentFontSize = shape.fontSize || textFontSize;
-        const currentLineHeight = shape.lineHeight || textLineHeight;
-        const currentLetterSpacing = shape.letterSpacing || textLetterSpacing;
-
-        textarea.value = shape.text || '';
+        textarea.value = originalText;
+        textarea.setAttribute('aria-label', 'Edit text');
+        textarea.setAttribute('spellcheck', 'false');
+        textarea.setAttribute('autocapitalize', 'off');
+        textarea.setAttribute('autocomplete', 'off');
+        textarea.setAttribute('autocorrect', 'off');
         textarea.style.position = 'absolute';
-        textarea.style.top = `${areaPosition.y}px`;
-        textarea.style.left = `${areaPosition.x}px`;
-        textarea.style.width = Math.max(120, node.width() * stageScale) + 'px';
-        textarea.style.height = Math.max(32, node.height() * stageScale) + 'px';
-        textarea.style.fontSize = `${currentFontSize * stageScale}px`;
-        textarea.style.fontFamily = shape.fontFamily || textFontFamily;
-        textarea.style.fontStyle = currentFontStyle.includes('italic') ? 'italic' : 'normal';
-        textarea.style.fontWeight = currentFontStyle.includes('bold') ? '700' : '400';
-        textarea.style.lineHeight = String(currentLineHeight);
-        textarea.style.letterSpacing = `${currentLetterSpacing * stageScale}px`;
-        textarea.style.textAlign = shape.align || textAlignValue;
-        textarea.style.textDecoration = shape.textDecoration || textDecorationValue;
-        textarea.style.border = '1px solid #4f83ff';
-        textarea.style.padding = '6px 8px';
+        textarea.style.border = '1px solid transparent';
+        textarea.style.padding = '0';
         textarea.style.margin = '0';
-        textarea.style.overflow = 'hidden';
-        textarea.style.background = '#ffffff';
+        textarea.style.background = 'transparent';
         textarea.style.outline = 'none';
         textarea.style.resize = 'none';
-        textarea.style.boxShadow = '0 0 0 2px rgba(79, 131, 255, 0.25)';
-        textarea.style.borderRadius = '6px';
-        textarea.style.color = '#1f2a37';
-        textarea.style.zIndex = 1000;
+        textarea.style.whiteSpace = 'pre-wrap';
+        textarea.style.overflowWrap = 'break-word';
+        textarea.style.wordBreak = 'break-word';
+        textarea.style.overflow = 'hidden';
+        textarea.style.userSelect = 'text';
+        textarea.style.pointerEvents = 'auto';
 
-        textarea.focus();
-        if (typeof textarea.setSelectionRange === 'function') {
-            const length = textarea.value.length;
-            textarea.setSelectionRange(length, length);
+        const fontFamily = shape.fontFamily || (typeof textNode.fontFamily === 'function' ? textNode.fontFamily() : 'Inter');
+        const fontStyle = shape.fontStyle || (typeof textNode.fontStyle === 'function' ? textNode.fontStyle() : 'normal');
+        const isItalic = typeof fontStyle === 'string' && fontStyle.toLowerCase().includes('italic');
+        const isBold = typeof fontStyle === 'string' &&
+            (fontStyle.toLowerCase().includes('bold') || fontStyle.toLowerCase().includes('700'));
+        textarea.style.fontFamily = fontFamily;
+        textarea.style.fontStyle = isItalic ? 'italic' : 'normal';
+        textarea.style.fontWeight = isBold ? 'bold' : 'normal';
+
+        const fontSize =
+            typeof shape.fontSize === 'number'
+                ? shape.fontSize
+                : typeof textNode.fontSize === 'function'
+                ? textNode.fontSize()
+                : 16;
+        const lineHeightValue =
+            typeof shape.lineHeight === 'number'
+                ? shape.lineHeight
+                : typeof textNode.lineHeight === 'function'
+                ? textNode.lineHeight()
+                : 1.2;
+        const letterSpacingValue =
+            typeof shape.letterSpacing === 'number'
+                ? shape.letterSpacing
+                : typeof textNode.letterSpacing === 'function'
+                ? textNode.letterSpacing()
+                : 0;
+        const textAlignValue =
+            typeof shape.align === 'string'
+                ? shape.align
+                : typeof textNode.align === 'function'
+                ? textNode.align()
+                : 'left';
+        textarea.style.textAlign = textAlignValue;
+
+        const fillColor = (() => {
+            if (typeof shape.fill === 'string' && shape.fill.trim()) return shape.fill;
+            const gradient = shape.fillGradient;
+            if (gradient && Array.isArray(gradient.stops) && gradient.stops.length) {
+                const first = gradient.stops.find((stop) => typeof stop.color === 'string' && stop.color.trim());
+                if (first) return first.color;
+            }
+            return '#000000';
+        })();
+        textarea.style.color = fillColor;
+        textarea.style.caretColor = fillColor;
+
+        const rotation =
+            typeof shape.rotation === 'number'
+                ? shape.rotation
+                : typeof textNode.rotation === 'function'
+                ? textNode.rotation()
+                : 0;
+
+        let currentWidth =
+            typeof shape.width === 'number'
+                ? Math.max(1, shape.width)
+                : Math.max(1, typeof textNode.width === 'function' ? textNode.width() : 0);
+        let currentHeight = Math.max(1, originalHeight);
+        const minLineHeight = Math.max(1, fontSize * lineHeightValue);
+
+        const previousCursor = host.style.cursor;
+        host.style.cursor = 'text';
+
+        if (typeof textNode.hide === 'function') {
+            textNode.hide();
+            textNode.getLayer?.()?.batchDraw?.();
         }
 
+        host.appendChild(textarea);
+
+        const applyLayout = () => {
+            const stageScaleX = stage.scaleX() || 1;
+            const stageScaleY = stage.scaleY() || 1;
+            const stageX = stage.x() || 0;
+            const stageY = stage.y() || 0;
+            const textPos = typeof textNode.getAbsolutePosition === 'function'
+                ? textNode.getAbsolutePosition()
+                : { x: shape.x || 0, y: shape.y || 0 };
+            const displayWidth = Math.max(1, currentWidth * stageScaleX);
+            const displayHeight = Math.max(1, currentHeight * stageScaleY);
+            textarea.style.left = `${stageX + textPos.x * stageScaleX}px`;
+            textarea.style.top = `${stageY + textPos.y * stageScaleY}px`;
+            textarea.style.width = `${displayWidth}px`;
+            textarea.style.height = `${displayHeight}px`;
+            textarea.style.minHeight = `${minLineHeight * stageScaleY}px`;
+            textarea.style.fontSize = `${fontSize * stageScaleY}px`;
+            textarea.style.lineHeight = `${Math.max(minLineHeight, fontSize * lineHeightValue) * stageScaleY}px`;
+            textarea.style.letterSpacing = `${letterSpacingValue * stageScaleX}px`;
+            textarea.style.transformOrigin = 'top left';
+            textarea.style.transform = `rotate(${rotation}deg)`;
+        };
+
+        const updateHeightFromContent = () => {
+            const stageScaleY = stage.scaleY() || 1;
+            textarea.style.height = 'auto';
+            const minDisplayHeight = Math.max(minLineHeight * stageScaleY, textarea.scrollHeight);
+            currentHeight = Math.max(1, minDisplayHeight / stageScaleY);
+            textarea.style.height = `${minDisplayHeight}px`;
+            return currentHeight;
+        };
+
+        const applyValue = (value, height = currentHeight) => {
+            const nextHeight = Math.max(1, height);
+            setShapes((prev) =>
+                prev.map((s) =>
+                    s.id === shape.id
+                        ? {
+                              ...s,
+                              text: value,
+                              height: nextHeight,
+                          }
+                        : s
+                )
+            );
+        };
+
+        const focusTextarea = () => {
+            applyLayout();
+            updateHeightFromContent();
+            applyLayout();
+            textarea.focus();
+            if (typeof textarea.setSelectionRange === 'function') {
+                const length = textarea.value.length;
+                textarea.setSelectionRange(length, length);
+            } else {
+                textarea.select?.();
+            }
+        };
+
         let cancelled = false;
+        let committed = false;
 
         const cleanup = () => {
+            textarea.removeEventListener('input', onInput);
             textarea.removeEventListener('keydown', onKeyDown);
             textarea.removeEventListener('blur', onBlur);
             if (textarea.parentNode) textarea.parentNode.removeChild(textarea);
+            if (typeof textNode.show === 'function') {
+                textNode.show();
+                textNode.getLayer?.()?.batchDraw?.();
+            }
+            stage.batchDraw?.();
+            host.style.cursor = previousCursor;
         };
 
-        const commit = () => {
+        const commit = (finalHeight = currentHeight) => {
+            if (committed || cancelled) return;
+            committed = true;
             const value = textarea.value;
-            applyChange((prev) => prev.map((s) => (s.id === shape.id ? { ...s, text: value } : s)));
+            const normalizedHeight = Math.max(1, finalHeight);
+            applyValue(value, normalizedHeight);
+            const textChanged = value !== originalText;
+            const heightChanged = Math.abs(normalizedHeight - originalHeight) > 0.01;
+            if (textChanged || heightChanged) {
+                pastRef.current.push(beforeState);
+                if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
+                futureRef.current = [];
+            }
             cleanup();
         };
 
         const cancel = () => {
+            if (committed || cancelled) return;
             cancelled = true;
+            if (originalText !== textarea.value || Math.abs(currentHeight - originalHeight) > 0.01) {
+                setShapes((prev) =>
+                    prev.map((s) =>
+                        s.id === shape.id
+                            ? {
+                                  ...s,
+                                  text: originalText,
+                                  height: originalHeight,
+                              }
+                            : s
+                    )
+                );
+            }
             cleanup();
+        };
+
+        const onInput = () => {
+            if (cancelled || committed) return;
+            const measuredHeight = updateHeightFromContent();
+            applyLayout();
+            applyValue(textarea.value, measuredHeight);
         };
 
         const onKeyDown = (evt) => {
             if (evt.key === 'Enter' && !evt.shiftKey) {
                 evt.preventDefault();
-                commit();
+                const measuredHeight = updateHeightFromContent();
+                applyLayout();
+                commit(measuredHeight);
             } else if (evt.key === 'Escape') {
                 evt.preventDefault();
                 cancel();
+            } else if (evt.key === 'Tab') {
+                evt.preventDefault();
+                const measuredHeight = updateHeightFromContent();
+                applyLayout();
+                commit(measuredHeight);
             }
             evt.stopPropagation();
         };
 
         const onBlur = () => {
-            if (cancelled) return;
-            commit();
+            if (cancelled || committed) return;
+            const measuredHeight = updateHeightFromContent();
+            applyLayout();
+            commit(measuredHeight);
         };
 
+        textarea.addEventListener('input', onInput);
         textarea.addEventListener('keydown', onKeyDown);
         textarea.addEventListener('blur', onBlur);
+
+        focusTextarea();
     };
 
     useEffect(() => {
@@ -4440,6 +4817,11 @@ export default function Canvas({
             const path = getContainerPathForId(containerAncestor.id, shapesRef.current);
             setActiveContainerPath([null, ...path]);
         }
+        if (shape.type === 'text') {
+            openTextEditor(shape.id);
+            return;
+        }
+
         if (shape.type === 'path' || canConvertShapeToPath(shape)) {
             enterAnchorModeForShape(shape.id);
         } else {
@@ -5003,16 +5385,29 @@ export default function Canvas({
                     />
                 );
             }
-            case 'line':
+            case 'line': {
+                const points = Array.isArray(shape.points) ? shape.points : [];
+                const hitWidth = Math.max(8, (shape.strokeWidth || 1) * 2);
+                const dashArray = Array.isArray(shape.dash) ? shape.dash : undefined;
                 return (
-                    <Path
+                    <Line
                         {...commonProps}
-                        points={shape.points}
+                        x={shape.x || 0}
+                        y={shape.y || 0}
+                        points={points}
                         stroke={shape.stroke}
-                        strokeWidth={shape.strokeWidth}
+                        strokeWidth={shape.strokeWidth || 1}
+                        lineCap={shape.lineCap || 'round'}
+                        lineJoin={shape.lineJoin || 'round'}
+                        dash={dashArray}
+                        dashEnabled={Array.isArray(dashArray) && dashArray.length > 0}
+                        hitStrokeWidth={hitWidth}
+                        tension={shape.tension || 0}
+                        bezier={shape.bezier || false}
                         rotation={shape.rotation || 0}
                     />
                 );
+            }
             case 'path': {
                 const pathPoints = getPathPoints(shape);
                 const pathData = buildSvgPath(pathPoints, !!shape.closed);
@@ -5044,6 +5439,8 @@ export default function Canvas({
                         {...commonProps}
                         x={shape.x}
                         y={shape.y}
+                        width={typeof shape.width === 'number' ? Math.max(1, shape.width) : undefined}
+                        height={typeof shape.height === 'number' ? Math.max(1, shape.height) : undefined}
                         text={shape.text || 'Text'}
                         {...fillProps}
                         stroke={shape.stroke}
@@ -5057,6 +5454,8 @@ export default function Canvas({
                         align={shape.align || textAlignValue}
                         verticalAlign={shape.verticalAlign || textVerticalAlignValue}
                         textDecoration={shape.textDecoration || textDecorationValue}
+                        wrap="word"
+                        listening={true}
                         onDblClick={() => openTextEditor(shape.id)}
                     />
                 );
@@ -5407,6 +5806,86 @@ export default function Canvas({
             <Group key={`container-${shape.id}`} {...clipProps}>
                 {node}
                 {children.map((child) => renderShapeTree(child))}
+            </Group>
+        );
+    };
+
+    const renderLineHandles = () => {
+        const allowHandles = selectedTool === 'line' || isSelectLikeTool;
+        if (!allowHandles) return null;
+        const ids = new Set(selectedIds.length ? selectedIds : selectedId != null ? [selectedId] : []);
+        if (currentDrawingIdRef.current != null) {
+            ids.add(currentDrawingIdRef.current);
+        }
+        if (!ids.size) return null;
+        const stage = stageRef.current;
+        const stageScale = stage ? stage.scaleX() || 1 : scale || 1;
+        const radius = Math.max(4, 6 / stageScale);
+        const stroke = Math.max(1, 2 / stageScale);
+        const handlesInteractive = selectedTool !== 'line';
+        const handles = [];
+        for (let i = 0; i < shapesOnActivePage.length; i += 1) {
+            const shape = shapesOnActivePage[i];
+            if (!shape || shape.type !== 'line') continue;
+            if (shape.visible === false || shape.locked) continue;
+            if (!ids.has(shape.id)) continue;
+            const points = Array.isArray(shape.points) ? shape.points : [];
+            for (let j = 0; j + 1 < points.length; j += 2) {
+                const x = Number(points[j]);
+                const y = Number(points[j + 1]);
+                if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+                const pointIndex = j / 2;
+                handles.push(
+                    <Circle
+                        key={`line-handle-${shape.id}-${pointIndex}`}
+                        x={x}
+                        y={y}
+                        radius={radius}
+                        fill="#ffffff"
+                        stroke="#2563eb"
+                        strokeWidth={stroke}
+                        draggable={handlesInteractive}
+                        listening={handlesInteractive}
+                        hitStrokeWidth={Math.max(radius * 2, 16 / stageScale)}
+                        onMouseDown={(evt) => {
+                            if (!handlesInteractive) return;
+                            evt.cancelBubble = true;
+                            beginLineAnchorDrag(shape.id, pointIndex);
+                        }}
+                        onTouchStart={(evt) => {
+                            if (!handlesInteractive) return;
+                            evt.cancelBubble = true;
+                            beginLineAnchorDrag(shape.id, pointIndex);
+                        }}
+                        onDragStart={(evt) => {
+                            if (!handlesInteractive) return;
+                            evt.cancelBubble = true;
+                            beginLineAnchorDrag(shape.id, pointIndex);
+                        }}
+                        onDragMove={(evt) => {
+                            if (!handlesInteractive) return;
+                            evt.cancelBubble = true;
+                            const pointer = getCanvasPointer();
+                            if (!pointer) return;
+                            updateLineAnchorFromPointer(shape.id, pointIndex, pointer);
+                        }}
+                        onDragEnd={(evt) => {
+                            if (!handlesInteractive) return;
+                            evt.cancelBubble = true;
+                            const pointer = getCanvasPointer();
+                            if (pointer) {
+                                updateLineAnchorFromPointer(shape.id, pointIndex, pointer);
+                            }
+                            commitLineAnchorDrag();
+                        }}
+                    />
+                );
+            }
+        }
+        if (!handles.length) return null;
+        return (
+            <Group key="line-handle-layer" listening={handlesInteractive}>
+                {handles}
             </Group>
         );
     };
@@ -6513,6 +6992,9 @@ export default function Canvas({
                                 perfectDrawEnabled={false}
                             />
                         )}
+                    </Layer>
+                    <Layer listening={selectedTool === 'line' || isSelectLikeTool}>
+                        {renderLineHandles()}
                     </Layer>
                     <Layer listening={selectedTool === 'path' || isSelectLikeTool}>
                         {renderPathEditor()}
