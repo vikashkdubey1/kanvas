@@ -1294,28 +1294,41 @@ export default function Canvas({
     const updatePathShape = useCallback(
         (shapeId, mutator, options = {}) => {
             if (!shapeId || typeof mutator !== 'function') return;
+
             const applyUpdater = (source) =>
                 source.map((shape) => {
                     if (shape.id !== shapeId || shape.type !== 'path') {
                         return shape;
                     }
+
                     const currentPoints = getPathPoints(shape);
                     const result = mutator(clonePathPoints(currentPoints), shape);
                     if (!result) {
                         return shape;
                     }
+
+                    let nextShape;
+
                     if (Array.isArray(result)) {
-                        return { ...shape, points: result };
-                    }
-                    if (typeof result === 'object') {
+                        nextShape = { ...shape, points: result };
+                    } else if (typeof result === 'object') {
                         const nextPoints = Array.isArray(result.points)
                             ? result.points
                             : clonePathPoints(currentPoints);
                         const { points: _ignored, ...rest } = result;
-                        return { ...shape, ...rest, points: nextPoints };
+                        nextShape = { ...shape, ...rest, points: nextPoints };
+                    } else {
+                        return shape;
                     }
-                    return shape;
+
+                    // 👉 mark that this path has actually been edited via path ops
+                    if (!shape._pathWasEdited) {
+                        nextShape = { ...nextShape, _pathWasEdited: true };
+                    }
+
+                    return nextShape;
                 });
+
             if (options.commit) {
                 const baseState = options.baseState || shapesRef.current;
                 applyChange(applyUpdater, { baseState });
@@ -1499,12 +1512,29 @@ export default function Canvas({
             const shape = currentShapes[index];
             if (!shape || shape.type === 'path') return shape;
             if (!canConvertShapeToPath(shape)) return null;
+
+            // 👉 capture the original geometry so we can restore it later
+            const originalGeometry = {
+                type: shape.type,
+                x: shape.x,
+                y: shape.y,
+                width: shape.width,
+                height: shape.height,
+                radius: shape.radius,
+                radiusX: shape.radiusX,
+                radiusY: shape.radiusY,
+                rotation: shape.rotation,
+                points: Array.isArray(shape.points) ? [...shape.points] : undefined,
+                closed: shape.closed,
+            };
+
             const derived = shapeToPath(shape);
             if (!derived || !Array.isArray(derived.points) || derived.points.length === 0) {
                 return null;
             }
+
             const nextPoints = derived.points.map((point) => clonePathPoint(point));
-            const nextShape = {
+            let nextShape = {
                 ...shape,
                 type: 'path',
                 points: nextPoints,
@@ -1512,20 +1542,28 @@ export default function Canvas({
                     derived.closed != null
                         ? derived.closed
                         : shape.type !== 'line' && nextPoints.length > 2,
+                // 👉 metadata for restoring later
+                __pathOriginal: originalGeometry,
+                _pathWasEdited: false,
             };
+
             if (derived.lineCap) nextShape.lineCap = derived.lineCap;
             if (derived.lineJoin) nextShape.lineJoin = derived.lineJoin;
+
+            // path no longer uses these, but we kept them inside __pathOriginal
             delete nextShape.width;
             delete nextShape.height;
             delete nextShape.radius;
             delete nextShape.radiusX;
             delete nextShape.radiusY;
+
             const nextState = currentShapes.map((s, idx) => (idx === index ? nextShape : s));
             applyChange(() => nextState, { baseState: currentShapes });
             return nextShape;
         },
         [applyChange]
     );
+
 
     const ensureAnchorEditableShape = useCallback(
         (shapeId) => {
@@ -3969,6 +4007,65 @@ export default function Canvas({
             };
         }
     }, [selectedTool, selectedId, selectedIds, convertShapeToPath]);
+
+    useEffect(() => {
+        if (selectedTool !== 'select') return;
+
+        // when switching to Select, restore any auto-converted paths
+        // that were never actually edited in path mode
+        applyChange((prev) => {
+            let changed = false;
+
+            const next = prev.map((shape) => {
+                // only care about paths that remember their original shape
+                if (shape.type !== 'path' || !shape.__pathOriginal) {
+                    return shape;
+                }
+
+                // if user edited this path, keep it as a path
+                if (shape._pathWasEdited) {
+                    return shape;
+                }
+
+                const orig = shape.__pathOriginal || {};
+                let reverted = {
+                    ...shape,
+                    type: orig.type || shape.type,
+                    x: orig.x != null ? orig.x : shape.x,
+                    y: orig.y != null ? orig.y : shape.y,
+                    width: orig.width,
+                    height: orig.height,
+                    radius: orig.radius,
+                    radiusX: orig.radiusX,
+                    radiusY: orig.radiusY,
+                    rotation: orig.rotation,
+                    // only keep points when the original needed them
+                    points: Array.isArray(orig.points) ? [...orig.points] : orig.points,
+                    closed: orig.closed,
+                };
+
+                // For non-path shapes that don't use points (rect/circle/ellipse),
+                // remove path-specific geometry fields.
+                if (
+                    orig.type === 'rectangle' ||
+                    orig.type === 'circle' ||
+                    orig.type === 'ellipse'
+                ) {
+                    delete reverted.points;
+                    delete reverted.closed;
+                }
+
+                // clean up metadata
+                delete reverted.__pathOriginal;
+                delete reverted._pathWasEdited;
+
+                changed = true;
+                return reverted;
+            });
+
+            return changed ? next : prev;
+        });
+    }, [selectedTool, applyChange]);
 
     useEffect(() => {
         setSelectedId(null);
