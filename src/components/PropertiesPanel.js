@@ -137,23 +137,23 @@ const activeSubtitleStyle = {
 };
 
 
-    const contentStyle = {
-        //padding: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 0,
-        overflowY: 'auto',
-    };
+const contentStyle = {
+    //padding: '20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 0,
+    overflowY: 'auto',
+};
 
-    const sectionCardStyle = {
-        background: '#ffffff',
-        borderRadius: 0,
-        padding: '18px 16px',
-        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
-    };
+const sectionCardStyle = {
+    background: '#ffffff',
+    borderRadius: 0,
+    padding: '18px 16px',
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+};
 
-    const sectionHeaderStyle = {
-        marginBottom: 14,
+const sectionHeaderStyle = {
+    marginBottom: 14,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -164,20 +164,20 @@ const sectionHeaderActionsStyle = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    };
+};
 
-    const sectionTitleStyle = {
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: 0.7,
-        textTransform: 'uppercase',
-        color: '#64748b',
-    };
+const sectionTitleStyle = {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+    color: '#64748b',
+};
 
-    const sectionBodyStyle = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
+const sectionBodyStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
 };
 
 const sectionSubheadingStyle = {
@@ -540,61 +540,61 @@ const blendOptions = [
     { id: 'normal', label: 'Normal' },
     { id: 'multiply', label: 'Multiply' },
     { id: 'screen', label: 'Screen' },
-];  
+];
 
-    const fieldStyle = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-    };
+const fieldStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+};
 
-    const fieldLabelStyle = {
-        fontSize: 12,
-        fontWeight: 600,
-        color: '#1f2937',
-    };
+const fieldLabelStyle = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#1f2937',
+};
 
-    const selectStyle = {
-        height: 24,
-        borderRadius: 4,
-        //border: '1px solid #cdd5e0',
-        border: 'none',
-        background: '#e5e5e5',
-        fontSize: 13,
-        color: '#1f2937',
-        padding: '0 12px',
-    };
-
-    const numberInputWrapperStyle = {
-        display: 'flex',
-        alignItems: 'center',
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        padding: '0 10px',
-        height: 24,
-        gap: 6,
-    };
-
-    const numberInputStyle = {
-        width: 64,
-        border: 'none',
-        background: 'transparent',
+const selectStyle = {
+    height: 24,
+    borderRadius: 4,
+    //border: '1px solid #cdd5e0',
+    border: 'none',
+    background: '#e5e5e5',
     fontSize: 13,
-        color: '#111827',
-        textAlign: 'right',
-        outline: 'none',
-    };
+    color: '#1f2937',
+    padding: '0 12px',
+};
 
-    const suffixStyle = {
-        fontSize: 12,
-        color: '#64748b',
+const numberInputWrapperStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    padding: '0 10px',
+    height: 24,
+    gap: 6,
+};
+
+const numberInputStyle = {
+    width: 64,
+    border: 'none',
+    background: 'transparent',
+    fontSize: 13,
+    color: '#111827',
+    textAlign: 'right',
+    outline: 'none',
+};
+
+const suffixStyle = {
+    fontSize: 12,
+    color: '#64748b',
 };
 
 const toggleButtonBase = {
     flex: 1,
     width: 26,
-    maxWidth:24,
+    maxWidth: 24,
     height: 24,
     padding: '6px 8px',
     borderRadius: 8,
@@ -637,21 +637,21 @@ const ToggleGroup = ({ children }) => (
     <div style={{ display: 'flex', gap: 1, flexDirection: 'row' }}>{children}</div>
 );
 
-    const hiddenColorInputStyle = {
-        position: 'absolute',
-        inset: 0,
-        opacity: 0,
-        cursor: 'pointer',
-    };
+const hiddenColorInputStyle = {
+    position: 'absolute',
+    inset: 0,
+    opacity: 0,
+    cursor: 'pointer',
+};
 
-    const colorSwatchStyle = {
-        position: 'relative',
-        width: 14,
-        height: 14,
-        borderRadius: 2,
-        border: '1px solid #cdd5e0',
-        overflow: 'hidden',
-        boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)',
+const colorSwatchStyle = {
+    position: 'relative',
+    width: 14,
+    height: 14,
+    borderRadius: 2,
+    border: '1px solid #cdd5e0',
+    overflow: 'hidden',
+    boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)',
 };
 
 const colorPickerButtonStyle = {
@@ -958,23 +958,23 @@ const gradientAngleSuffixStyle = {
     fontWeight: 600,
 };
 
-    const hexInputStyle = {
-        width: 80,
-        height: 36,
-        borderRadius: 8,
-        border: '1px solid #cdd5e0',
-        background: '#f8fafc',
-        fontSize: 13,
-        color: '#111827',
-        padding: '0 10px',
-        textTransform: 'uppercase',
-        outline: 'none',
-    };
+const hexInputStyle = {
+    width: 80,
+    height: 36,
+    borderRadius: 8,
+    border: '1px solid #cdd5e0',
+    background: '#f8fafc',
+    fontSize: 13,
+    color: '#111827',
+    padding: '0 10px',
+    textTransform: 'uppercase',
+    outline: 'none',
+};
 
-    const disabledValueStyle = {
-        fontSize: 12,
-        color: '#94a3b8',
-    };
+const disabledValueStyle = {
+    fontSize: 12,
+    color: '#94a3b8',
+};
 
 const HEX_REGEX = /^#([0-9a-f]{6})$/i;
 
@@ -1491,27 +1491,27 @@ const solidSwatchButtonInnerStyle = {
 };
 
 const Section = ({ title, children, disabled = false, actions = null }) => (
-        <section
-            style={{
-                ...sectionCardStyle,
-                opacity: disabled ? 0.55 : 1,
-                pointerEvents: disabled ? 'none' : 'auto',
-            }}
-        >
-            <div style={sectionHeaderStyle}>
+    <section
+        style={{
+            ...sectionCardStyle,
+            opacity: disabled ? 0.55 : 1,
+            pointerEvents: disabled ? 'none' : 'auto',
+        }}
+    >
+        <div style={sectionHeaderStyle}>
             <div style={sectionTitleStyle}>{title}</div>
             {actions ? <div style={sectionHeaderActionsStyle}>{actions}</div> : null}
-            </div>
-            <div style={sectionBodyStyle}>{children}</div>
-        </section>
-    );
+        </div>
+        <div style={sectionBodyStyle}>{children}</div>
+    </section>
+);
 
-    const normalizeHex = (value, fallback = '#000000') => {
-        if (typeof value === 'string' && HEX_REGEX.test(value)) {
-            return value.toLowerCase();
-        }
-        return fallback;
-    };
+const normalizeHex = (value, fallback = '#000000') => {
+    if (typeof value === 'string' && HEX_REGEX.test(value)) {
+        return value.toLowerCase();
+    }
+    return fallback;
+};
 
 const ColorControl = ({
     label,
@@ -1782,9 +1782,9 @@ const ColorControl = ({
             const nextType = updates.type ?? activeType;
             let nextValue = updates.value ?? style?.value;
             const nextMeta =
-                      updates.meta && typeof updates.meta === 'object'
-                            ? { ...updates.meta }
-                        : { source: 'colorControl' }; // ✅ default meta so Canvas knows it's user-initiated
+                updates.meta && typeof updates.meta === 'object'
+                    ? { ...updates.meta }
+                    : { source: 'colorControl' }; // ✅ default meta so Canvas knows it's user-initiated
 
             if (nextType === 'solid') {
                 if (typeof nextValue !== 'string') {
@@ -2107,7 +2107,7 @@ const ColorControl = ({
                 return current;
             },
             { focusIndex: stopsCount - 1 - activeStopIndex }
-            );
+        );
     };
 
     const handleGradientRotate = () => {
@@ -2126,31 +2126,31 @@ const ColorControl = ({
             current.handles = applyAngleToHandles(current.type, current.handles, normalizedAngle);
             return current;
         });
-        };
+    };
 
-        const handleGradientHexChange = (index, event) => {
-            let next = event.target.value.trim();
-            if (!next.startsWith('#')) next = `#${next}`;
-            setActiveStopIndex(index);
-            setGradientDrafts((prev) =>
-                prev.map((draftValue, draftIndex) => (draftIndex === index ? next.toUpperCase() : draftValue))
+    const handleGradientHexChange = (index, event) => {
+        let next = event.target.value.trim();
+        if (!next.startsWith('#')) next = `#${next}`;
+        setActiveStopIndex(index);
+        setGradientDrafts((prev) =>
+            prev.map((draftValue, draftIndex) => (draftIndex === index ? next.toUpperCase() : draftValue))
+        );
+        if (HEX_REGEX.test(next)) {
+            const safe = next.toLowerCase();
+            commitGradientUpdate(
+                (current) => {
+                    if (!current.stops[index]) return current;
+                    current.stops[index].color = safe;
+                    return current;
+                },
+                { focusIndex: index }
             );
-            if (HEX_REGEX.test(next)) {
-                const safe = next.toLowerCase();
-                commitGradientUpdate(
-                    (current) => {
-                        if (!current.stops[index]) return current;
-                        current.stops[index].color = safe;
-                        return current;
-                    },
-                    { focusIndex: index }
-                );
-            }
-        };
+        }
+    };
 
-        const handleGradientHexBlur = () => {
-            setGradientDrafts(gradientValueRef.current.stops.map((stop) => stop.color.toUpperCase()));
-        };
+    const handleGradientHexBlur = () => {
+        setGradientDrafts(gradientValueRef.current.stops.map((stop) => stop.color.toUpperCase()));
+    };
 
     const handleGradientStopColorChange = (index, color) => {
         setActiveStopIndex(index);
@@ -2508,102 +2508,102 @@ const ColorControl = ({
         );
     };
 
-        const renderGradientEditor = () => {
-            const stops = gradientValue.stops;
-            const canRemove = stops.length > 2;
-            const canAddStop = stops.length < 8;
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={gradientToolbarStyle}>
-                        <select
-                            value={gradientValue.type}
-                            onChange={handleGradientTypeChange}
-                            style={gradientTypeSelectStyle}
-                        >
-                            {GRADIENT_TYPE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                    {option.label}
-                                </option>
-                            ))}
-                        </select>
-                        <button
-                            type="button"
-                            onClick={handleGradientFlip}
-                            style={gradientToolbarButtonStyle}
-                        >
-                            <span style={gradientToolbarIconStyle} aria-hidden="true">
-                                ⇆
-                            </span>
-                            Flip
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleGradientRotate}
-                            style={gradientToolbarButtonStyle}
-                        >
-                            <span style={gradientToolbarIconStyle} aria-hidden="true">
-                                ↻
-                            </span>
-                            Rotate 90°
-                        </button>
-                    </div>
+    const renderGradientEditor = () => {
+        const stops = gradientValue.stops;
+        const canRemove = stops.length > 2;
+        const canAddStop = stops.length < 8;
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={gradientToolbarStyle}>
+                    <select
+                        value={gradientValue.type}
+                        onChange={handleGradientTypeChange}
+                        style={gradientTypeSelectStyle}
+                    >
+                        {GRADIENT_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                    <button
+                        type="button"
+                        onClick={handleGradientFlip}
+                        style={gradientToolbarButtonStyle}
+                    >
+                        <span style={gradientToolbarIconStyle} aria-hidden="true">
+                            ⇆
+                        </span>
+                        Flip
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleGradientRotate}
+                        style={gradientToolbarButtonStyle}
+                    >
+                        <span style={gradientToolbarIconStyle} aria-hidden="true">
+                            ↻
+                        </span>
+                        Rotate 90°
+                    </button>
+                </div>
+                <div
+                    style={{
+                        ...gradientPreviewStyle,
+                        backgroundImage: gradientCss,
+                        backgroundColor: stops[0]?.color || '#000000',
+                    }}
+                />
+                <div style={gradientMeterWrapperStyle}>
                     <div
+                        ref={gradientTrackRef}
                         style={{
-                            ...gradientPreviewStyle,
+                            ...gradientMeterStyle,
                             backgroundImage: gradientCss,
                             backgroundColor: stops[0]?.color || '#000000',
                         }}
-                    />
-                    <div style={gradientMeterWrapperStyle}>
-                        <div
-                            ref={gradientTrackRef}
-                            style={{
-                                ...gradientMeterStyle,
-                                backgroundImage: gradientCss,
-                                backgroundColor: stops[0]?.color || '#000000',
-                            }}
-                            onPointerDown={handleGradientTrackPointerDown}
-                        >
-                            {stops.map((stop, index) => {
-                                const isActive = index === activeStopIndex;
-                                const opacity = clampValue(stop.opacity ?? 1, 0, 1);
-                                return (
+                        onPointerDown={handleGradientTrackPointerDown}
+                    >
+                        {stops.map((stop, index) => {
+                            const isActive = index === activeStopIndex;
+                            const opacity = clampValue(stop.opacity ?? 1, 0, 1);
+                            return (
                                 <div
                                     key={`stop-handle-${index}`}
                                     data-stop-index={index}
                                     onPointerDown={(event) => handleStopPointerDown(event, index)}
-                                        style={{
-                                            ...gradientStopHandleStyle,
+                                    style={{
+                                        ...gradientStopHandleStyle,
                                         ...(isActive ? gradientStopHandleActiveStyle : null),
                                         left: `${stop.position * 100}%`,
-                                            background: stop.color,
-                                            opacity,
-                                        }}
-                                    />
-                                );
-                            })}
-                        </div>
+                                        background: stop.color,
+                                        opacity,
+                                    }}
+                                />
+                            );
+                        })}
                     </div>
-                    <div style={gradientStopsHeaderStyle}>
-                        <span style={gradientStopsTitleStyle}>Stops</span>
-                        <button
-                            type="button"
-                            onClick={() => handleAddGradientStop()}
-                            style={{
-                                ...gradientAddStopButtonStyle,
-                                opacity: canAddStop ? 1 : 0.4,
-                                cursor: canAddStop ? 'pointer' : 'not-allowed',
-                            }}
-                            disabled={!canAddStop}
-                        >
-                            + Add stop
-                        </button>
-                    </div>
-                    <div style={gradientStopsListStyle}>
-                        {stops.map((stop, index) => {
-                            const isActive = index === activeStopIndex;
-                            const opacityPercent = Math.round(clampValue(stop.opacity ?? 1, 0, 1) * 100);
-                            return (
+                </div>
+                <div style={gradientStopsHeaderStyle}>
+                    <span style={gradientStopsTitleStyle}>Stops</span>
+                    <button
+                        type="button"
+                        onClick={() => handleAddGradientStop()}
+                        style={{
+                            ...gradientAddStopButtonStyle,
+                            opacity: canAddStop ? 1 : 0.4,
+                            cursor: canAddStop ? 'pointer' : 'not-allowed',
+                        }}
+                        disabled={!canAddStop}
+                    >
+                        + Add stop
+                    </button>
+                </div>
+                <div style={gradientStopsListStyle}>
+                    {stops.map((stop, index) => {
+                        const isActive = index === activeStopIndex;
+                        const opacityPercent = Math.round(clampValue(stop.opacity ?? 1, 0, 1) * 100);
+                        return (
                             <div
                                 key={`stop-row-${index}`}
                                 style={{
@@ -2628,8 +2628,8 @@ const ColorControl = ({
                                         ...colorPopoverSwatchStyle,
                                         width: 32,
                                         height: 32,
-                                        }}
-                                        >
+                                    }}
+                                >
                                     <span
                                         aria-hidden="true"
                                         style={{
@@ -2655,67 +2655,67 @@ const ColorControl = ({
                                     onChange={(event) => handleGradientHexChange(index, event)}
                                     onBlur={handleGradientHexBlur}
                                     style={hexInputStyle}
-                                    />
-                                    <input
-                                        type="number"
+                                />
+                                <input
+                                    type="number"
                                     min={0}
                                     max={100}
                                     step={1}
                                     value={opacityPercent}
-                                        onChange={(event) =>
-                                            handleGradientStopOpacityChange(index, event.target.value)
-                                        }
-                                        style={gradientStopOpacityInputStyle}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            handleGradientStopRemove(index);
-                                        }}
-                                        style={{
-                                            ...gradientStopRemoveButtonStyle,
-                                            opacity: canRemove ? 1 : 0.4,
-                                            cursor: canRemove ? 'pointer' : 'not-allowed',
-                                        }}
-                                        disabled={!canRemove}
-                                        aria-label="Remove colour stop"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <div style={gradientAngleControlsStyle}>
-                        <span style={colorPopoverFieldLabelStyle}>Angle</span>
-                        <div style={gradientAngleInputsStyle}>
-                            <input
-                                type="range"
-                                min={0}
-                                max={360}
-                                value={gradientValue.angle}
-                                onChange={(event) =>
-                                    handleGradientAngleChange(Number(event.target.value))
-                                }
-                                style={{ flex: 1 }}
-                            />
-                            <input
-                                type="number"
-                                min={0}
-                                max={360}
-                                value={Math.round(gradientValue.angle)}
-                                onChange={(event) =>
-                                    handleGradientAngleChange(Number(event.target.value))
-                                }
-                                style={gradientAngleNumberStyle}
-                            />
-                            <span style={gradientAngleSuffixStyle}>°</span>
-                        </div>
+                                    onChange={(event) =>
+                                        handleGradientStopOpacityChange(index, event.target.value)
+                                    }
+                                    style={gradientStopOpacityInputStyle}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleGradientStopRemove(index);
+                                    }}
+                                    style={{
+                                        ...gradientStopRemoveButtonStyle,
+                                        opacity: canRemove ? 1 : 0.4,
+                                        cursor: canRemove ? 'pointer' : 'not-allowed',
+                                    }}
+                                    disabled={!canRemove}
+                                    aria-label="Remove colour stop"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div style={gradientAngleControlsStyle}>
+                    <span style={colorPopoverFieldLabelStyle}>Angle</span>
+                    <div style={gradientAngleInputsStyle}>
+                        <input
+                            type="range"
+                            min={0}
+                            max={360}
+                            value={gradientValue.angle}
+                            onChange={(event) =>
+                                handleGradientAngleChange(Number(event.target.value))
+                            }
+                            style={{ flex: 1 }}
+                        />
+                        <input
+                            type="number"
+                            min={0}
+                            max={360}
+                            value={Math.round(gradientValue.angle)}
+                            onChange={(event) =>
+                                handleGradientAngleChange(Number(event.target.value))
+                            }
+                            style={gradientAngleNumberStyle}
+                        />
+                        <span style={gradientAngleSuffixStyle}>°</span>
                     </div>
                 </div>
-            );
-        };
+            </div>
+        );
+    };
 
     const renderNonSolidPlaceholder = () => {
         const description = COLOR_TYPE_DESCRIPTIONS[activeType];
@@ -2798,7 +2798,7 @@ const ColorControl = ({
             <div
                 ref={containerRef}
                 style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}
-        >
+            >
                 <span style={sectionSubheadingStyle}>{label}</span>
                 <button
                     type="button"
@@ -3024,11 +3024,11 @@ const SelectControl = ({ label, value, onChange, options }) => {
     );
 };
 
-    const ToggleField = ({ label, children }) => (
-        <div style={fieldStyle}>
-            <span style={sectionSubheadingStyle}>{label}</span>
-            {children}
-        </div>
+const ToggleField = ({ label, children }) => (
+    <div style={fieldStyle}>
+        <span style={sectionSubheadingStyle}>{label}</span>
+        {children}
+    </div>
 );
 
 export default function PropertiesPanel({
@@ -3071,14 +3071,14 @@ export default function PropertiesPanel({
     onOpacityChange,
     onCornerRadiusChange = () => { },
     onCornerSmoothingChange,
-    onPolygonSidesChange = () => {},
+    onPolygonSidesChange = () => { },
 }) {
-        const isTextShape = shape?.type === 'text';
+    const isTextShape = shape?.type === 'text';
     const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
     const disableStrokeControls = shape?.type === 'group';
 
     // ---- current values derived from the active selection ----
-    
+
     const currentX = primaryShape?.x ?? 0;
     const currentY = primaryShape?.y ?? 0;
     const currentW = primaryShape?.width ?? 0;   // fine as a baseline; your dimension effect handles special types
@@ -3427,13 +3427,8 @@ export default function PropertiesPanel({
         onPositionChange(next);*/
     };
 
-    const commitPositionDraft = (axis, overrideValue) => {
-        if (typeof axis === 'string' && typeof overrideValue !== 'undefined') {
-            const nextDraft = { ...positionDraftRef.current, [axis]: overrideValue };
-            positionDraftRef.current = nextDraft;
-            setPositionDraft(nextDraft);
-        }
-
+    const commitPositionDraft = () => {
+        console.log("position is here");
         positionEditingRef.current = false;
         if (!hasSelection || typeof onPositionChange !== 'function') return;
         const { x, y } = positionDraftRef.current;
@@ -3448,14 +3443,7 @@ export default function PropertiesPanel({
         }
     };
 
-    const commitDimensionDraft = (axis, overrideValue) => {
-        if (typeof axis === 'string' && typeof overrideValue !== 'undefined') {
-            const nextDraft = { ...dimensionDraftRef.current, [axis]: overrideValue };
-            dimensionDraftRef.current = nextDraft;
-            setDimensionDraft(nextDraft);
-        }
-
-        dimensionEditingRef.current = false;
+    const commitDimensionDraft = () => {
         if (!supportsDimensions || typeof onDimensionChange !== 'function') return;
         let w = Number(dimensionDraftRef.current.width);
         let h = Number(dimensionDraftRef.current.height);
@@ -3827,12 +3815,10 @@ export default function PropertiesPanel({
         }, [value]);
 
         const commitHandler = useCallback(
-            (event, overrideValue) => {
+            (event) => {
                 const handler = onCommit ?? onBlurProp;
                 if (typeof handler === 'function') {
-                    const valueToCommit =
-                        typeof overrideValue !== 'undefined' ? overrideValue : latestValueRef.current;
-                    handler(valueToCommit, event);
+                    handler(event);
                 }
             },
             [onBlurProp, onCommit]
@@ -3879,9 +3865,8 @@ export default function PropertiesPanel({
 
         const commitSoon = useCallback(() => {
             if (typeof (onCommit ?? onBlurProp) !== 'function') return;
-            const pendingValue = latestValueRef.current;
             scheduleFrame(() => {
-                commitHandler(undefined, pendingValue);
+                commitHandler();
             });
         }, [commitHandler, onBlurProp, onCommit]);
 
@@ -3923,7 +3908,7 @@ export default function PropertiesPanel({
                     return;
                 }
                 allowBlurRef.current = false;
-                commitHandler(event, latestValueRef.current);
+                commitHandler(event);
             },
             [commitHandler]
         );
@@ -4074,40 +4059,40 @@ export default function PropertiesPanel({
     }, []);
     */
 
-   const normalizeFonts = (fontArray) => {
-  if (!Array.isArray(fontArray)) return [];
-  return fontArray.map((font) => ({
-    family: font.family || font.familyName || font.fullName || 'Unknown',
-    fullName: font.fullName || font.family || 'Unknown',
-    postscriptName: font.postscriptName || font.postscript || font.fullName || 'Unknown',
-  }));
-};
+    const normalizeFonts = (fontArray) => {
+        if (!Array.isArray(fontArray)) return [];
+        return fontArray.map((font) => ({
+            family: font.family || font.familyName || font.fullName || 'Unknown',
+            fullName: font.fullName || font.family || 'Unknown',
+            postscriptName: font.postscriptName || font.postscript || font.fullName || 'Unknown',
+        }));
+    };
 
-   // Ask for local fonts only after a user gesture
-  const loadLocalFonts = async () => {
-      let isActive = true;
-      console.log('Requesting local fonts...');
-      try {
-          if (navigator?.fonts?.query) {
-              const collected = [];
-              // Must be called from a user gesture (e.g., button onClick)
-              for await (const fontData of navigator.fonts.query()) {
-                  collected.push(fontData);
-              }
-              if (isActive) setLocalFontEntries(normalizeFonts(collected));
-          } else if (typeof window !== 'undefined' && typeof window.queryLocalFonts === 'function') {
-              // Chromium alt API
-              const localFonts = await window.queryLocalFonts();
-              if (isActive) setLocalFontEntries(normalizeFonts(localFonts));
-          } else {
-              console.info('Local Font Access API not supported in this browser');
-          }
-      } catch (err) {
-          // SecurityError typically means no user activation or permission denied
-          console.warn('Unable to access local fonts', err);
-      }
-      return () => { isActive = false; };
-  };
+    // Ask for local fonts only after a user gesture
+    const loadLocalFonts = async () => {
+        let isActive = true;
+        console.log('Requesting local fonts...');
+        try {
+            if (navigator?.fonts?.query) {
+                const collected = [];
+                // Must be called from a user gesture (e.g., button onClick)
+                for await (const fontData of navigator.fonts.query()) {
+                    collected.push(fontData);
+                }
+                if (isActive) setLocalFontEntries(normalizeFonts(collected));
+            } else if (typeof window !== 'undefined' && typeof window.queryLocalFonts === 'function') {
+                // Chromium alt API
+                const localFonts = await window.queryLocalFonts();
+                if (isActive) setLocalFontEntries(normalizeFonts(localFonts));
+            } else {
+                console.info('Local Font Access API not supported in this browser');
+            }
+        } catch (err) {
+            // SecurityError typically means no user activation or permission denied
+            console.warn('Unable to access local fonts', err);
+        }
+        return () => { isActive = false; };
+    };
 
     const fontOptions = useMemo(() => {
         const seen = new Set();
@@ -4165,24 +4150,24 @@ export default function PropertiesPanel({
         { id: 'top', label: 'Top' },
         { id: 'middle', label: 'Middle' },
         { id: 'bottom', label: 'Bottom' },
-];
+    ];
 
-const shapeName = useMemo(() => {
-    if (!shape) return 'No selection';
-    const labels = {
-        rectangle: 'Rectangle',
-        circle: 'Circle',
-        ellipse: 'Ellipse',
-        line: 'Line',
-        pen: 'Path',
-        text: 'Text',
-    };
-    const base = labels[shape.type] || 'Layer';
-    return `${base}${typeof shape.id === 'number' ? ` #${shape.id}` : ''}`;
-}, [shape]);
+    const shapeName = useMemo(() => {
+        if (!shape) return 'No selection';
+        const labels = {
+            rectangle: 'Rectangle',
+            circle: 'Circle',
+            ellipse: 'Ellipse',
+            line: 'Line',
+            pen: 'Path',
+            text: 'Text',
+        };
+        const base = labels[shape.type] || 'Layer';
+        return `${base}${typeof shape.id === 'number' ? ` #${shape.id}` : ''}`;
+    }, [shape]);
 
-const subtitle = shape
-    ? 'Adjust layer appearance and typography.'
+    const subtitle = shape
+        ? 'Adjust layer appearance and typography.'
         : 'Select a layer on the canvas to edit its properties.';
 
     const resolvedPanelWidth = Math.min(
@@ -4269,7 +4254,7 @@ const subtitle = shape
                             </div>
                         </div>
                     </div>
-                    
+
                     <div>
                         <div style={sectionSubheadingStyle}>Position</div>
                         <div style={numericRowStyle}>
@@ -4277,7 +4262,7 @@ const subtitle = shape
                                 value={positionDraft.x}
                                 onChange={(value) => handlePositionFieldChange('x', value)}
                                 onFocus={() => { positionEditingRef.current = true; }}
-                                onCommit={(nextValue) => commitPositionDraft('x', nextValue)}
+                                onCommit={commitPositionDraft}
                                 step={1}
                                 prefix="X"
                                 suffix="px"
@@ -4287,7 +4272,7 @@ const subtitle = shape
                                 value={positionDraft.y}
                                 onChange={(value) => handlePositionFieldChange('y', value)}
                                 onFocus={() => { positionEditingRef.current = true; }}
-                                onCommit={(nextValue) => commitPositionDraft('y', nextValue)}
+                                onCommit={commitPositionDraft}
                                 step={1}
                                 prefix="Y"
                                 suffix="px"
@@ -4350,7 +4335,7 @@ const subtitle = shape
                                 value={dimensionDraft.width}
                                 onChange={(value) => handleDimensionFieldChange('width', value)}
                                 onFocus={() => { dimensionEditingRef.current = true; }}
-                                onCommit={(nextValue) => commitDimensionDraft('width', nextValue)}
+                                onCommit={commitDimensionDraft}
                                 step={1}
                                 suffix="px"
                                 prefix="W"
@@ -4361,7 +4346,7 @@ const subtitle = shape
                                 value={dimensionDraft.height}
                                 onChange={(value) => handleDimensionFieldChange('height', value)}
                                 onFocus={() => { dimensionEditingRef.current = true; }}
-                                onCommit={(nextValue) => commitDimensionDraft('height', nextValue)}
+                                onCommit={commitDimensionDraft}
                                 step={1}
                                 suffix="px"
                                 prefix="H"
@@ -4551,23 +4536,23 @@ const subtitle = shape
                         step={1}
                         disabled={disableStrokeControls}
                     />
-                    
+
                 </Section>
 
                 <div style={dividerStyle} />
 
                 <Section title="Typography" disabled={!isTextShape}>
                     {/* Optional: only show if API is available and nothing loaded yet */}
-                       {(!localFontEntries.length && (navigator?.fonts?.query || window?.queryLocalFonts)) && (
-                             <button
-                             type="button"
-                           onClick={loadLocalFonts}
-                           style={{ alignSelf: 'flex-start', marginBottom: 8 }}
-                           title="Load local fonts from your system (requires a click)"
-     >
-                           Load local fonts
-                         </button>
-   )}
+                    {(!localFontEntries.length && (navigator?.fonts?.query || window?.queryLocalFonts)) && (
+                        <button
+                            type="button"
+                            onClick={loadLocalFonts}
+                            style={{ alignSelf: 'flex-start', marginBottom: 8 }}
+                            title="Load local fonts from your system (requires a click)"
+                        >
+                            Load local fonts
+                        </button>
+                    )}
                     <SelectControl
                         label=""
                         value={textFontFamily}
@@ -4578,30 +4563,30 @@ const subtitle = shape
                         options={fontOptions}
                     />
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    <SelectControl
-                        label=""
-                        value={normalizedFontStyle}
-                        onChange={(event) =>
-                            typeof onTextFontStyleChange === 'function' &&
-                            onTextFontStyleChange(event.target.value || 'normal')
-                        }
-                        options={fontVariationOptions}
-                    />
-                    <NumberControl
-                        label=""
-                        value={textFontSize}
-                        onChange={(value) =>
-                            typeof onTextFontSizeChange === 'function' && onTextFontSizeChange(value)
-                        }
-                        min={0}
-                        suffix=""
-                        prefix=""
-                        max={200}
-                        step={1}
+                        <SelectControl
+                            label=""
+                            value={normalizedFontStyle}
+                            onChange={(event) =>
+                                typeof onTextFontStyleChange === 'function' &&
+                                onTextFontStyleChange(event.target.value || 'normal')
+                            }
+                            options={fontVariationOptions}
+                        />
+                        <NumberControl
+                            label=""
+                            value={textFontSize}
+                            onChange={(value) =>
+                                typeof onTextFontSizeChange === 'function' && onTextFontSizeChange(value)
+                            }
+                            min={0}
+                            suffix=""
+                            prefix=""
+                            max={200}
+                            step={1}
                         />
                     </div>
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                        
+
                         <NumberControl
                             label="Line Height"
                             value={textLineHeight}
@@ -4626,59 +4611,59 @@ const subtitle = shape
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'row', gap: 8, }}>
-                    
-                    <ToggleField label="Alignment">
-                        <ToggleGroup>
-                            {alignOptions.map((option) => (
-                                <ToggleButton
-                                    key={option}
-                                    title={`Align ${option}`}
-                                    active={textAlign === option}
-                                    onClick={() =>
-                                        typeof onTextAlignChange === 'function' && onTextAlignChange(option)
-                                    }
-                                >
-                                    {option.charAt(0).toUpperCase()}
-                                </ToggleButton>
-                            ))}
-                        </ToggleGroup>
-                    </ToggleField>
 
-                    <ToggleField label="Vertical">
-                        <ToggleGroup>
-                            {verticalAlignOptions.map((option) => (
-                                <ToggleButton
-                                    key={option.id}
-                                    title={`Vertical align ${option.label}`}
-                                    active={textVerticalAlign === option.id}
-                                    onClick={() =>
-                                        typeof onTextVerticalAlignChange === 'function' &&
-                                        onTextVerticalAlignChange(option.id)
-                                    }
-                                >
-                                    {option.label.charAt(0)}
-                                </ToggleButton>
-                            ))}
-                        </ToggleGroup>
-                    </ToggleField>
+                        <ToggleField label="Alignment">
+                            <ToggleGroup>
+                                {alignOptions.map((option) => (
+                                    <ToggleButton
+                                        key={option}
+                                        title={`Align ${option}`}
+                                        active={textAlign === option}
+                                        onClick={() =>
+                                            typeof onTextAlignChange === 'function' && onTextAlignChange(option)
+                                        }
+                                    >
+                                        {option.charAt(0).toUpperCase()}
+                                    </ToggleButton>
+                                ))}
+                            </ToggleGroup>
+                        </ToggleField>
 
-                    <ToggleField label="Decoration">
-                        <ToggleGroup>
-                            <ToggleButton
-                                title="Underline"
-                                active={decorationState.underline}
-                                onClick={() => updateDecoration({ underline: !decorationState.underline })}
-                            >
-                                U
-                            </ToggleButton>
-                            <ToggleButton
-                                title="Strikethrough"
-                                active={decorationState.lineThrough}
-                                onClick={() => updateDecoration({ lineThrough: !decorationState.lineThrough })}
-                            >
-                                S
-                            </ToggleButton>
-                        </ToggleGroup>
+                        <ToggleField label="Vertical">
+                            <ToggleGroup>
+                                {verticalAlignOptions.map((option) => (
+                                    <ToggleButton
+                                        key={option.id}
+                                        title={`Vertical align ${option.label}`}
+                                        active={textVerticalAlign === option.id}
+                                        onClick={() =>
+                                            typeof onTextVerticalAlignChange === 'function' &&
+                                            onTextVerticalAlignChange(option.id)
+                                        }
+                                    >
+                                        {option.label.charAt(0)}
+                                    </ToggleButton>
+                                ))}
+                            </ToggleGroup>
+                        </ToggleField>
+
+                        <ToggleField label="Decoration">
+                            <ToggleGroup>
+                                <ToggleButton
+                                    title="Underline"
+                                    active={decorationState.underline}
+                                    onClick={() => updateDecoration({ underline: !decorationState.underline })}
+                                >
+                                    U
+                                </ToggleButton>
+                                <ToggleButton
+                                    title="Strikethrough"
+                                    active={decorationState.lineThrough}
+                                    onClick={() => updateDecoration({ lineThrough: !decorationState.lineThrough })}
+                                >
+                                    S
+                                </ToggleButton>
+                            </ToggleGroup>
                         </ToggleField>
                     </div>
                 </Section>
