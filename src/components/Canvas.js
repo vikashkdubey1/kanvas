@@ -6350,97 +6350,108 @@ export default function Canvas({
         }
 
         if (shape.type === 'polygon') {
-            const radius = Math.max(0, shape.radius || 0);
-            if (!radius) return null;
-            const sides = Math.max(3, Math.floor(shape.sides || 5));
-            const maxRadius = radius;
-            const currentRadius = clampValue(Number(shape.cornerRadius) || 0, 0, maxRadius);
-            const center = { x: shape.x || 0, y: shape.y || 0 };
-            const vertices = buildRegularPolygonPoints(center, radius, sides, shape.rotation || 0);
+    const radius = Math.max(0, shape.radius || 0);
+    if (!radius) return null;
+    const sides = Math.max(3, Math.floor(shape.sides || 5));
+    const maxRadius = radius;
+    const currentRadius = clampValue(Number(shape.cornerRadius) || 0, 0, maxRadius);
+    const center = { x: shape.x || 0, y: shape.y || 0 };
 
-            const updateCornerRadius = (nextRadius, { commit = false } = {}) => {
-                const clamped = clampValue(nextRadius, 0, maxRadius);
-                if (commit) {
-                    applyChange((prev) =>
-                        prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
-                    );
-                } else {
-                    setShapes((prev) =>
-                        prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
-                    );
-                }
-                return clamped;
-            };
+    // If you already changed this earlier to always recompute, keep that version:
+    const vertices = buildRegularPolygonPoints(center, radius, sides, shape.rotation || 0);
 
-            const handleNodes = [];
-            for (let index = 0; index < vertices.length; index += 2) {
-                const vx = vertices[index];
-                const vy = vertices[index + 1];
-                if (!Number.isFinite(vx) || !Number.isFinite(vy)) continue;
-                const vec = { x: vx - center.x, y: vy - center.y };
-                const length = Math.sqrt(vec.x * vec.x + vec.y * vec.y);
-                if (!length) continue;
-                const unit = { x: vec.x / length, y: vec.y / length };
-                handleNodes.push({ key: index / 2, unit, vertexLength: length });
-            }
-
-            return (
-                <Group key={`corner-radius-${shape.id}`} listening={true}>
-                    {handleNodes.map((node) => {
-                        const inset = Math.min(maxRadius, Math.max(currentRadius, 12 / zoomSafeScale));
-                        const distance = Math.max(0, node.vertexLength - inset);
-                        const baseX = center.x + node.unit.x * distance;
-                        const baseY = center.y + node.unit.y * distance;
-                        return (
-                            <Circle
-                                key={`corner-radius-handle-${shape.id}-${node.key}`}
-                                x={baseX}
-                                y={baseY}
-                                radius={handleRadius}
-                                fill="#1d4ed8"
-                                stroke="#ffffff"
-                                strokeWidth={1 / zoomSafeScale}
-                                draggable
-                                onDragMove={(evt) => {
-                                    evt.cancelBubble = true;
-                                    const stage = evt.target.getStage();
-                                    const pointer = stage?.getPointerPosition();
-                                    if (!pointer) return;
-                                    const dx = pointer.x - center.x;
-                                    const dy = pointer.y - center.y;
-                                    const pointerLength = Math.sqrt(dx * dx + dy * dy);
-                                    const candidate = clampValue(radius - pointerLength, 0, maxRadius);
-                                    const applied = updateCornerRadius(candidate, { commit: false });
-                                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
-                                    const distance = Math.max(0, node.vertexLength - inset);
-                                    evt.target.absolutePosition({
-                                        x: center.x + node.unit.x * distance,
-                                        y: center.y + node.unit.y * distance,
-                                    });
-                                }}
-                                onDragEnd={(evt) => {
-                                    evt.cancelBubble = true;
-                                    const stage = evt.target.getStage();
-                                    const pointer = stage?.getPointerPosition();
-                                    if (!pointer) return;
-                                    const dx = pointer.x - center.x;
-                                    const dy = pointer.y - center.y;
-                                    const pointerLength = Math.sqrt(dx * dx + dy * dy);
-                                    const candidate = clampValue(radius - pointerLength, 0, maxRadius);
-                                    const applied = updateCornerRadius(candidate, { commit: true });
-                                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
-                                    const distance = Math.max(0, node.vertexLength - inset);
-                                    evt.target.absolutePosition({
-                                        x: center.x + node.unit.x * distance,
-                                        y: center.y + node.unit.y * distance,
-                                    });
-                                }}
-                            />
-                        );
-                    })}
-                </Group>
+    const updateCornerRadius = (nextRadius, { commit = false } = {}) => {
+        const clamped = clampValue(nextRadius, 0, maxRadius);
+        if (commit) {
+            applyChange((prev) =>
+                prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
+            );
+        } else {
+            setShapes((prev) =>
+                prev.map((s) => (s.id === shape.id ? { ...s, cornerRadius: clamped } : s))
             );
         }
+        return clamped;
+    };
+
+    // Build nodes as before
+    const handleNodes = [];
+    for (let index = 0; index < vertices.length; index += 2) {
+        const vx = vertices[index];
+        const vy = vertices[index + 1];
+        if (!Number.isFinite(vx) || !Number.isFinite(vy)) continue;
+        const vec = { x: vx - center.x, y: vy - center.y };
+        const length = Math.sqrt(vec.x * vec.x + vec.y * vec.y);
+        if (!length) continue;
+        const unit = { x: vec.x / length, y: vec.y / length };
+        handleNodes.push({ key: index / 2, unit, vertexLength: length });
+    }
+
+    if (!handleNodes.length) return null;
+
+    // ✅ Use just one node (e.g., first vertex) as the single handle
+    const node = handleNodes[0];
+    const inset = Math.min(maxRadius, Math.max(currentRadius, 12 / zoomSafeScale));
+    const distance = Math.max(0, node.vertexLength - inset);
+    const baseX = center.x + node.unit.x * distance;
+    const baseY = center.y + node.unit.y * distance;
+
+    return (
+        <Group key={`corner-radius-${shape.id}`} listening={true}>
+            <Circle
+                key={`corner-radius-handle-${shape.id}-${node.key}`}
+                x={baseX}
+                y={baseY}
+                radius={handleRadius}
+                fill="#1d4ed8"
+                stroke="#ffffff"
+                strokeWidth={1 / zoomSafeScale}
+                draggable
+                onDragMove={(evt) => {
+                    evt.cancelBubble = true;
+                    const stage = evt.target.getStage();
+                    const pointer = stage?.getPointerPosition();
+                    if (!pointer) return;
+
+                    const dx = pointer.x - center.x;
+                    const dy = pointer.y - center.y;
+                    const pointerLength = Math.sqrt(dx * dx + dy * dy);
+
+                    const candidate = clampValue(radius - pointerLength, 0, maxRadius);
+                    const applied = updateCornerRadius(candidate, { commit: false });
+                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                    const distance = Math.max(0, node.vertexLength - inset);
+
+                    evt.target.absolutePosition({
+                        x: center.x + node.unit.x * distance,
+                        y: center.y + node.unit.y * distance,
+                    });
+                }}
+                onDragEnd={(evt) => {
+                    evt.cancelBubble = true;
+                    const stage = evt.target.getStage();
+                    const pointer = stage?.getPointerPosition();
+                    if (!pointer) return;
+
+                    const dx = pointer.x - center.x;
+                    const dy = pointer.y - center.y;
+                    const pointerLength = Math.sqrt(dx * dx + dy * dy);
+
+                    const candidate = clampValue(radius - pointerLength, 0, maxRadius);
+                    const applied = updateCornerRadius(candidate, { commit: true });
+                    const inset = Math.min(maxRadius, Math.max(applied, 12 / zoomSafeScale));
+                    const distance = Math.max(0, node.vertexLength - inset);
+
+                    evt.target.absolutePosition({
+                        x: center.x + node.unit.x * distance,
+                        y: center.y + node.unit.y * distance,
+                    });
+                }}
+            />
+        </Group>
+    );
+}
+
 
         return null;
     };
