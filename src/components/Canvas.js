@@ -5482,20 +5482,6 @@ export default function Canvas({
                     />
                 );
             case 'circle':
-                const radius = Math.max(0, shape.radius || 0);
-
-                // Optional arc fields – if not present, treat as full circle
-                const start = typeof shape.startAngle === 'number' ? shape.startAngle : 0;
-                const end = typeof shape.endAngle === 'number' ? shape.endAngle : 360;
-                const innerRadius = Math.max(0, shape.innerRadius || 0);
-
-                let span = end - start;
-                if (!Number.isFinite(span)) span = 360;
-
-                const isFullCircle = Math.abs(span) >= 359.9;
-
-                // 🔵 Normal full circle (no arc)
-                if (isFullCircle && innerRadius <= 0) {
                 return (
                     <Circle
                         {...commonProps}
@@ -5508,23 +5494,6 @@ export default function Canvas({
                         rotation={shape.rotation || 0}
                     />
                 );
-            }
-            // 🟣 Arc / donut slice when angles or innerRadius are set
-                return (
-                    <Arc
-                        {...commonProps}
-                        x={shape.x || 0}
-                        y={shape.y || 0}
-                        innerRadius={innerRadius}         // 0 = pie, >0 = donut
-                        outerRadius={radius}
-                        angle={span}                       // end - start
-                        rotation={(shape.rotation || 0) + start}
-                        {...fillProps}
-                        stroke={shape.stroke}
-                        strokeWidth={shape.strokeWidth}
-                    />
-                );
-            }
             case 'ellipse':
                 return (
                     <Ellipse
