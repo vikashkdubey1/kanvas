@@ -6356,10 +6356,7 @@ export default function Canvas({
             const maxRadius = radius;
             const currentRadius = clampValue(Number(shape.cornerRadius) || 0, 0, maxRadius);
             const center = { x: shape.x || 0, y: shape.y || 0 };
-            const vertices =
-                Array.isArray(shape.points) && shape.points.length >= sides * 2
-                    ? shape.points
-                    : buildRegularPolygonPoints(center, radius, sides, shape.rotation || 0);
+            const vertices = buildRegularPolygonPoints(center, radius, sides, shape.rotation || 0);
 
             const updateCornerRadius = (nextRadius, { commit = false } = {}) => {
                 const clamped = clampValue(nextRadius, 0, maxRadius);
