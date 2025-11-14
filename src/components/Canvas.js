@@ -65,6 +65,15 @@ const getPathPoints = (shape) => {
     }));
 };
 
+const getRadiusHandlePosition = (shape) => {
+    const { x, y, width, height } = shape;
+
+    return {
+        x: x + width,
+        y: y + height
+    };
+};
+
 const getPointsBoundingBox = (points) => {
     if (!Array.isArray(points) || points.length === 0) return null;
     let minX = points[0].x;
@@ -6215,14 +6224,20 @@ export default function Canvas({
 
     const renderCornerRadiusHandles = () => {
         if (!isSelectLikeTool) return null;
-        if (!selectedId) return null;
-        const shape = shapes.find((s) => s.id === selectedId);
-        if (!shape) return null;
-        if (!('cornerRadius' in shape)) return null;
+    if (!selectedId) return null;
 
-        const stageScale = stageRef.current ? stageRef.current.scaleX() : scale;
-        const zoomSafeScale = stageScale || 1;
-        const handleRadius = 6 / zoomSafeScale;
+    const shape = shapes.find((s) => s.id === selectedId);
+    if (!shape) return null;
+
+    // ✅ Only allow shapes we support, but don't require cornerRadius to already exist
+    const supportsCornerRadius =
+        shape.type === 'rectangle' ||
+        shape.type === 'polygon';
+    if (!supportsCornerRadius) return null;
+
+    const stageScale = stageRef.current ? stageRef.current.scaleX() : scale;
+    const zoomSafeScale = stageScale || 1;
+    const handleRadius = 6 / zoomSafeScale;
 
         if (shape.type === 'rectangle') {
             const width = Math.max(0, shape.width || 0);
@@ -6382,8 +6397,8 @@ export default function Canvas({
                         return (
                             <Circle
                                 key={`corner-radius-handle-${shape.id}-${node.key}`}
-                                x={baseX}
-                                y={baseY}
+                                x={getRadiusHandlePosition(shape).x}
+                                y={getRadiusHandlePosition(shape).y}
                                 radius={handleRadius}
                                 fill="#1d4ed8"
                                 stroke="#ffffff"
