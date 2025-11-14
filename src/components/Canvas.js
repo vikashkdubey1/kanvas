@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer, Path, RegularPolygon } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer, Path, RegularPolygon, Arc } from 'react-konva';
 import PagesPanel from './PagesPanel';
 import LayersPanel from './LayersPanel';
 import PropertiesPanel from './PropertiesPanel';
@@ -3524,11 +3524,11 @@ export default function Canvas({
                 const next = prev.filter((s) => {
                     if (s.id !== id) return true;
                     let keep = true;
-                    if (s.type === 'rectangle') keep = s.width >= 5 && s.height >= 5;
-                    else if (s.type === 'frame' || s.type === 'group') keep = s.width >= 5 && s.height >= 5;
-                    else if (s.type === 'circle') keep = s.radius >= 3;
-                    else if (s.type === 'ellipse') keep = s.radiusX >= 3 && s.radiusY >= 3;
-                    else if (s.type === 'polygon') keep = s.radius >= 3;
+                    if (s.type === 'rectangle') keep = s.width >= 5 && s.height >= 0;
+                    else if (s.type === 'frame' || s.type === 'group') keep = s.width >= 5 && s.height >= 0;
+                    else if (s.type === 'circle') keep = s.radius >= 0;
+                    else if (s.type === 'ellipse') keep = s.radiusX >= 0 && s.radiusY >= 0;
+                    else if (s.type === 'polygon') keep = s.radius >= 0;
                     else if (s.type === 'line') keep = !(Math.abs(s.points[0] - s.points[2]) < 2 && Math.abs(s.points[1] - s.points[3]) < 2);
                     else if (s.type === 'path') keep = getPathPoints(s).length > 1;
                     if (!keep) removed = true;
@@ -5482,6 +5482,20 @@ export default function Canvas({
                     />
                 );
             case 'circle':
+                const radius = Math.max(0, shape.radius || 0);
+
+                // Optional arc fields – if not present, treat as full circle
+                const start = typeof shape.startAngle === 'number' ? shape.startAngle : 0;
+                const end = typeof shape.endAngle === 'number' ? shape.endAngle : 360;
+                const innerRadius = Math.max(0, shape.innerRadius || 0);
+
+                let span = end - start;
+                if (!Number.isFinite(span)) span = 360;
+
+                const isFullCircle = Math.abs(span) >= 359.9;
+
+                // 🔵 Normal full circle (no arc)
+                if (isFullCircle && innerRadius <= 0) {
                 return (
                     <Circle
                         {...commonProps}
@@ -5494,6 +5508,23 @@ export default function Canvas({
                         rotation={shape.rotation || 0}
                     />
                 );
+            }
+            // 🟣 Arc / donut slice when angles or innerRadius are set
+                return (
+                    <Arc
+                        {...commonProps}
+                        x={shape.x || 0}
+                        y={shape.y || 0}
+                        innerRadius={innerRadius}         // 0 = pie, >0 = donut
+                        outerRadius={radius}
+                        angle={span}                       // end - start
+                        rotation={(shape.rotation || 0) + start}
+                        {...fillProps}
+                        stroke={shape.stroke}
+                        strokeWidth={shape.strokeWidth}
+                    />
+                );
+            }
             case 'ellipse':
                 return (
                     <Ellipse
