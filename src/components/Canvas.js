@@ -2940,71 +2940,67 @@ export default function Canvas({
                     const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, shape.radius || 0, sides, shape.rotation || 0);
                     return { ...shape, sides, points };
                 }
-                    case 'radius': {
-    const nextRadius = Math.max(0, Number(value) || 0);
+                case 'radius': {
+                    const nextRadius = Math.max(0, Number(value) || 0);
+                    if (!Number.isFinite(nextRadius)) return shape;
 
-    // 1) Plain polygon
-    if (shape.type === 'polygon') {
-        if (shape.radius === nextRadius) return shape;
+                    // 1) Plain polygon
+                    if (shape.type === 'polygon') {
+                        if (shape.radius === nextRadius) return shape;
 
-        const sides = Math.max(3, Math.floor(shape.sides || 5));
-        const points = buildRegularPolygonPoints(
-            { x: shape.x || 0, y: shape.y || 0 },
-            nextRadius,
-            sides,
-            shape.rotation || 0
-        );
+                        const sides = Math.max(3, Math.floor(shape.sides || 5));
+                        const points = buildRegularPolygonPoints(
+                            { x: shape.x || 0, y: shape.y || 0 },
+                            nextRadius,
+                            sides,
+                            shape.rotation || 0
+                        );
 
-        return {
-            ...shape,
-            radius: nextRadius,
-            points,
-        };
-    }
+                        return {
+                            ...shape,
+                            radius: nextRadius,
+                            points,
+                        };
+                    }
 
-    // 2) Path that still remembers its original shape
-    if (shape.type === 'path' && shape.__pathOriginal && !shape._pathWasEdited) {
-        const original = shape.__pathOriginal;
+                    // 2) Path that still remembers its original shape
+                    if (shape.type === 'path' && shape.__pathOriginal && !shape._pathWasEdited) {
+                        const points = getPathPoints(shape);
+                        if (!points.length) return shape;
 
-        // Only support radius for original circle / ellipse / polygon / star
-        if (
-            original.type === 'circle' ||
-            original.type === 'ellipse' ||
-            original.type === 'polygon' ||
-            original.type === 'star'
-        ) {
-            const updatedOriginal = {
-                ...original,
-                radius: nextRadius,
-                outerRadius: original.outerRadius ?? nextRadius,
-            };
+                        const bounds = getPointsBoundingBox(points);
+                        if (!bounds) return shape;
 
-            const derived = shapeToPath(updatedOriginal);
-            if (!derived || !Array.isArray(derived.points) || !derived.points.length) {
-                return {
-                    ...shape,
-                    radius: nextRadius,
-                    __pathOriginal: updatedOriginal,
-                };
-            }
+                        const width = Math.max(0, bounds.right - bounds.left);
+                        const height = Math.max(0, bounds.bottom - bounds.top);
+                        const currentRadius = Math.max(width, height) / 2;
+                        if (currentRadius <= 0) return shape;
 
-            const nextPoints = derived.points.map((pt) => clonePathPoint(pt));
+                        const scale = nextRadius / currentRadius;
+                        if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.0001) {
+                            return shape;
+                        }
 
-            return {
-                ...shape,
-                radius: nextRadius,
-                points: nextPoints,
-                closed:
-                    derived.closed != null
-                        ? derived.closed
-                        : shape.closed,
-                __pathOriginal: updatedOriginal,
-            };
-        }
-    }
+                        const centerX = (bounds.left + bounds.right) / 2;
+                        const centerY = (bounds.top + bounds.bottom) / 2;
 
-    return shape;
-}
+                        const nextPoints = points.map((pt) => {
+                            const next = clonePathPoint(pt);
+                            const dx = pt.x - centerX;
+                            const dy = pt.y - centerY;
+                            next.x = centerX + dx * scale;
+                            next.y = centerY + dy * scale;
+                            return next;
+                        });
+
+                        return {
+                            ...shape,
+                            points: nextPoints,
+                        };
+                    }
+
+                    return shape;
+                }
                 default:
                     return shape;
             }
