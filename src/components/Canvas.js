@@ -6397,8 +6397,8 @@ export default function Canvas({
                         return (
                             <Circle
                                 key={`corner-radius-handle-${shape.id}-${node.key}`}
-                                x={getRadiusHandlePosition(shape).x}
-                                y={getRadiusHandlePosition(shape).y}
+                                x={baseX}
+                                y={baseY}
                                 radius={handleRadius}
                                 fill="#1d4ed8"
                                 stroke="#ffffff"
