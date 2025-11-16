@@ -3057,7 +3057,7 @@ export default function Canvas({
                     const nextRotation = value % 360;
                     if (shape.rotation === nextRotation) return shape;
                     if (isPolygonLikeShape(shape)) {
-                        const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
+                        const sides = Math.max(3, Math.floor(shape.sides || 5));
                         const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, shape.radius || 0, sides, nextRotation);
                         return { ...shape, rotation: nextRotation, points };
                     }
@@ -3203,7 +3203,7 @@ export default function Canvas({
                 }
                 case 'polygonSides': {
                     if (!isPolygonLikeShape(shape)) return shape;
-                    const sides = clampValue(Math.floor(value), 3, 60);
+                    const sides = Math.max(3, Math.floor(value));
                     if (shape.sides === sides) return shape;
                     const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, shape.radius || 0, sides, shape.rotation || 0);
                     return { ...shape, sides, points };
@@ -3535,7 +3535,7 @@ export default function Canvas({
         }
 
         // start drag-create for supported tools
-        const dragTools = ['rectangle', 'ellipse', 'roundedPolygon', 'line', 'frame'];
+        const dragTools = ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'line', 'frame', 'group'];
         if (dragTools.includes(selectedTool)) {
             const pos = getCanvasPointer();
             if (!pos) return;
@@ -4752,13 +4752,13 @@ export default function Canvas({
                 prev.map((s) =>
                     s.id === id
                         ? {
-                            ...s,
-                            radiusX: newRadiusX,
-                            radiusY: newRadiusY,
-                            x: node.x(),
-                            y: node.y(),
-                            rotation: snapAngle(rotation),
-                        }
+                              ...s,
+                              radiusX: newRadiusX,
+                              radiusY: newRadiusY,
+                              x: node.x(),
+                              y: node.y(),
+                              rotation: snapAngle(rotation),
+                          }
                         : s
                 )
             );
@@ -4797,13 +4797,14 @@ export default function Canvas({
                 prev.map((s) =>
                     s.id === id
                         ? {
-                            ...s,
-                            radius: newRadius,
-                            x: node.x(),
-                            y: node.y(),
-                            rotation: snappedRotation,
-                            points: updatedPoints,
-                        }
+                              ...s,
+                              radius: newRadius,
+                              cornerRadius: clampValue(Number(s.cornerRadius) || 0, 0, newRadius),
+                              x: node.x(),
+                              y: node.y(),
+                              rotation: snappedRotation,
+                              points: updatedPoints,
+                          }
                         : s
                 )
             );
@@ -6871,7 +6872,7 @@ export default function Canvas({
         if (isPolygonLikeShape(shape)) {
             const radius = Math.max(0, shape.radius || 0);
             if (!radius) return null;
-            const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
+            const sides = Math.max(3, Math.floor(shape.sides || 5));
             const maxRadius = radius;
             const currentRadius = clampValue(Number(shape.cornerRadius) || 0, 0, maxRadius);
             const center = { x: shape.x || 0, y: shape.y || 0 };

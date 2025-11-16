@@ -1586,7 +1586,7 @@ const ColorControl = ({
             String(
                 Math.round(
                     Math.min(Math.max(Number.isFinite(stop.position) ? stop.position : 0, 0), 1) *
-                    100
+                        100
                 )
             )
         )
@@ -3207,8 +3207,8 @@ const NumberControl = ({
                 typeof latestValueRef.current === 'number' && !Number.isNaN(latestValueRef.current)
                     ? latestValueRef.current
                     : typeof value === 'number' && !Number.isNaN(value)
-                        ? clampValue(value)
-                        : clampValue(min ?? 0);
+                    ? clampValue(value)
+                    : clampValue(min ?? 0);
             const formatted = String(fallback);
             setDraftValue(formatted);
             focusValueRef.current = fallback;
@@ -3351,7 +3351,7 @@ export default function PropertiesPanel({
     onCornerSmoothingChange,
     onArcChange,
     onPolygonSidesChange = () => { },
-    onRadiusChange = () => { },
+    onRadiusChange = () => {},
 }) {
     const isTextShape = shape?.type === 'text';
     const supportsFill =
@@ -3616,8 +3616,7 @@ export default function PropertiesPanel({
 
     useEffect(() => {
         if (isPolygonLikeShape) {
-            const raw = Math.floor(primaryShape?.sides || 5);
-            const sides = clamp(raw, 3, 60);
+            const sides = Math.max(3, Math.floor(primaryShape?.sides || 5));
             setPolygonSidesDraft(String(sides));
         } else {
             setPolygonSidesDraft('5');
@@ -4236,34 +4235,25 @@ export default function PropertiesPanel({
         }
     };
 
-    const handleNumericInputKeyDown = (
-        event,
-        { step = 1, min, max, onChange, onCommit, onKeyDown }
-    ) => {
-        const target = event.currentTarget; // capture BEFORE any async work
-
+    const handleNumericInputKeyDown = (event, { step = 1, min, max, onChange, onCommit, onKeyDown }) => {
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             event.preventDefault();
             const direction = event.key === 'ArrowUp' ? 1 : -1;
             const multiplier = event.shiftKey ? 10 : 1;
-
-            const nextValue = adjustNumericDraftValue(target.value, {
+            const nextValue = adjustNumericDraftValue(event.currentTarget.value, {
                 step,
                 direction,
                 multiplier,
                 min,
                 max,
-                fallbackValue: target.dataset.lastValid ?? target.dataset.focusValue,
+                fallbackValue: event.currentTarget.dataset.lastValid ?? event.currentTarget.dataset.focusValue,
             });
-
-            target.dataset.lastValid = nextValue;
-
+            event.currentTarget.dataset.lastValid = nextValue;
             if (typeof onChange === 'function') {
                 onChange(nextValue);
             } else {
-                target.value = nextValue;
+                event.currentTarget.value = nextValue;
             }
-
             scheduleFrame(() => {
                 if (typeof onCommit === 'function') {
                     onCommit();
@@ -4278,28 +4268,24 @@ export default function PropertiesPanel({
                 onCommit();
             }
             scheduleFrame(() => {
-                if (target && typeof target.blur === 'function') {
-                    target.blur();
-                }
+                event.currentTarget.blur();
             });
             return;
         }
 
         if (event.key === 'Escape') {
             event.preventDefault();
-            const focusValue = target.dataset.focusValue ?? '';
+            const focusValue = event.currentTarget.dataset.focusValue ?? '';
             if (typeof onChange === 'function') {
                 onChange(focusValue);
             } else {
-                target.value = focusValue;
+                event.currentTarget.value = focusValue;
             }
             scheduleFrame(() => {
                 if (typeof onCommit === 'function') {
                     onCommit();
                 }
-                if (target && typeof target.blur === 'function') {
-                    target.blur();
-                }
+                event.currentTarget.blur();
             });
             return;
         }
@@ -4315,6 +4301,57 @@ export default function PropertiesPanel({
             onKeyDown(event);
         }
     };
+
+    const renderNumericInput = ({
+        label,
+        value,
+        onChange,
+        onCommit,
+        onFocus,
+        onKeyDown,
+        suffix = 'px',
+        prefix = '',
+        step = 1,
+        min = undefined,
+        max = undefined,
+        disabled = false,
+    }) => (
+        <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
+            <span style={sectionSubheadingStyle}>{label}</span>
+            <div
+                style={{
+                    ...numericInputWrapperInlineStyle,
+                    pointerEvents: disabled ? 'none' : 'auto',
+                }}
+            >
+                {prefix ? <span style={unitPrefixStyle}>{prefix}</span> : null}
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    value={value}
+                    step={step}
+                    min={min}
+                    max={max}
+                    onChange={(event) => handleNumericInputChange(event, onChange)}
+                    onFocus={(event) => handleNumericInputFocus(event, onFocus)}
+                    onBlur={(event) => handleNumericInputBlur(event, onCommit)}
+                    onKeyDown={(event) =>
+                        handleNumericInputKeyDown(event, {
+                            step,
+                            min,
+                            max,
+                            onChange,
+                            onCommit,
+                            onKeyDown,
+                        })
+                    }
+                    style={numericInputFieldStyle}
+                    disabled={disabled}
+                />
+                {suffix ? <span style={unitSuffixStyle}>{suffix}</span> : null}
+            </div>
+        </label>
+    );
 
     const renderNumericInput = ({
         label,
@@ -4757,12 +4794,10 @@ export default function PropertiesPanel({
                                     onChange: handlePolygonSidesInputChange,
                                     onCommit: commitPolygonSides,
                                     step: 1,
-                                    min: 3,
-                                    max: 60,
                                     suffix: '',
                                     prefix: '',
                                     disabled: !hasSelection,
-                                })} 
+                                })}
                                 {renderNumericInput({
                                     label: 'Radius',
                                     value: polygonRadiusDraft,

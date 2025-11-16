@@ -110,8 +110,8 @@ export default function App() {
                 typeof shape.fill === 'string'
                     ? shape.fill
                     : ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame'].includes(
-                        shape.type
-                    )
+                          shape.type
+                      )
                         ? DEFAULT_FILL_STYLE.value
                         : prev.value;
             return { type: nextType, value: nextValue };
@@ -441,6 +441,44 @@ export default function App() {
                         onRadiusChange={handleRadiusChange}
                     />
                 </div>
+
+                <PropertiesPanel
+                    panelWidth={propertiesPanelWidth}
+                    shape={activeShape}
+                    fillStyle={fillStyle}
+                    onFillStyleChange={setFillStyle}
+                    onGradientPickerToggle={setGradientPickerOpen}
+                    gradientInteractionRef={gradientInteractionRef}
+                    strokeStyle={strokeStyle}
+                    onStrokeStyleChange={setStrokeStyle}
+                    strokeWidth={strokeWidth}
+                    onStrokeWidthChange={handleStrokeWidthChange}
+                    textFontFamily={textFontFamily}
+                    onTextFontFamilyChange={setTextFontFamily}
+                    textFontStyle={textFontStyle}
+                    onTextFontStyleChange={setTextFontStyle}
+                    textFontSize={textFontSize}
+                    onTextFontSizeChange={setTextFontSize}
+                    textLineHeight={textLineHeight}
+                    onTextLineHeightChange={setTextLineHeight}
+                    textLetterSpacing={textLetterSpacing}
+                    onTextLetterSpacingChange={setTextLetterSpacing}
+                    textAlign={textAlign}
+                    onTextAlignChange={setTextAlign}
+                    textVerticalAlign={textVerticalAlign}
+                    onTextVerticalAlignChange={setTextVerticalAlign}
+                    textDecoration={textDecoration}
+                    onTextDecorationChange={setTextDecoration}
+                    onPositionChange={handlePositionChange}
+                    onDimensionChange={handleDimensionChange}
+                    onRotationChange={handleRotationChange}
+                    onOpacityChange={handleOpacityChange}
+                    onCornerRadiusChange={handleCornerRadiusChange}
+                    onCornerSmoothingChange={handleCornerSmoothingChange}
+                    onArcChange={handleArcChange}
+                    onPolygonSidesChange={handlePolygonSidesChange}
+                    onRadiusChange={handleRadiusChange}
+                />
             </div>
         </>
     );
