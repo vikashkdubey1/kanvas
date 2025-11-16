@@ -22,6 +22,8 @@ const DEFAULT_TEXT_PROPS = {
     textDecoration: 'none',
 };
 
+const ARC_RATIO_MAX = 0.99;
+
 /**
  * The root component of the Figma‑like application.
  *
@@ -107,7 +109,9 @@ export default function App() {
             const nextValue =
                 typeof shape.fill === 'string'
                     ? shape.fill
-                    : ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type)
+                    : ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame'].includes(
+                          shape.type
+                      )
                         ? DEFAULT_FILL_STYLE.value
                         : prev.value;
             return { type: nextType, value: nextValue };
@@ -297,10 +301,37 @@ if (event.pointerType === 'mouse' && event.button !== 0) {
         [emitShapePropertyChange]
     );
 
+    const handleArcChange = useCallback(
+        (value) => {
+            if (!value) return;
+            const start = Number(value.start);
+            const sweep = Number(value.sweep);
+            const ratio = Number(value.ratio);
+            if (!Number.isFinite(start) || !Number.isFinite(sweep) || !Number.isFinite(ratio)) {
+                return;
+            }
+            const normalized = {
+                start: ((start % 360) + 360) % 360,
+                sweep: Math.min(360, Math.max(0, sweep)),
+                ratio: Math.min(ARC_RATIO_MAX, Math.max(0, ratio)),
+            };
+            emitShapePropertyChange('arc', normalized);
+        },
+        [emitShapePropertyChange]
+    );
+
     const handlePolygonSidesChange = useCallback(
         (value) => {
             const next = Math.max(3, Math.floor(Number(value)) || 0);
             emitShapePropertyChange('polygonSides', next);
+        },
+        [emitShapePropertyChange]
+    );
+
+    const handleRadiusChange = useCallback(
+        (value) => {
+            const next = Math.max(0, Number(value) || 0);
+            emitShapePropertyChange('radius', next);
         },
         [emitShapePropertyChange]
     );
@@ -404,7 +435,9 @@ if (event.pointerType === 'mouse' && event.button !== 0) {
                     onOpacityChange={handleOpacityChange}
                     onCornerRadiusChange={handleCornerRadiusChange}
                     onCornerSmoothingChange={handleCornerSmoothingChange}
+                    onArcChange={handleArcChange}
                     onPolygonSidesChange={handlePolygonSidesChange}
+                    onRadiusChange={handleRadiusChange}
                 />
             </div>
         </div>

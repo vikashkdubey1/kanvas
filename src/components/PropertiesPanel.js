@@ -117,6 +117,9 @@ const disabledTabStyle = {
     cursor: 'not-allowed',
 };
 
+const FULL_CIRCLE_DEGREES = 360;
+const ARC_RATIO_PERCENT_MAX = 99;
+
 const activeSummaryStyle = {
     display: 'flex',
     flexDirection: 'column',
@@ -1490,6 +1493,8 @@ const solidSwatchButtonInnerStyle = {
     borderRadius: 'inherit',
 };
 
+const NON_NEGATIVE_NUMBER_REGEX = /^\d+(\.\d+)?$/;
+
 const Section = ({ title, children, disabled = false, actions = null }) => (
     <section
         style={{
@@ -1532,7 +1537,9 @@ const ColorControl = ({
 
     const [solidHsva, setSolidHsva] = useState(initialHsva);
     const [solidHexDraft, setSolidHexDraft] = useState(rgbaToHex(parsedSolid).toUpperCase());
-    const [solidAlphaDraft, setSolidAlphaDraft] = useState(Math.round(parsedSolid.a * 100));
+    const initialSolidAlpha = Math.min(Math.max(Math.round(parsedSolid.a * 100), 0), 100);
+    const [solidAlphaDraft, setSolidAlphaDraft] = useState(String(initialSolidAlpha));
+    const solidAlphaPreviousRef = useRef(String(initialSolidAlpha));
 
     const solidHsvaRef = useRef(solidHsva);
     const solidSaturationRef = useRef(null);
@@ -1554,7 +1561,10 @@ const ColorControl = ({
         solidHsvaRef.current = hsva;
         setSolidHsva(hsva);
         setSolidHexDraft(rgbaToHex(nextParsed).toUpperCase());
-        setSolidAlphaDraft(Math.round(nextParsed.a * 100));
+        const nextAlpha = Math.min(Math.max(Math.round(nextParsed.a * 100), 0), 100);
+        const formattedAlpha = String(nextAlpha);
+        setSolidAlphaDraft(formattedAlpha);
+        solidAlphaPreviousRef.current = formattedAlpha;
     }, [style?.value]);
 
     const [isOpen, setIsOpen] = useState(false);
@@ -1571,6 +1581,35 @@ const ColorControl = ({
     const [gradientDrafts, setGradientDrafts] = useState(
         gradientValue.stops.map((stop) => stop.color.toUpperCase())
     );
+    const [gradientPositionDrafts, setGradientPositionDrafts] = useState(
+        gradientValue.stops.map((stop) =>
+            String(
+                Math.round(
+                    Math.min(Math.max(Number.isFinite(stop.position) ? stop.position : 0, 0), 1) *
+                        100
+                )
+            )
+        )
+    );
+    const [gradientOpacityDrafts, setGradientOpacityDrafts] = useState(
+        gradientValue.stops.map((stop) =>
+            String(
+                Math.round(
+                    Math.min(Math.max(Number.isFinite(stop.opacity) ? stop.opacity : 1, 0), 1) * 100
+                )
+            )
+        )
+    );
+    const [gradientAngleDraft, setGradientAngleDraft] = useState(() =>
+        String(
+            Math.round(
+                Math.min(
+                    Math.max(Number.isFinite(gradientValue.angle) ? gradientValue.angle : 0, 0),
+                    360
+                )
+            )
+        )
+    );
     const [activeStopIndex, setActiveStopIndex] = useState(0);
     const gradientCss = useMemo(() => gradientToCss(gradientValue), [gradientValue]);
     const gradientTrackRef = useRef(null);
@@ -1581,6 +1620,30 @@ const ColorControl = ({
     useEffect(() => {
         gradientValueRef.current = gradientValue;
         setGradientDrafts(gradientValue.stops.map((stop) => stop.color.toUpperCase()));
+        setGradientPositionDrafts(
+            gradientValue.stops.map((stop) =>
+                String(
+                    Math.round(
+                        clampValue(Number.isFinite(stop.position) ? stop.position : 0, 0, 1) * 100
+                    )
+                )
+            )
+        );
+        setGradientOpacityDrafts(
+            gradientValue.stops.map((stop) =>
+                String(
+                    Math.round(
+                        clampValue(Number.isFinite(stop.opacity) ? stop.opacity : 1, 0, 1) * 100
+                    )
+                )
+            )
+        );
+        const clampedAngle = clampValue(
+            Number.isFinite(gradientValue.angle) ? gradientValue.angle : 0,
+            0,
+            360
+        );
+        setGradientAngleDraft(String(Math.round(clampedAngle)));
         setActiveStopIndex((index) => {
             if (gradientValue.stops.length === 0) return 0;
             const clamped = Math.min(
@@ -1839,7 +1902,10 @@ const ColorControl = ({
             setSolidHsva(normalized);
             const rgba = hsvaToRgba(normalized);
             setSolidHexDraft(rgbaToHex(rgba).toUpperCase());
-            setSolidAlphaDraft(Math.round(rgba.a * 100));
+            const alphaPercent = Math.min(Math.max(Math.round(rgba.a * 100), 0), 100);
+            const formattedAlpha = String(alphaPercent);
+            setSolidAlphaDraft(formattedAlpha);
+            solidAlphaPreviousRef.current = formattedAlpha;
             let meta = null;
             if (options.preview) {
                 const interactionId = activeSolidInteractionIdRef.current;
@@ -2022,13 +2088,41 @@ const ColorControl = ({
     };
 
     const handleSolidAlphaChange = (event) => {
-        const numeric = clampValue(Number(event.target.value), 0, 100);
-        setSolidAlphaDraft(numeric);
+        const raw = event.target.value;
+        const trimmed = typeof raw === 'string' ? raw.trim() : '';
+        if (trimmed === '') {
+            setSolidAlphaDraft('');
+            return;
+        }
+        if (!NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+            return;
+        }
+        const numeric = clampValue(Number(trimmed), 0, 100);
+        const formatted = String(numeric);
+        setSolidAlphaDraft(formatted);
+        solidAlphaPreviousRef.current = formatted;
         applySolidColor({ ...solidHsvaRef.current, a: numeric / 100 });
     };
 
     const handleSolidAlphaBlur = () => {
-        setSolidAlphaDraft(Math.round(solidHsvaRef.current.a * 100));
+        const trimmed = typeof solidAlphaDraft === 'string' ? solidAlphaDraft.trim() : '';
+        if (trimmed === '') {
+            const fallback = solidAlphaPreviousRef.current;
+            setSolidAlphaDraft(fallback);
+            applySolidColor({ ...solidHsvaRef.current, a: Number(fallback) / 100 });
+            return;
+        }
+        if (!NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+            const fallback = solidAlphaPreviousRef.current;
+            setSolidAlphaDraft(fallback);
+            applySolidColor({ ...solidHsvaRef.current, a: Number(fallback) / 100 });
+            return;
+        }
+        const numeric = clampValue(Number(trimmed), 0, 100);
+        const formatted = String(numeric);
+        setSolidAlphaDraft(formatted);
+        solidAlphaPreviousRef.current = formatted;
+        applySolidColor({ ...solidHsvaRef.current, a: numeric / 100 });
     };
 
     const handleTypeSelect = (nextType) => {
@@ -2073,6 +2167,22 @@ const ColorControl = ({
             const normalizedGradient = normalizeGradient(updated, DEFAULT_GRADIENT);
             gradientValueRef.current = normalizedGradient;
             setGradientDrafts(normalizedGradient.stops.map((stop) => stop.color.toUpperCase()));
+            setGradientPositionDrafts(
+                normalizedGradient.stops.map((stop) =>
+                    String(Math.round(clampValue(stop.position ?? 0, 0, 1) * 100))
+                )
+            );
+            setGradientOpacityDrafts(
+                normalizedGradient.stops.map((stop) =>
+                    String(Math.round(clampValue(stop.opacity ?? 1, 0, 1) * 100))
+                )
+            );
+            const normalizedAngle = clampValue(
+                Number.isFinite(normalizedGradient.angle) ? normalizedGradient.angle : 0,
+                0,
+                360
+            );
+            setGradientAngleDraft(String(Math.round(normalizedAngle)));
             commitStyleRef.current({ type: 'gradient', value: normalizedGradient });
             setActiveStopIndex((previous) => {
                 const { focusIndex, focusPosition } = options;
@@ -2120,12 +2230,48 @@ const ColorControl = ({
     };
 
     const handleGradientAngleChange = (nextAngle) => {
-        const normalizedAngle = Number.isNaN(nextAngle) ? gradientValue.angle : nextAngle;
+        const fallback = Number.isFinite(gradientValue.angle) ? gradientValue.angle : 0;
+        const normalizedAngle = Number.isNaN(nextAngle) ? fallback : nextAngle;
+        const clamped = clampValue(normalizedAngle, 0, 360);
+        setGradientAngleDraft(String(Math.round(clamped)));
         commitGradientUpdate((current) => {
-            current.angle = normalizedAngle;
-            current.handles = applyAngleToHandles(current.type, current.handles, normalizedAngle);
+            current.angle = clamped;
+            current.handles = applyAngleToHandles(current.type, current.handles, clamped);
             return current;
         });
+    };
+
+    const handleGradientAngleInputChange = (rawValue) => {
+        const trimmed = typeof rawValue === 'string' ? rawValue.trim() : '';
+        if (trimmed === '') {
+            setGradientAngleDraft('');
+            return;
+        }
+        if (!NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+            return;
+        }
+        const numeric = clampValue(Number(trimmed), 0, 360);
+        const formatted = String(numeric);
+        setGradientAngleDraft(formatted);
+        handleGradientAngleChange(numeric);
+    };
+
+    const handleGradientAngleBlur = () => {
+        const trimmed = typeof gradientAngleDraft === 'string' ? gradientAngleDraft.trim() : '';
+        if (!trimmed || !NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+            const fallback = clampValue(
+                Number.isFinite(gradientValueRef.current.angle) ? gradientValueRef.current.angle : 0,
+                0,
+                360
+            );
+            const formatted = String(Math.round(fallback));
+            setGradientAngleDraft(formatted);
+            return;
+        }
+        const numeric = clampValue(Number(trimmed), 0, 360);
+        const formatted = String(numeric);
+        setGradientAngleDraft(formatted);
+        handleGradientAngleChange(numeric);
     };
 
     const handleGradientHexChange = (index, event) => {
@@ -2167,29 +2313,121 @@ const ColorControl = ({
     };
 
     const handleGradientStopPositionChange = (index, value) => {
-        const numeric = clampValue(Number(value), 0, 100) / 100;
+        const raw = typeof value === 'string' ? value : String(value ?? '');
+        const trimmed = raw.trim();
+        if (trimmed === '') {
+            setGradientPositionDrafts((prev) => {
+                const next = prev.slice();
+                next[index] = '';
+                return next;
+            });
+            return;
+        }
+        if (!NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+            return;
+        }
+        const numericPercent = clampValue(Number(trimmed), 0, 100);
+        const formatted = String(numericPercent);
+        setGradientPositionDrafts((prev) => {
+            const next = prev.slice();
+            next[index] = formatted;
+            return next;
+        });
         setActiveStopIndex(index);
+        const normalized = numericPercent / 100;
         commitGradientUpdate(
             (current) => {
                 if (!current.stops[index]) return current;
-                current.stops[index].position = numeric;
+                current.stops[index].position = normalized;
                 return current;
             },
-            { focusPosition: numeric }
+            { focusPosition: normalized }
         );
     };
 
     const handleGradientStopOpacityChange = (index, value) => {
-        const numeric = clampValue(Number(value), 0, 100) / 100;
+        const raw = typeof value === 'string' ? value : String(value ?? '');
+        const trimmed = raw.trim();
+        if (trimmed === '') {
+            setGradientOpacityDrafts((prev) => {
+                const next = prev.slice();
+                next[index] = '';
+                return next;
+            });
+            return;
+        }
+        if (!NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+            return;
+        }
+        const numericPercent = clampValue(Number(trimmed), 0, 100);
+        const formatted = String(numericPercent);
+        setGradientOpacityDrafts((prev) => {
+            const next = prev.slice();
+            next[index] = formatted;
+            return next;
+        });
         setActiveStopIndex(index);
+        const normalized = numericPercent / 100;
         commitGradientUpdate(
             (current) => {
                 if (!current.stops[index]) return current;
-                current.stops[index].opacity = numeric;
+                current.stops[index].opacity = normalized;
                 return current;
             },
             { focusIndex: index }
         );
+    };
+
+    const handleGradientStopPositionBlur = (index) => {
+        const stop = gradientValueRef.current.stops[index];
+        const fallback = stop
+            ? String(Math.round(clampValue(stop.position ?? 0, 0, 1) * 100))
+            : '0';
+        setGradientPositionDrafts((prev) => {
+            const current = prev[index];
+            if (current && NON_NEGATIVE_NUMBER_REGEX.test(current.trim())) {
+                const numericPercent = clampValue(Number(current.trim()), 0, 100);
+                const formatted = String(numericPercent);
+                if (formatted === current) {
+                    return prev;
+                }
+                const next = prev.slice();
+                next[index] = formatted;
+                return next;
+            }
+            if (current === fallback) {
+                return prev;
+            }
+            const next = prev.slice();
+            next[index] = fallback;
+            return next;
+        });
+    };
+
+    const handleGradientStopOpacityBlur = (index) => {
+        const stop = gradientValueRef.current.stops[index];
+        const fallback = stop
+            ? String(Math.round(clampValue(stop.opacity ?? 1, 0, 1) * 100))
+            : '100';
+        setGradientOpacityDrafts((prev) => {
+            const current = prev[index];
+            if (current && NON_NEGATIVE_NUMBER_REGEX.test(current.trim())) {
+                const numericPercent = clampValue(Number(current.trim()), 0, 100);
+                const formatted = String(numericPercent);
+                if (formatted === current) {
+                    return prev;
+                }
+                const next = prev.slice();
+                next[index] = formatted;
+                return next;
+            }
+            if (current === fallback) {
+                return prev;
+            }
+            const next = prev.slice();
+            next[index] = fallback;
+            return next;
+        });
     };
     const handleGradientStopRemove = (index) => {
         const totalStops = gradientValueRef.current.stops.length;
@@ -2459,10 +2697,8 @@ const ColorControl = ({
                     />
                     <div style={solidAlphaInputWrapperStyle}>
                         <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={1}
+                            type="text"
+                            inputMode="decimal"
                             value={solidAlphaDraft}
                             onChange={handleSolidAlphaChange}
                             onBlur={handleSolidAlphaBlur}
@@ -2613,14 +2849,16 @@ const ColorControl = ({
                                 onClick={() => setActiveStopIndex(index)}
                             >
                                 <input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    value={Math.round(stop.position * 100)}
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={
+                                        gradientPositionDrafts[index] ??
+                                        String(Math.round(clampValue(stop.position ?? 0, 0, 1) * 100))
+                                    }
                                     onChange={(event) =>
                                         handleGradientStopPositionChange(index, event.target.value)
                                     }
+                                    onBlur={() => handleGradientStopPositionBlur(index)}
                                     style={gradientStopPositionInputStyle}
                                 />
                                 <label
@@ -2657,14 +2895,16 @@ const ColorControl = ({
                                     style={hexInputStyle}
                                 />
                                 <input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    value={opacityPercent}
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={
+                                        gradientOpacityDrafts[index] ??
+                                        String(Math.round(clampValue(stop.opacity ?? 1, 0, 1) * 100))
+                                    }
                                     onChange={(event) =>
                                         handleGradientStopOpacityChange(index, event.target.value)
                                     }
+                                    onBlur={() => handleGradientStopOpacityBlur(index)}
                                     style={gradientStopOpacityInputStyle}
                                 />
                                 <button
@@ -2701,13 +2941,13 @@ const ColorControl = ({
                             style={{ flex: 1 }}
                         />
                         <input
-                            type="number"
-                            min={0}
-                            max={360}
-                            value={Math.round(gradientValue.angle)}
+                            type="text"
+                            inputMode="decimal"
+                            value={gradientAngleDraft}
                             onChange={(event) =>
-                                handleGradientAngleChange(Number(event.target.value))
+                                handleGradientAngleInputChange(event.target.value)
                             }
+                            onBlur={handleGradientAngleBlur}
                             style={gradientAngleNumberStyle}
                         />
                         <span style={gradientAngleSuffixStyle}>°</span>
@@ -2865,6 +3105,9 @@ const NumberControl = ({
     const latestValueRef = useRef(
         typeof value === 'number' && !Number.isNaN(value) ? value : focusValueRef.current
     );
+    const [draftValue, setDraftValue] = useState(
+        typeof value === 'number' && !Number.isNaN(value) ? String(value) : ''
+    );
 
     useEffect(() => {
         if (typeof value === 'number' && !Number.isNaN(value)) {
@@ -2873,6 +3116,7 @@ const NumberControl = ({
                 typeof document !== 'undefined' && inputRef.current === document.activeElement;
             if (!isFocused) {
                 focusValueRef.current = value;
+                setDraftValue(String(value));
             }
         }
     }, [value]);
@@ -2898,15 +3142,25 @@ const NumberControl = ({
 
     const handleInternalChange = useCallback(
         (event) => {
-            const numeric = Number(event.target.value);
+            const raw = event.target.value;
+            const trimmed = typeof raw === 'string' ? raw.trim() : '';
+            if (trimmed === '') {
+                setDraftValue('');
+                return;
+            }
+            if (!NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+                return;
+            }
+            const numeric = clampValue(Number(trimmed));
+            const formatted = String(numeric);
+            setDraftValue(formatted);
+            focusValueRef.current = numeric;
+            latestValueRef.current = numeric;
             if (typeof onChange === 'function') {
-                if (!Number.isNaN(numeric)) {
-                    latestValueRef.current = numeric;
-                }
-                onChange(Number.isNaN(numeric) ? 0 : numeric);
+                onChange(numeric);
             }
         },
-        [onChange]
+        [clampValue, onChange]
     );
 
     const adjustValue = useCallback(
@@ -2919,6 +3173,7 @@ const NumberControl = ({
             const next = clampValue(current + delta);
             focusValueRef.current = next;
             latestValueRef.current = next;
+            setDraftValue(String(next));
             if (typeof onChange === 'function') {
                 onChange(next);
             }
@@ -2946,7 +3201,32 @@ const NumberControl = ({
             return;
         }
         allowBlurRef.current = false;
-    }, []);
+        const trimmed = typeof draftValue === 'string' ? draftValue.trim() : '';
+        if (!trimmed || !NON_NEGATIVE_NUMBER_REGEX.test(trimmed)) {
+            const fallback =
+                typeof latestValueRef.current === 'number' && !Number.isNaN(latestValueRef.current)
+                    ? latestValueRef.current
+                    : typeof value === 'number' && !Number.isNaN(value)
+                    ? clampValue(value)
+                    : clampValue(min ?? 0);
+            const formatted = String(fallback);
+            setDraftValue(formatted);
+            focusValueRef.current = fallback;
+            latestValueRef.current = fallback;
+            if (typeof onChange === 'function') {
+                onChange(fallback);
+            }
+            return;
+        }
+        const numeric = clampValue(Number(trimmed));
+        const formatted = String(numeric);
+        setDraftValue(formatted);
+        focusValueRef.current = numeric;
+        latestValueRef.current = numeric;
+        if (typeof onChange === 'function') {
+            onChange(numeric);
+        }
+    }, [clampValue, draftValue, min, onChange, value]);
 
     const handleKeyDown = useCallback(
         (event) => {
@@ -2987,11 +3267,9 @@ const NumberControl = ({
             <div style={numberInputWrapperStyle}>
                 <input
                     ref={inputRef}
-                    type="number"
-                    min={min}
-                    max={max}
-                    step={step}
-                    value={typeof value === 'number' && !Number.isNaN(value) ? value : 0}
+                    type="text"
+                    inputMode="decimal"
+                    value={draftValue}
                     onChange={handleInternalChange}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
@@ -3071,10 +3349,16 @@ export default function PropertiesPanel({
     onOpacityChange,
     onCornerRadiusChange = () => { },
     onCornerSmoothingChange,
+    onArcChange,
     onPolygonSidesChange = () => { },
+    onRadiusChange = () => {},
 }) {
     const isTextShape = shape?.type === 'text';
-    const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
+    const supportsFill =
+        !shape ||
+        ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame'].includes(
+            shape.type
+        );
     const disableStrokeControls = shape?.type === 'group';
 
     // ---- current values derived from the active selection ----
@@ -3101,6 +3385,9 @@ export default function PropertiesPanel({
     };
 
     const primaryShape = shape || selectionInfo?.shape || null;
+    const isPolygonLikeShape = Boolean(
+        primaryShape && ['polygon', 'roundedPolygon'].includes(primaryShape.type)
+    );
     const selectedIds = Array.isArray(selectionInfo?.selectedIds)
         ? selectionInfo.selectedIds
         : primaryShape?.id != null
@@ -3111,14 +3398,27 @@ export default function PropertiesPanel({
     const hasSelection = Boolean(primaryShape);
     const supportsCornerRadius = Boolean(
         primaryShape && (
-            ['rectangle', 'frame', 'group', 'polygon'].includes(primaryShape.type) ||
+            ['rectangle', 'frame', 'group'].includes(primaryShape.type) ||
+            isPolygonLikeShape ||
             (primaryShape.type === 'path' && primaryShape.closed)
         )
     );
     const supportsDimensions = Boolean(
         primaryShape &&
-        ['rectangle', 'frame', 'group', 'circle', 'ellipse', 'polygon', 'line', 'path', 'text'].includes(primaryShape.type)
+        [
+            'rectangle',
+            'frame',
+            'group',
+            'circle',
+            'ellipse',
+            'polygon',
+            'roundedPolygon',
+            'line',
+            'path',
+            'text',
+        ].includes(primaryShape.type)
     );
+    const supportsArc = Boolean(primaryShape && ['circle', 'ellipse'].includes(primaryShape.type));
 
     const [alignmentActive, setAlignmentActive] = useState(null);
     const [distributionActive, setDistributionActive] = useState(null);
@@ -3179,7 +3479,8 @@ export default function PropertiesPanel({
                         width: Math.max(0, (target.radiusX || 0) * 2),
                         height: Math.max(0, (target.radiusY || 0) * 2),
                     };
-                case 'polygon': {
+                case 'polygon':
+                case 'roundedPolygon': {
                     const radius = Math.max(0, target.radius || 0);
                     return { width: radius * 2, height: radius * 2 };
                 }
@@ -3314,13 +3615,61 @@ export default function PropertiesPanel({
     const [polygonSidesDraft, setPolygonSidesDraft] = useState('5');
 
     useEffect(() => {
-        if (primaryShape?.type === 'polygon') {
-            const sides = Math.max(3, Math.floor(primaryShape.sides || 5));
+        if (isPolygonLikeShape) {
+            const sides = Math.max(3, Math.floor(primaryShape?.sides || 5));
             setPolygonSidesDraft(String(sides));
         } else {
             setPolygonSidesDraft('5');
         }
-    }, [primaryShape?.type, primaryShape?.sides, primaryShape?.id]);
+    }, [isPolygonLikeShape, primaryShape?.sides, primaryShape?.id]);
+
+    const [polygonRadiusDraft, setPolygonRadiusDraft] = useState('0');
+
+    useEffect(() => {
+        if (isPolygonLikeShape) {
+            const radius = Math.max(0, Number(primaryShape?.radius) || 0);
+            setPolygonRadiusDraft(formatNumeric(radius));
+        } else {
+            setPolygonRadiusDraft('0');
+        }
+    }, [isPolygonLikeShape, primaryShape?.radius, primaryShape?.id]);
+
+    const [arcDraft, setArcDraft] = useState({ start: '0', sweep: '100', ratio: '0' });
+    const arcDraftRef = useRef({ start: '0', sweep: '100', ratio: '0' });
+
+    useEffect(() => {
+        if (supportsArc && primaryShape) {
+            const rawStart = Number(primaryShape.arcStart);
+            const rawSweep = Number(primaryShape.arcSweep);
+            const rawRatio = Number(primaryShape.arcRatio);
+            const start = Number.isFinite(rawStart)
+                ? ((rawStart % FULL_CIRCLE_DEGREES) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES
+                : 0;
+            const sweepDegrees = Number.isFinite(rawSweep)
+                ? clamp(rawSweep, 0, FULL_CIRCLE_DEGREES)
+                : FULL_CIRCLE_DEGREES;
+            const ratio = Number.isFinite(rawRatio)
+                ? clamp(rawRatio, 0, ARC_RATIO_PERCENT_MAX / 100)
+                : 0;
+            const next = {
+                start: formatNumeric(start, 1),
+                sweep: formatNumeric((sweepDegrees / FULL_CIRCLE_DEGREES) * 100, 1),
+                ratio: formatNumeric(ratio * 100, 1),
+            };
+            arcDraftRef.current = next;
+            setArcDraft(next);
+        } else {
+            const reset = { start: '0', sweep: '100', ratio: '0' };
+            arcDraftRef.current = reset;
+            setArcDraft(reset);
+        }
+    }, [
+        primaryShape?.arcStart,
+        primaryShape?.arcSweep,
+        primaryShape?.arcRatio,
+        primaryShape?.id,
+        supportsArc,
+    ]);
 
     const [cornerRadiusDraft, setCornerRadiusDraft] = useState('0');
     const [cornerDetailDraft, setCornerDetailDraft] = useState({
@@ -3508,6 +3857,41 @@ export default function PropertiesPanel({
         onDimensionChange({ width: nextWidth, height: nextHeight });*/
     };
 
+    const handleArcFieldChange = (field, rawValue) => {
+        const nextDraft = { ...arcDraftRef.current, [field]: rawValue };
+        arcDraftRef.current = nextDraft;
+        setArcDraft(nextDraft);
+    };
+
+    const commitArcDraft = () => {
+        if (!supportsArc || !hasSelection || typeof onArcChange !== 'function') return;
+
+        const startRaw = Number(arcDraftRef.current.start);
+        const sweepPercentRaw = Number(arcDraftRef.current.sweep);
+        const ratioPercentRaw = Number(arcDraftRef.current.ratio);
+
+        const start = Number.isFinite(startRaw)
+            ? ((startRaw % FULL_CIRCLE_DEGREES) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES
+            : 0;
+        const sweepPercent = Number.isFinite(sweepPercentRaw) ? clamp(sweepPercentRaw, 0, 100) : 100;
+        const ratioPercent = Number.isFinite(ratioPercentRaw)
+            ? clamp(ratioPercentRaw, 0, ARC_RATIO_PERCENT_MAX)
+            : 0;
+
+        const sweep = (sweepPercent / 100) * FULL_CIRCLE_DEGREES;
+        const ratio = clamp(ratioPercent / 100, 0, ARC_RATIO_PERCENT_MAX / 100);
+
+        onArcChange({ start, sweep, ratio });
+
+        const normalized = {
+            start: formatNumeric(start, 1),
+            sweep: formatNumeric(sweepPercent, 1),
+            ratio: formatNumeric(ratioPercent, 1),
+        };
+        arcDraftRef.current = normalized;
+        setArcDraft(normalized);
+    };
+
     const handleAspectToggle = () => {
         setAspectLocked((prev) => {
             const next = !prev;
@@ -3572,7 +3956,7 @@ export default function PropertiesPanel({
     };
 
     const commitPolygonSides = (nextValue) => {
-        if (primaryShape?.type !== 'polygon' || typeof onPolygonSidesChange !== 'function') return;
+        if (!isPolygonLikeShape || typeof onPolygonSidesChange !== 'function') return;
         const raw = typeof nextValue === 'string' ? nextValue : polygonSidesDraft;
         const numeric = Number(raw);
         if (!Number.isFinite(numeric)) return;
@@ -3583,6 +3967,20 @@ export default function PropertiesPanel({
 
     const handlePolygonSidesInputChange = (value) => {
         setPolygonSidesDraft(value);
+    };
+
+    const commitPolygonRadius = (nextValue) => {
+        if (!isPolygonLikeShape || typeof onRadiusChange !== 'function') return;
+        const raw = typeof nextValue === 'string' ? nextValue : polygonRadiusDraft;
+        const numeric = Number(raw);
+        if (!Number.isFinite(numeric)) return;
+        const clamped = Math.max(0, numeric);
+        onRadiusChange(clamped);
+        setPolygonRadiusDraft(String(clamped));
+    };
+
+    const handlePolygonRadiusInputChange = (value) => {
+        setPolygonRadiusDraft(value);
     };
 
 
@@ -3785,217 +4183,175 @@ export default function PropertiesPanel({
         </>
     );
 
-    const NumericField = ({
+    const resolveNumericStep = (step) => {
+        const numericStep = typeof step === 'number' ? step : Number(step);
+        return Number.isFinite(numericStep) && numericStep !== 0 ? numericStep : 1;
+    };
+
+    const getStepPrecision = (step) => {
+        const stepString = String(step);
+        const decimalIndex = stepString.indexOf('.');
+        return decimalIndex >= 0 ? stepString.length - decimalIndex - 1 : 0;
+    };
+
+    const adjustNumericDraftValue = (rawValue, { step, direction, multiplier, min, max, fallbackValue }) => {
+        const resolvedStep = resolveNumericStep(step);
+        const precision = getStepPrecision(resolvedStep);
+        let base = Number(rawValue);
+        if (Number.isNaN(base)) {
+            const fallback = Number(fallbackValue);
+            base = Number.isNaN(fallback) ? 0 : fallback;
+        }
+        let next = base + resolvedStep * multiplier * direction;
+        if (typeof min === 'number') {
+            next = Math.max(min, next);
+        }
+        if (typeof max === 'number') {
+            next = Math.min(max, next);
+        }
+        return formatNumeric(next, precision);
+    };
+
+    const handleNumericInputFocus = (event, onFocus) => {
+        event.currentTarget.dataset.focusValue = event.currentTarget.value ?? '';
+        event.currentTarget.dataset.lastValid = event.currentTarget.value ?? '';
+        event.target.select?.();
+        if (typeof onFocus === 'function') {
+            onFocus(event);
+        }
+    };
+
+    const handleNumericInputChange = (event, onChange) => {
+        const nextValue = event.target.value;
+        event.currentTarget.dataset.lastValid = nextValue;
+        if (typeof onChange === 'function') {
+            onChange(nextValue);
+        }
+    };
+
+    const handleNumericInputBlur = (event, onCommit) => {
+        if (typeof onCommit === 'function') {
+            onCommit(event);
+        }
+    };
+
+    const handleNumericInputKeyDown = (event, { step = 1, min, max, onChange, onCommit, onKeyDown }) => {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            const direction = event.key === 'ArrowUp' ? 1 : -1;
+            const multiplier = event.shiftKey ? 10 : 1;
+            const nextValue = adjustNumericDraftValue(event.currentTarget.value, {
+                step,
+                direction,
+                multiplier,
+                min,
+                max,
+                fallbackValue: event.currentTarget.dataset.lastValid ?? event.currentTarget.dataset.focusValue,
+            });
+            event.currentTarget.dataset.lastValid = nextValue;
+            if (typeof onChange === 'function') {
+                onChange(nextValue);
+            } else {
+                event.currentTarget.value = nextValue;
+            }
+            scheduleFrame(() => {
+                if (typeof onCommit === 'function') {
+                    onCommit();
+                }
+            });
+            return;
+        }
+
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (typeof onCommit === 'function') {
+                onCommit();
+            }
+            scheduleFrame(() => {
+                event.currentTarget.blur();
+            });
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            const focusValue = event.currentTarget.dataset.focusValue ?? '';
+            if (typeof onChange === 'function') {
+                onChange(focusValue);
+            } else {
+                event.currentTarget.value = focusValue;
+            }
+            scheduleFrame(() => {
+                if (typeof onCommit === 'function') {
+                    onCommit();
+                }
+                event.currentTarget.blur();
+            });
+            return;
+        }
+
+        if (event.key === 'Tab') {
+            if (typeof onCommit === 'function') {
+                onCommit();
+            }
+            return;
+        }
+
+        if (typeof onKeyDown === 'function') {
+            onKeyDown(event);
+        }
+    };
+
+    const renderNumericInput = ({
         label,
         value,
         onChange,
         onCommit,
-        onBlur: onBlurProp,
-        onKeyDown,
         onFocus,
+        onKeyDown,
         suffix = 'px',
-        prefix = 'x',
+        prefix = '',
         step = 1,
         min = undefined,
         max = undefined,
         disabled = false,
-    }) => {
-        const inputRef = useRef(null);
-        const allowBlurRef = useRef(false);
-        const focusValueRef = useRef(value);
-        const latestValueRef = useRef(value);
-
-        useEffect(() => {
-            latestValueRef.current = value;
-            const isFocused =
-                typeof document !== 'undefined' && inputRef.current === document.activeElement;
-            if (!isFocused) {
-                focusValueRef.current = value;
-            }
-        }, [value]);
-
-        const commitHandler = useCallback(
-            (event) => {
-                const handler = onCommit ?? onBlurProp;
-                if (typeof handler === 'function') {
-                    handler(event);
-                }
-            },
-            [onBlurProp, onCommit]
-        );
-
-        const resolvedStep = useMemo(() => {
-            const numericStep = typeof step === 'number' ? step : Number(step);
-            return Number.isFinite(numericStep) && numericStep !== 0 ? numericStep : 1;
-        }, [step]);
-
-        const precision = useMemo(() => {
-            const stepString = String(resolvedStep);
-            const decimalIndex = stepString.indexOf('.');
-            return decimalIndex >= 0 ? stepString.length - decimalIndex - 1 : 0;
-        }, [resolvedStep]);
-
-        const clampValue = useCallback(
-            (numeric) => {
-                let next = numeric;
-                if (typeof min === 'number') {
-                    next = Math.max(min, next);
-                }
-                if (typeof max === 'number') {
-                    next = Math.min(max, next);
-                }
-                return next;
-            },
-            [min, max]
-        );
-
-        const parseValue = useCallback(() => {
-            const numeric = Number(value);
-            if (Number.isNaN(numeric)) {
-                const fallback = Number(latestValueRef.current);
-                return Number.isNaN(fallback) ? 0 : fallback;
-            }
-            return numeric;
-        }, [value]);
-
-        const formatValue = useCallback(
-            (numeric) => formatNumeric(clampValue(numeric), precision),
-            [clampValue, precision]
-        );
-
-        const commitSoon = useCallback(() => {
-            if (typeof (onCommit ?? onBlurProp) !== 'function') return;
-            scheduleFrame(() => {
-                commitHandler();
-            });
-        }, [commitHandler, onBlurProp, onCommit]);
-
-        const adjustValue = useCallback(
-            (direction, multiplier) => {
-                const base = parseValue();
-                const next = base + resolvedStep * multiplier * direction;
-                const formatted = formatValue(next);
-                latestValueRef.current = formatted;
-                if (typeof onChange === 'function') {
-                    onChange(formatted);
-                }
-                commitSoon();
-            },
-            [commitSoon, formatValue, onChange, parseValue, resolvedStep]
-        );
-
-        const handleFocus = useCallback(
-            (event) => {
-                allowBlurRef.current = false;
-                focusValueRef.current = latestValueRef.current ?? value;
-                event.target.select?.();
-                if (typeof onFocus === 'function') {
-                    onFocus(event);
-                }
-            },
-            [onFocus, value]
-        );
-
-        const handleBlur = useCallback(
-            (event) => {
-                if (!allowBlurRef.current) {
-                    event.preventDefault();
-                    const node = inputRef.current;
-                    scheduleFrame(() => {
-                        node?.focus();
-                        node?.select?.();
-                    });
-                    return;
-                }
-                allowBlurRef.current = false;
-                commitHandler(event);
-            },
-            [commitHandler]
-        );
-
-        const handleChange = useCallback(
-            (event) => {
-                const nextValue = event.target.value;
-                latestValueRef.current = nextValue;
-                if (typeof onChange === 'function') {
-                    onChange(nextValue);
-                }
-            },
-            [onChange]
-        );
-
-        const handleKeyDownInternal = useCallback(
-            (event) => {
-                if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    adjustValue(event.key === 'ArrowUp' ? 1 : -1, event.shiftKey ? 10 : 1);
-                    return;
-                }
-
-                if (event.key === 'Enter') {
-                    allowBlurRef.current = true;
-                    commitSoon();
-                    scheduleFrame(() => {
-                        inputRef.current?.blur();
-                    });
-                    return;
-                }
-
-                if (event.key === 'Escape') {
-                    allowBlurRef.current = true;
-                    if (typeof onChange === 'function') {
-                        onChange(focusValueRef.current ?? '');
+    }) => (
+        <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
+            <span style={sectionSubheadingStyle}>{label}</span>
+            <div
+                style={{
+                    ...numericInputWrapperInlineStyle,
+                    pointerEvents: disabled ? 'none' : 'auto',
+                }}
+            >
+                {prefix ? <span style={unitPrefixStyle}>{prefix}</span> : null}
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    value={value}
+                    step={step}
+                    min={min}
+                    max={max}
+                    onChange={(event) => handleNumericInputChange(event, onChange)}
+                    onFocus={(event) => handleNumericInputFocus(event, onFocus)}
+                    onBlur={(event) => handleNumericInputBlur(event, onCommit)}
+                    onKeyDown={(event) =>
+                        handleNumericInputKeyDown(event, {
+                            step,
+                            min,
+                            max,
+                            onChange,
+                            onCommit,
+                            onKeyDown,
+                        })
                     }
-                    latestValueRef.current = focusValueRef.current ?? latestValueRef.current;
-                    commitSoon();
-                    scheduleFrame(() => {
-                        inputRef.current?.blur();
-                    });
-                    return;
-                }
-
-                if (event.key === 'Tab') {
-                    allowBlurRef.current = true;
-                    commitSoon();
-                }
-
-                if (typeof onKeyDown === 'function') {
-                    onKeyDown(event);
-                }
-            },
-            [adjustValue, commitSoon, onChange, onKeyDown]
-        );
-
-        return (
-            <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
-                <span style={sectionSubheadingStyle}>{label}</span>
-                <div
-                    style={{
-                        ...numericInputWrapperInlineStyle,
-                        pointerEvents: disabled ? 'none' : 'auto',
-                    }}
-                >
-                    {prefix ? <span style={unitPrefixStyle}>{prefix}</span> : null}
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        inputMode="decimal"
-                        value={value}
-                        step={step}
-                        min={min}
-                        max={max}
-                        onChange={handleChange}
-                        onFocus={handleFocus}
-                        onBlur={handleBlur}
-                        onKeyDown={handleKeyDownInternal}
-                        style={numericInputFieldStyle}
-                        disabled={disabled}
-                    />
-                    {suffix ? <span style={unitSuffixStyle}>{suffix}</span> : null}
-                </div>
-            </label>
-        );
-    };
+                    style={numericInputFieldStyle}
+                    disabled={disabled}
+                />
+                {suffix ? <span style={unitSuffixStyle}>{suffix}</span> : null}
+            </div>
+        </label>
+    );
 
     const [localFontEntries, setLocalFontEntries] = useState([]);
 
@@ -4258,41 +4614,47 @@ export default function PropertiesPanel({
                     <div>
                         <div style={sectionSubheadingStyle}>Position</div>
                         <div style={numericRowStyle}>
-                            <NumericField
-                                value={positionDraft.x}
-                                onChange={(value) => handlePositionFieldChange('x', value)}
-                                onFocus={() => { positionEditingRef.current = true; }}
-                                onCommit={commitPositionDraft}
-                                step={1}
-                                prefix="X"
-                                suffix="px"
-                                disabled={!hasSelection}
-                            />
-                            <NumericField
-                                value={positionDraft.y}
-                                onChange={(value) => handlePositionFieldChange('y', value)}
-                                onFocus={() => { positionEditingRef.current = true; }}
-                                onCommit={commitPositionDraft}
-                                step={1}
-                                prefix="Y"
-                                suffix="px"
-                                disabled={!hasSelection}
-                            />
+                            {renderNumericInput({
+                                label: '',
+                                value: positionDraft.x,
+                                onChange: (value) => handlePositionFieldChange('x', value),
+                                onCommit: commitPositionDraft,
+                                onFocus: () => {
+                                    positionEditingRef.current = true;
+                                },
+                                step: 1,
+                                prefix: 'X',
+                                suffix: 'px',
+                                disabled: !hasSelection,
+                            })}
+                            {renderNumericInput({
+                                label: '',
+                                value: positionDraft.y,
+                                onChange: (value) => handlePositionFieldChange('y', value),
+                                onCommit: commitPositionDraft,
+                                onFocus: () => {
+                                    positionEditingRef.current = true;
+                                },
+                                step: 1,
+                                prefix: 'Y',
+                                suffix: 'px',
+                                disabled: !hasSelection,
+                            })}
                         </div>
                     </div>
                     <div>
                         <div style={sectionSubheadingStyle}>Rotation</div>
                         <div style={rotationRowStyle}>
-                            <NumericField
-                                label=""
-                                value={rotationDraft}
-                                onChange={handleRotationInputChange}
-                                onCommit={commitRotation}
-                                prefix=""
-                                suffix="°"
-                                step={1}
-                                disabled={!hasSelection}
-                            />
+                            {renderNumericInput({
+                                label: '',
+                                value: rotationDraft,
+                                onChange: handleRotationInputChange,
+                                onCommit: commitRotation,
+                                prefix: '',
+                                suffix: '°',
+                                step: 1,
+                                disabled: !hasSelection,
+                            })}
                             <button
                                 type="button"
                                 title="Rotate 90° Clockwise"
@@ -4330,28 +4692,32 @@ export default function PropertiesPanel({
                     <div>
                         <div style={sectionSubheadingStyle}>Dimension</div>
                         <div style={dimensionRowStyle}>
-                            <NumericField
-                                label=""
-                                value={dimensionDraft.width}
-                                onChange={(value) => handleDimensionFieldChange('width', value)}
-                                onFocus={() => { dimensionEditingRef.current = true; }}
-                                onCommit={commitDimensionDraft}
-                                step={1}
-                                suffix="px"
-                                prefix="W"
-                                disabled={!supportsDimensions || !hasSelection}
-                            />
-                            <NumericField
-                                label=""
-                                value={dimensionDraft.height}
-                                onChange={(value) => handleDimensionFieldChange('height', value)}
-                                onFocus={() => { dimensionEditingRef.current = true; }}
-                                onCommit={commitDimensionDraft}
-                                step={1}
-                                suffix="px"
-                                prefix="H"
-                                disabled={!supportsDimensions || !hasSelection}
-                            />
+                            {renderNumericInput({
+                                label: '',
+                                value: dimensionDraft.width,
+                                onChange: (value) => handleDimensionFieldChange('width', value),
+                                onCommit: commitDimensionDraft,
+                                onFocus: () => {
+                                    dimensionEditingRef.current = true;
+                                },
+                                step: 1,
+                                suffix: 'px',
+                                prefix: 'W',
+                                disabled: !supportsDimensions || !hasSelection,
+                            })}
+                            {renderNumericInput({
+                                label: '',
+                                value: dimensionDraft.height,
+                                onChange: (value) => handleDimensionFieldChange('height', value),
+                                onCommit: commitDimensionDraft,
+                                onFocus: () => {
+                                    dimensionEditingRef.current = true;
+                                },
+                                step: 1,
+                                suffix: 'px',
+                                prefix: 'H',
+                                disabled: !supportsDimensions || !hasSelection,
+                            })}
                             <button
                                 type="button"
                                 title={isAspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
@@ -4369,18 +4735,28 @@ export default function PropertiesPanel({
                                 {isAspectLocked ? <LockClosedIcon /> : <LockOpenIcon />}
                             </button>
                         </div>
-                        {primaryShape?.type === 'polygon' ? (
-                            <div style={{ marginTop: 8 }}>
-                                <NumericField
-                                    label="Sides"
-                                    value={polygonSidesDraft}
-                                    onChange={handlePolygonSidesInputChange}
-                                    onCommit={commitPolygonSides}
-                                    step={1}
-                                    suffix=""
-                                    prefix=""
-                                    disabled={!hasSelection}
-                                />
+                        {isPolygonLikeShape ? (
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+                                {renderNumericInput({
+                                    label: 'Sides',
+                                    value: polygonSidesDraft,
+                                    onChange: handlePolygonSidesInputChange,
+                                    onCommit: commitPolygonSides,
+                                    step: 1,
+                                    suffix: '',
+                                    prefix: '',
+                                    disabled: !hasSelection,
+                                })}
+                                {renderNumericInput({
+                                    label: 'Radius',
+                                    value: polygonRadiusDraft,
+                                    onChange: handlePolygonRadiusInputChange,
+                                    onCommit: commitPolygonRadius,
+                                    step: 1,
+                                    suffix: 'px',
+                                    prefix: '',
+                                    disabled: !hasSelection,
+                                })}
                             </div>
                         ) : null}
                     </div>
@@ -4391,28 +4767,27 @@ export default function PropertiesPanel({
                 <Section title="Appearance" actions={appearanceActions}>
                     <div>
                         <div style={appearanceRowStyle}>
-                            <NumericField
-                                label="Opacity"
-                                value={opacityDraft}
-                                onChange={handleOpacityInputChange}
-                                onCommit={commitOpacity}
-                                min={0}
-                                max={100}
-                                suffix="%"
-                                prefix=""
-                                disabled={!hasSelection}
-                            />
-                            <NumericField
-                                label="Corner Radius"
-                                value={cornerRadiusDraft}
-                                onChange={handleCornerRadiusInputChange}
-                                //onChange={(value) => setCornerRadiusDraft(value)}
-                                onCommit={commitCornerRadius}
-                                step={1}
-                                suffix="px"
-                                prefix=""
-                                disabled={!supportsCornerRadius || !hasSelection}
-                            />
+                            {renderNumericInput({
+                                label: 'Opacity',
+                                value: opacityDraft,
+                                onChange: handleOpacityInputChange,
+                                onCommit: commitOpacity,
+                                min: 0,
+                                max: 100,
+                                suffix: '%',
+                                prefix: '',
+                                disabled: !hasSelection,
+                            })}
+                            {renderNumericInput({
+                                label: 'Corner Radius',
+                                value: cornerRadiusDraft,
+                                onChange: handleCornerRadiusInputChange,
+                                onCommit: commitCornerRadius,
+                                step: 1,
+                                suffix: 'px',
+                                prefix: '',
+                                disabled: !supportsCornerRadius || !hasSelection,
+                            })}
                             <button
                                 type="button"
                                 title={showCornerDetails ? 'Hide individual corners' : 'Show individual corners'}
@@ -4432,42 +4807,76 @@ export default function PropertiesPanel({
                         </div>
                         {showCornerDetails ? (
                             <div style={cornerDetailsGridStyle}>
-                                <NumericField
-                                    label="Top-Left"
-                                    value={cornerDetailDraft.topLeft || cornerRadiusDraft}
-                                    onChange={(value) => handleCornerDetailInputChange('topLeft', value)}
-                                    onCommit={() => commitCornerDetail('topLeft')}
-                                    step={1}
-                                    suffix="px"
-                                    disabled={!supportsCornerRadius || !hasSelection}
-                                />
-                                <NumericField
-                                    label="Top-Right"
-                                    value={cornerDetailDraft.topRight}
-                                    onChange={(value) => handleCornerDetailInputChange('topRight', value)}
-                                    onCommit={() => commitCornerDetail('topRight')}
-                                    step={1}
-                                    suffix="px"
-                                    disabled={!supportsCornerRadius || !hasSelection}
-                                />
-                                <NumericField
-                                    label="Bottom-Right"
-                                    value={cornerDetailDraft.bottomRight}
-                                    onChange={(value) => handleCornerDetailInputChange('bottomRight', value)}
-                                    onCommit={() => commitCornerDetail('bottomRight')}
-                                    step={1}
-                                    suffix="px"
-                                    disabled={!supportsCornerRadius || !hasSelection}
-                                />
-                                <NumericField
-                                    label="Bottom-Left"
-                                    value={cornerDetailDraft.bottomLeft}
-                                    onChange={(value) => handleCornerDetailInputChange('bottomLeft', value)}
-                                    onCommit={() => commitCornerDetail('bottomLeft')}
-                                    step={1}
-                                    suffix="px"
-                                    disabled={!supportsCornerRadius || !hasSelection}
-                                />
+                                {renderNumericInput({
+                                    label: 'Top-Left',
+                                    value: cornerDetailDraft.topLeft || cornerRadiusDraft,
+                                    onChange: (value) => handleCornerDetailInputChange('topLeft', value),
+                                    onCommit: () => commitCornerDetail('topLeft'),
+                                    step: 1,
+                                    suffix: 'px',
+                                    disabled: !supportsCornerRadius || !hasSelection,
+                                })}
+                                {renderNumericInput({
+                                    label: 'Top-Right',
+                                    value: cornerDetailDraft.topRight,
+                                    onChange: (value) => handleCornerDetailInputChange('topRight', value),
+                                    onCommit: () => commitCornerDetail('topRight'),
+                                    step: 1,
+                                    suffix: 'px',
+                                    disabled: !supportsCornerRadius || !hasSelection,
+                                })}
+                                {renderNumericInput({
+                                    label: 'Bottom-Right',
+                                    value: cornerDetailDraft.bottomRight,
+                                    onChange: (value) => handleCornerDetailInputChange('bottomRight', value),
+                                    onCommit: () => commitCornerDetail('bottomRight'),
+                                    step: 1,
+                                    suffix: 'px',
+                                    disabled: !supportsCornerRadius || !hasSelection,
+                                })}
+                                {renderNumericInput({
+                                    label: 'Bottom-Left',
+                                    value: cornerDetailDraft.bottomLeft,
+                                    onChange: (value) => handleCornerDetailInputChange('bottomLeft', value),
+                                    onCommit: () => commitCornerDetail('bottomLeft'),
+                                    step: 1,
+                                    suffix: 'px',
+                                    disabled: !supportsCornerRadius || !hasSelection,
+                                })}
+                            </div>
+                        ) : null}
+                        {supportsArc ? (
+                            <div style={numericRowStyle}>
+                                {renderNumericInput({
+                                    label: 'Start',
+                                    value: arcDraft.start,
+                                    onChange: (value) => handleArcFieldChange('start', value),
+                                    onCommit: commitArcDraft,
+                                    step: 1,
+                                    suffix: '°',
+                                    prefix: '',
+                                    disabled: !hasSelection,
+                                })}
+                                {renderNumericInput({
+                                    label: 'Sweep',
+                                    value: arcDraft.sweep,
+                                    onChange: (value) => handleArcFieldChange('sweep', value),
+                                    onCommit: commitArcDraft,
+                                    step: 1,
+                                    suffix: '%',
+                                    prefix: '',
+                                    disabled: !hasSelection,
+                                })}
+                                {renderNumericInput({
+                                    label: 'Ratio',
+                                    value: arcDraft.ratio,
+                                    onChange: (value) => handleArcFieldChange('ratio', value),
+                                    onCommit: commitArcDraft,
+                                    step: 1,
+                                    suffix: '%',
+                                    prefix: '',
+                                    disabled: !hasSelection,
+                                })}
                             </div>
                         ) : null}
                         <div style={smoothingControlStyle}>
