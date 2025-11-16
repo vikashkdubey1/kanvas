@@ -1,4 +1,4 @@
-declare module '*.module.css' {
+src / index.tsxdeclare module '*.module.css' {
   const classes: { readonly [key: string]: string };
   export default classes;
 }
@@ -29,3 +29,4 @@ declare module './App' {
   const App: ComponentType;
   export default App;
 }
+src / index.tsx
