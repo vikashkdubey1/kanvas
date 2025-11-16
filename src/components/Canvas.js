@@ -48,6 +48,7 @@ const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
 const FULL_ARC_SWEEP = 360;
 const ARC_RATIO_MAX = 0.99;
 const ARC_EPSILON = 0.0001;
+const CANVAS_STORAGE_KEY = 'kanvas:canvas-state';
 
 const LAYER_PANEL_MIN_WIDTH = 240;
 const LAYER_PANEL_MAX_WIDTH = 500;
@@ -753,6 +754,35 @@ export default function Canvas({
     const [pages, setPages] = useState(initialPageStateRef.current.pages);
     const [activePageId, setActivePageId] = useState(initialPageStateRef.current.activePageId);
     const pagesRef = useRef(pages);
+    const persistCanvasState = useCallback((payload) => {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        try {
+            window.localStorage.setItem(CANVAS_STORAGE_KEY, JSON.stringify(payload));
+        } catch { }
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        try {
+            const raw = window.localStorage.getItem(CANVAS_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.shapes)) {
+                setShapes(parsed.shapes);
+            }
+            if (parsed && Array.isArray(parsed.pages) && parsed.pages.length) {
+                setPages(parsed.pages);
+                const fallbackPageId = parsed.pages[0]?.id;
+                const nextActiveId =
+                    parsed.activePageId && parsed.pages.some((page) => page.id === parsed.activePageId)
+                        ? parsed.activePageId
+                        : fallbackPageId;
+                if (nextActiveId) {
+                    setActivePageId(nextActiveId);
+                }
+            }
+        } catch { }
+    }, []);
 
     useEffect(() => {
         const stage = stageRef.current;
@@ -833,6 +863,22 @@ export default function Canvas({
     useEffect(() => {
         activePageRef.current = activePageId;
     }, [activePageId]);
+
+    useEffect(() => {
+        persistCanvasState({
+            shapes: shapesRef.current,
+            pages: pagesRef.current,
+            activePageId: activePageRef.current,
+        });
+    }, [shapes, pages, activePageId, persistCanvasState]);
+
+    useEffect(() => () => {
+        persistCanvasState({
+            shapes: shapesRef.current,
+            pages: pagesRef.current,
+            activePageId: activePageRef.current,
+        });
+    }, [persistCanvasState]);
 
     useEffect(() => {
         if (!pages.length) {

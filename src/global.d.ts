@@ -1,26 +1,31 @@
 declare module '*.module.css' {
-    const classes: { readonly [key: string]: string };
-    export default classes;
+  const classes: { readonly [key: string]: string };
+  export default classes;
 }
 
 // Minimal typings for react-dom/client to support local builds without
 // fetching the official @types package in restricted environments.
 declare module 'react-dom/client' {
-    import type { ReactNode } from 'react';
+  import type { ReactNode } from 'react';
 
-    interface Root {
-        render(children: ReactNode): void;
-        unmount(): void;
-    }
+  interface Root {
+    render(children: ReactNode): void;
+    unmount(): void;
+  }
 
-    interface RootOptions {
-        identifierPrefix?: string;
-        onRecoverableError?: (error: Error) => void;
-    }
+  interface RootOptions {
+    identifierPrefix?: string;
+    onRecoverableError?: (error: Error) => void;
+  }
 
-    export function createRoot(
-        container: Element | DocumentFragment,
-        options?: RootOptions
-    ): Root;
+  export function createRoot(
+    container: Element | DocumentFragment,
+    options?: RootOptions
+  ): Root;
 }
-src / index.tsx
+
+declare module './App' {
+  import type { ComponentType } from 'react';
+  const App: ComponentType;
+  export default App;
+}
