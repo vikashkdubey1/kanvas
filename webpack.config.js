@@ -8,43 +8,56 @@ module.exports = {
     filename: 'bundle.js',
   },
   module: {
-    rules: [
-      {
-        test: /\.tsx?$/,
-        exclude: /node_modules/,
-        use: 'ts-loader',
-      },
-      {
-        test: /\.(js|jsx)$/,
-        exclude: /node_modules/,
-        use: {
-          loader: 'babel-loader',
-          options: {
-            presets: ['@babel/preset-env', '@babel/preset-react'],
-          },
-        },
-      },
-      {
-        test: /\.module\.css$/,
-        use: [
-          'style-loader',
+      rules: [
           {
-            loader: 'css-loader',
-            options: {
-              modules: true,
-            },
+              test: /\.tsx?$/,
+              exclude: /node_modules/,
+              use: 'ts-loader',
           },
-        ],
-      },
-      {
-        test: /\.css$/,
-        exclude: /\.module\.css$/,
-        use: ['style-loader', 'css-loader'],
-      },
-    ],
+          {
+              test: /\.(js|jsx)$/,
+              exclude: /node_modules/,
+              use: {
+                  loader: 'babel-loader',
+                  options: {
+                  presets: ['@babel/preset-env', '@babel/preset-react'],
+                  },
+              },
+          },
+          {
+              test: /\.module\.css$/,
+              use: [
+                  'style-loader',
+                  {
+                      loader: 'css-loader',
+                      options: {
+                          modules: true,
+                          esModule: true,
+                      },
+                  },
+              ],
+          },
+          {
+              test: /\.css$/,
+              exclude: /\.module\.css$/,
+              use: ['style-loader', 'css-loader'],
+          },
+      ],
   },
   resolve: {
-    extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      alias: {
+          react: path.resolve(__dirname, 'node_modules/react'),
+          'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+          'react-dom/client': path.resolve(
+              __dirname,
+              'node_modules/react-dom/client.js'
+          ),
+          'react/jsx-runtime': path.resolve(
+              __dirname,
+              'node_modules/react/jsx-runtime.js'
+          ),
+      },
   },
  plugins: [
     new HtmlWebpackPlugin({
@@ -52,11 +65,8 @@ module.exports = {
     }),
   ],
   devServer: {
-  static: './public',
-  hot: true,
-  host: '0.0.0.0',                // accept all network connections
-  port: process.env.PORT || 3000, // Render dynamically assigns a port
-  allowedHosts: 'all',            // allow Render’s hostname
-  historyApiFallback: true,       // for React Router / SPA support
-  }
+    static: './public',
+    hot: true,
+    port: 3000,
+  },
 };
