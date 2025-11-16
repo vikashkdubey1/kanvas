@@ -326,8 +326,8 @@ const getShapeBoundingBox = (shape) => {
     }
 };
 
-const buildRegularPolygonPoints = (center, radius, sides, rotationDegrees = 0) => {
-    const resolvedSides = Math.max(3, Math.floor(sides || 0));
+function buildRegularPolygonPoints(center, radius, sides, rotationDegrees = 0) {
+    const resolvedSides = clampValue(Math.floor(sides || 0), 3, 60);
     const resolvedRadius = Math.max(0, radius || 0);
     const rotation = (Number.isFinite(rotationDegrees) ? rotationDegrees : 0) * (Math.PI / 180);
     const baseAngle = rotation - Math.PI / 2;
@@ -339,6 +339,113 @@ const buildRegularPolygonPoints = (center, radius, sides, rotationDegrees = 0) =
         points.push(center.y + Math.sin(angle) * resolvedRadius);
     }
     return points;
+};
+
+const MAX_POLYGON_SIDES = 60;
+
+const RoundedRegularPolygon = ({
+    x = 0,
+    y = 0,
+    radius = 0,
+    sides = 3,
+    cornerRadius = 0,
+    rotation = 0,
+    ...shapeProps
+}) => {
+    const clampedSides = Math.max(3, Math.min(MAX_POLYGON_SIDES, Math.floor(sides || 0)));
+    const resolvedRadius = Math.max(0, radius || 0);
+    const resolvedCornerRadius = Math.max(0, cornerRadius || 0);
+
+    return (
+        <Shape
+            x={x}
+            y={y}
+            rotation={rotation}
+            {...shapeProps}
+            sceneFunc={(ctx, shape) => {
+                if (clampedSides < 3 || resolvedRadius <= 0) {
+                    return;
+                }
+
+                // Draw around (0, 0); Konva applies node rotation.
+                const points = buildRegularPolygonPoints(
+                    { x: 0, y: 0 },
+                    resolvedRadius,
+                    clampedSides,
+                    0
+                );
+
+                const total = points.length / 2;
+                if (total < 3) {
+                    return;
+                }
+
+                ctx.beginPath();
+
+                if (resolvedCornerRadius <= 0) {
+                    // Sharp-corner polygon
+                    ctx.moveTo(points[0], points[1]);
+                    for (let i = 1; i < total; i += 1) {
+                        const px = points[i * 2];
+                        const py = points[i * 2 + 1];
+                        ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.fillStrokeShape(shape);
+                    return;
+                }
+
+                const getPoint = (index) => {
+                    const idx = ((index % total) + total) % total;
+                    return {
+                        x: points[idx * 2],
+                        y: points[idx * 2 + 1],
+                    };
+                };
+
+                const distance = (a, b) => {
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+                    return Math.sqrt(dx * dx + dy * dy) || 0;
+                };
+
+                const moveTowards = (from, to, by) => {
+                    const dist = distance(from, to);
+                    if (!dist) return { x: from.x, y: from.y };
+                    const t = by / dist;
+                    return {
+                        x: from.x + (to.x - from.x) * t,
+                        y: from.y + (to.y - from.y) * t,
+                    };
+                };
+
+                for (let i = 0; i < total; i += 1) {
+                    const p0 = getPoint(i - 1);
+                    const p1 = getPoint(i);
+                    const p2 = getPoint(i + 1);
+
+                    const d01 = distance(p1, p0);
+                    const d12 = distance(p2, p1);
+
+                    const r = Math.min(resolvedCornerRadius, d01 / 2, d12 / 2);
+
+                    const p1a = moveTowards(p1, p0, r);
+                    const p1b = moveTowards(p1, p2, r);
+
+                    if (i === 0) {
+                        ctx.moveTo(p1a.x, p1a.y);
+                    } else {
+                        ctx.lineTo(p1a.x, p1a.y);
+                    }
+
+                    ctx.arcTo(p1.x, p1.y, p1b.x, p1b.y, r);
+                }
+
+                ctx.closePath();
+                ctx.fillStrokeShape(shape);
+            }}
+        />
+    );
 };
 
 const unionBoundingBoxes = (boxes) => {
@@ -2780,7 +2887,7 @@ export default function Canvas({
                     if (isPolygonLikeShape(shape)) {
                         if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) return shape;
                         if (shape.x === nextX && shape.y === nextY) return shape;
-                        const sides = Math.max(3, Math.floor(shape.sides || 5));
+                        const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
                         const points = buildRegularPolygonPoints(
                             { x: nextX, y: nextY },
                             shape.radius || 0,
@@ -2850,7 +2957,7 @@ export default function Canvas({
                     if (isPolygonLikeShape(shape)) {
                         const radius = Math.max(1, Math.max(width, height) / 2);
                         if (shape.radius === radius) return shape;
-                        const sides = Math.max(3, Math.floor(shape.sides || 5));
+                        const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
                         const points = buildRegularPolygonPoints({ x: shape.x || 0, y: shape.y || 0 }, radius, sides, shape.rotation || 0);
                         const nextCornerRadius = clampValue(Number(shape.cornerRadius) || 0, 0, radius);
                         return { ...shape, radius, cornerRadius: nextCornerRadius, points };
@@ -3109,7 +3216,7 @@ export default function Canvas({
                     if (isPolygonLikeShape(shape)) {
                         if (shape.radius === nextRadius) return shape;
 
-                        const sides = Math.max(3, Math.floor(shape.sides || 5));
+                        const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
                         const points = buildRegularPolygonPoints(
                             { x: shape.x || 0, y: shape.y || 0 },
                             nextRadius,
@@ -4657,18 +4764,35 @@ export default function Canvas({
             );
         } else if (isPolygonLikeShape(shape)) {
             const scaleVal = node.scaleX();
-            const newRadius = Math.max(1, node.radius() * scaleVal);
+
+            let baseRadius;
+            if (typeof node.radius === 'function') {
+                baseRadius = node.radius();
+            } else {
+                baseRadius = Number(node.getAttr('radius')) || shape.radius || 0;
+            }
+
+            if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+                baseRadius = shape.radius || 0;
+            }
+
+            const newRadius = Math.max(1, baseRadius * scaleVal);
             const rotation = node.rotation() || 0;
             node.scaleX(1);
             node.scaleY(1);
-            const sides = Math.max(3, Math.floor(shape.sides || 5));
-            const snappedRotation = snapAngle(rotation);
+
+            const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
+            let snappedRotation = rotation;
+            if (Math.abs(node.scaleX() - 1) > 0.001 || Math.abs(node.scaleY() - 1) > 0.001) {
+                snappedRotation = snapAngle(rotation);
+            }
             const updatedPoints = buildRegularPolygonPoints(
                 { x: node.x(), y: node.y() },
                 newRadius,
                 sides,
                 snappedRotation
             );
+
             applyChange((prev) =>
                 prev.map((s) =>
                     s.id === id
@@ -5905,15 +6029,16 @@ export default function Canvas({
             case 'polygon':
             case 'roundedPolygon': {
                 const radius = Math.max(1, shape.radius || 0);
-                const sides = Math.max(3, Math.floor(shape.sides || 5));
+                const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
+                const cornerRadius = Math.max(0, shape.cornerRadius || 0);
                 return (
-                    <RegularPolygon
+                    <RoundedRegularPolygon
                         {...commonProps}
                         x={shape.x}
                         y={shape.y}
                         radius={radius}
                         sides={sides}
-                        cornerRadius={Math.max(0, shape.cornerRadius || 0)}
+                        cornerRadius={cornerRadius}
                         {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
@@ -7499,9 +7624,14 @@ export default function Canvas({
 
                         <Transformer
                             ref={trRef}
-                            rotationEnabled={false}
+                            //rotationEnabled={false}
                             rotateEnabled={false}
-                            rotationAnchorOffset={-9999}
+                            //rotationAnchorOffset={-9999}
+                            resizeEnabled={
+                                selectedShape
+                                    ? !isPolygonLikeType(selectedShape.type)
+                                    : true
+                            }
                             enabledAnchors={[
                                 'top-left',
                                 'top-center',

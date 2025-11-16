@@ -3960,7 +3960,7 @@ export default function PropertiesPanel({
         const raw = typeof nextValue === 'string' ? nextValue : polygonSidesDraft;
         const numeric = Number(raw);
         if (!Number.isFinite(numeric)) return;
-        const clamped = Math.max(3, Math.floor(numeric));
+        const clamped = clamp(Math.floor(numeric), 3, 60);
         onPolygonSidesChange(clamped);
         setPolygonSidesDraft(String(clamped));
     };
@@ -4301,6 +4301,57 @@ export default function PropertiesPanel({
             onKeyDown(event);
         }
     };
+
+    const renderNumericInput = ({
+        label,
+        value,
+        onChange,
+        onCommit,
+        onFocus,
+        onKeyDown,
+        suffix = 'px',
+        prefix = '',
+        step = 1,
+        min = undefined,
+        max = undefined,
+        disabled = false,
+    }) => (
+        <label style={{ ...numericFieldStyle, opacity: disabled ? 0.5 : 1 }}>
+            <span style={sectionSubheadingStyle}>{label}</span>
+            <div
+                style={{
+                    ...numericInputWrapperInlineStyle,
+                    pointerEvents: disabled ? 'none' : 'auto',
+                }}
+            >
+                {prefix ? <span style={unitPrefixStyle}>{prefix}</span> : null}
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    value={value}
+                    step={step}
+                    min={min}
+                    max={max}
+                    onChange={(event) => handleNumericInputChange(event, onChange)}
+                    onFocus={(event) => handleNumericInputFocus(event, onFocus)}
+                    onBlur={(event) => handleNumericInputBlur(event, onCommit)}
+                    onKeyDown={(event) =>
+                        handleNumericInputKeyDown(event, {
+                            step,
+                            min,
+                            max,
+                            onChange,
+                            onCommit,
+                            onKeyDown,
+                        })
+                    }
+                    style={numericInputFieldStyle}
+                    disabled={disabled}
+                />
+                {suffix ? <span style={unitSuffixStyle}>{suffix}</span> : null}
+            </div>
+        </label>
+    );
 
     const renderNumericInput = ({
         label,
