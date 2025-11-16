@@ -4764,25 +4764,41 @@ export default function Canvas({
             );
         } else if (isPolygonLikeShape(shape)) {
             const scaleVal = node.scaleX();
-            const newRadius = Math.max(1, node.radius() * scaleVal);
+
+            let baseRadius;
+            if (typeof node.radius === 'function') {
+                baseRadius = node.radius();
+            } else {
+                baseRadius = Number(node.getAttr('radius')) || shape.radius || 0;
+            }
+
+            if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+                baseRadius = shape.radius || 0;
+            }
+
+            const newRadius = Math.max(1, baseRadius * scaleVal);
             const rotation = node.rotation() || 0;
             node.scaleX(1);
             node.scaleY(1);
+
             const sides = clampValue(Math.floor(shape.sides || 5), 3, 60);
-            const snappedRotation = snapAngle(rotation);
+            let snappedRotation = rotation;
+            if (Math.abs(node.scaleX() - 1) > 0.001 || Math.abs(node.scaleY() - 1) > 0.001) {
+                snappedRotation = snapAngle(rotation);
+            }
             const updatedPoints = buildRegularPolygonPoints(
                 { x: node.x(), y: node.y() },
                 newRadius,
                 sides,
                 snappedRotation
             );
+
             applyChange((prev) =>
                 prev.map((s) =>
                     s.id === id
                         ? {
                             ...s,
                             radius: newRadius,
-                            cornerRadius: clampValue(Number(s.cornerRadius) || 0, 0, newRadius),
                             x: node.x(),
                             y: node.y(),
                             rotation: snappedRotation,
@@ -7607,9 +7623,14 @@ export default function Canvas({
 
                         <Transformer
                             ref={trRef}
-                            rotationEnabled={false}
+                            //rotationEnabled={false}
                             rotateEnabled={false}
-                            rotationAnchorOffset={-9999}
+                            //rotationAnchorOffset={-9999}
+                            resizeEnabled={
+                                selectedShape
+                                    ? !isPolygonLikeType(selectedShape.type)
+                                    : true
+                            }
                             enabledAnchors={[
                                 'top-left',
                                 'top-center',
