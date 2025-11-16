@@ -3671,6 +3671,43 @@ export default function PropertiesPanel({
         supportsArc,
     ]);
 
+    const [arcDraft, setArcDraft] = useState({ start: '0', sweep: '100', ratio: '0' });
+    const arcDraftRef = useRef({ start: '0', sweep: '100', ratio: '0' });
+
+    useEffect(() => {
+        if (supportsArc && primaryShape) {
+            const rawStart = Number(primaryShape.arcStart);
+            const rawSweep = Number(primaryShape.arcSweep);
+            const rawRatio = Number(primaryShape.arcRatio);
+            const start = Number.isFinite(rawStart)
+                ? ((rawStart % FULL_CIRCLE_DEGREES) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES
+                : 0;
+            const sweepDegrees = Number.isFinite(rawSweep)
+                ? clamp(rawSweep, 0, FULL_CIRCLE_DEGREES)
+                : FULL_CIRCLE_DEGREES;
+            const ratio = Number.isFinite(rawRatio)
+                ? clamp(rawRatio, 0, ARC_RATIO_PERCENT_MAX / 100)
+                : 0;
+            const next = {
+                start: formatNumeric(start, 1),
+                sweep: formatNumeric((sweepDegrees / FULL_CIRCLE_DEGREES) * 100, 1),
+                ratio: formatNumeric(ratio * 100, 1),
+            };
+            arcDraftRef.current = next;
+            setArcDraft(next);
+        } else {
+            const reset = { start: '0', sweep: '100', ratio: '0' };
+            arcDraftRef.current = reset;
+            setArcDraft(reset);
+        }
+    }, [
+        primaryShape?.arcStart,
+        primaryShape?.arcSweep,
+        primaryShape?.arcRatio,
+        primaryShape?.id,
+        supportsArc,
+    ]);
+
     const [cornerRadiusDraft, setCornerRadiusDraft] = useState('0');
     const [cornerDetailDraft, setCornerDetailDraft] = useState({
         topLeft: '0',
