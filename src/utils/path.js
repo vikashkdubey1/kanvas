@@ -153,6 +153,111 @@ export const distanceToSegment = (point, a, b) => {
     return Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
 };
 
+const clamp = (value, min, max) => {
+    if (!Number.isFinite(value)) return min;
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+};
+
+const PATH_ROUNDING_EPSILON = 0.0001;
+const HANDLE_FACTOR = 4 / 3;
+
+export const roundPathCorners = (points = [], radius = 0) => {
+    if (!Array.isArray(points) || points.length < 3) {
+        return clonePathPoints(points);
+    }
+
+    const requestedRadius = Math.max(0, Number(radius) || 0);
+    if (requestedRadius <= PATH_ROUNDING_EPSILON) {
+        return clonePathPoints(points);
+    }
+
+    const count = points.length;
+    const rounded = [];
+
+    for (let index = 0; index < count; index += 1) {
+        const prev = points[(index - 1 + count) % count];
+        const current = points[index];
+        const next = points[(index + 1) % count];
+
+        if (!prev || !current || !next) {
+            continue;
+        }
+
+        if (current.handles && (current.handles.left || current.handles.right)) {
+            rounded.push(clonePathPoint(current));
+            continue;
+        }
+
+        const incoming = distanceBetween(current, prev);
+        const outgoing = distanceBetween(current, next);
+        if (incoming < PATH_ROUNDING_EPSILON || outgoing < PATH_ROUNDING_EPSILON) {
+            rounded.push(clonePathPoint(current));
+            continue;
+        }
+
+        const maxRadius = Math.min(requestedRadius, incoming / 2, outgoing / 2);
+        if (!Number.isFinite(maxRadius) || maxRadius <= PATH_ROUNDING_EPSILON) {
+            rounded.push(clonePathPoint(current));
+            continue;
+        }
+
+        const dirPrev = {
+            x: (prev.x - current.x) / incoming,
+            y: (prev.y - current.y) / incoming,
+        };
+        const dirNext = {
+            x: (next.x - current.x) / outgoing,
+            y: (next.y - current.y) / outgoing,
+        };
+
+        const tangentIn = { x: -dirPrev.x, y: -dirPrev.y };
+        const tangentOut = { x: dirNext.x, y: dirNext.y };
+        const dot = clamp(tangentIn.x * tangentOut.x + tangentIn.y * tangentOut.y, -1, 1);
+        const angle = Math.acos(dot);
+
+        if (!Number.isFinite(angle) || angle < PATH_ROUNDING_EPSILON) {
+            rounded.push(clonePathPoint(current));
+            continue;
+        }
+
+        const handleLength = maxRadius * HANDLE_FACTOR * Math.tan(angle / 4);
+
+        const startPoint = createPathPoint({
+            x: current.x + dirPrev.x * maxRadius,
+            y: current.y + dirPrev.y * maxRadius,
+            type: PATH_NODE_TYPES.DISCONNECTED,
+        });
+
+        const endPoint = createPathPoint({
+            x: current.x + dirNext.x * maxRadius,
+            y: current.y + dirNext.y * maxRadius,
+            type: PATH_NODE_TYPES.DISCONNECTED,
+        });
+
+        if (Number.isFinite(handleLength) && Math.abs(handleLength) > PATH_ROUNDING_EPSILON) {
+            startPoint.handles = {
+                right: {
+                    x: startPoint.x + tangentIn.x * handleLength,
+                    y: startPoint.y + tangentIn.y * handleLength,
+                },
+            };
+
+            endPoint.handles = {
+                left: {
+                    x: endPoint.x - tangentOut.x * handleLength,
+                    y: endPoint.y - tangentOut.y * handleLength,
+                },
+            };
+        }
+
+        rounded.push(startPoint, endPoint);
+    }
+
+    return rounded;
+};
+
 export const addHandle = (point, side, coords) => {
     const next = clonePathPoint(point);
     next.handles = next.handles || {};

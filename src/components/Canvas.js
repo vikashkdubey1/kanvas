@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer, Path, RegularPolygon, Arc } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Ellipse, Group, Line, Text, Transformer, Path, RegularPolygon, Arc, Shape } from 'react-konva';
 import PagesPanel from './PagesPanel';
 import LayersPanel from './LayersPanel';
 import PropertiesPanel from './PropertiesPanel';
@@ -24,6 +24,7 @@ import PATH_NODE_TYPES, {
     distanceBetween,
     distanceToSegment,
     ensureHandlesForType,
+    roundPathCorners,
     shapeToPath,
     translatePathPoints,
     updateHandleSymmetry,
@@ -43,6 +44,10 @@ const normalizeColor = (value, fallback) => (typeof value === 'string' ? value :
 const toRadians = (value) => (value * Math.PI) / 180;
 
 const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const FULL_ARC_SWEEP = 360;
+const ARC_RATIO_MAX = 0.99;
+const ARC_EPSILON = 0.0001;
 
 const LAYER_PANEL_MIN_WIDTH = 240;
 const LAYER_PANEL_MAX_WIDTH = 500;
@@ -1333,6 +1338,16 @@ export default function Canvas({
                     // 👉 mark that this path has actually been edited via path ops
                     if (!shape._pathWasEdited) {
                         nextShape = { ...nextShape, _pathWasEdited: true };
+                    }
+
+                    if (nextShape.__pathCornerBase || Number(nextShape.cornerRadius) > 0) {
+                        nextShape = { ...nextShape };
+                        if (nextShape.__pathCornerBase) {
+                            delete nextShape.__pathCornerBase;
+                        }
+                        if (Number.isFinite(nextShape.cornerRadius)) {
+                            nextShape.cornerRadius = 0;
+                        }
                     }
 
                     return nextShape;
@@ -2877,6 +2892,27 @@ export default function Canvas({
                     }
                     return shape;
                 }
+                case 'arc': {
+                    if (shape.type !== 'circle' && shape.type !== 'ellipse') {
+                        return shape;
+                    }
+                    const startRaw = Number(value?.start);
+                    const sweepRaw = Number(value?.sweep);
+                    const ratioRaw = Number(value?.ratio);
+                    const start = Number.isFinite(startRaw)
+                        ? ((startRaw % FULL_ARC_SWEEP) + FULL_ARC_SWEEP) % FULL_ARC_SWEEP
+                        : 0;
+                    const sweep = Number.isFinite(sweepRaw) ? clampValue(sweepRaw, 0, FULL_ARC_SWEEP) : FULL_ARC_SWEEP;
+                    const ratio = Number.isFinite(ratioRaw) ? clampValue(ratioRaw, 0, ARC_RATIO_MAX) : 0;
+                    if (
+                        shape.arcStart === start &&
+                        shape.arcSweep === sweep &&
+                        shape.arcRatio === ratio
+                    ) {
+                        return shape;
+                    }
+                    return { ...shape, arcStart: start, arcSweep: sweep, arcRatio: ratio };
+                }
                 case 'rotation': {
                     if (!Number.isFinite(value)) return shape;
                     const nextRotation = value % 360;
@@ -2920,10 +2956,103 @@ export default function Canvas({
                         if (shape.cornerRadius === nextRadius) return shape;
                         return { ...shape, cornerRadius: nextRadius };
                     }
-                    if (shape.type === 'polygon' || shape.type === 'path') {
+                    if (shape.type === 'polygon') {
                         const nextRadius = Math.max(0, Number(value) || 0);
                         if (shape.cornerRadius === nextRadius) return shape;
                         return { ...shape, cornerRadius: nextRadius };
+                    }
+                    if (shape.type === 'path') {
+                        const extractRadius = (input) => {
+                            if (input && typeof input === 'object') {
+                                const candidates = [
+                                    input.topLeft,
+                                    input.topRight,
+                                    input.bottomRight,
+                                    input.bottomLeft,
+                                ];
+                                for (let i = 0; i < candidates.length; i += 1) {
+                                    const candidate = Number(candidates[i]);
+                                    if (Number.isFinite(candidate)) {
+                                        return candidate;
+                                    }
+                                }
+                                return 0;
+                            }
+                            const numeric = Number(input);
+                            return Number.isFinite(numeric) ? numeric : 0;
+                        };
+
+                        const requestedRadius = Math.max(0, extractRadius(value));
+                        const basePoints = shape.__pathCornerBase
+                            ? clonePathPoints(shape.__pathCornerBase)
+                            : getPathPoints(shape);
+
+                        if (!shape.closed || basePoints.length < 3) {
+                            if (shape.cornerRadius === requestedRadius) return shape;
+                            return { ...shape, cornerRadius: requestedRadius };
+                        }
+
+                        if (requestedRadius <= 0.0001) {
+                            const restoreSource = shape.__pathCornerBase || basePoints;
+                            const restored = clonePathPoints(restoreSource);
+                            if (
+                                shape.cornerRadius <= 0.0001 &&
+                                !shape.__pathCornerBase
+                            ) {
+                                return shape;
+                            }
+                            const nextShape = {
+                                ...shape,
+                                cornerRadius: 0,
+                                points: restored,
+                            };
+                            if (shape.__pathCornerBase) {
+                                delete nextShape.__pathCornerBase;
+                            }
+                            return nextShape;
+                        }
+
+                        const baseForStore = shape.__pathCornerBase
+                            ? clonePathPoints(shape.__pathCornerBase)
+                            : clonePathPoints(basePoints);
+                        const roundedPoints = roundPathCorners(baseForStore, requestedRadius);
+
+                        if (
+                            shape.cornerRadius === requestedRadius &&
+                            Array.isArray(shape.points) &&
+                            shape.points.length === roundedPoints.length
+                        ) {
+                            let unchanged = true;
+                            for (let i = 0; i < roundedPoints.length; i += 1) {
+                                const a = shape.points[i];
+                                const b = roundedPoints[i];
+                                if (!a || !b) {
+                                    unchanged = false;
+                                    break;
+                                }
+                                if (
+                                    Math.abs((a.x || 0) - (b.x || 0)) > 0.0001 ||
+                                    Math.abs((a.y || 0) - (b.y || 0)) > 0.0001
+                                ) {
+                                    unchanged = false;
+                                    break;
+                                }
+                            }
+                            if (unchanged && shape.__pathCornerBase) {
+                                return shape;
+                            }
+                        }
+
+                        const nextShape = {
+                            ...shape,
+                            cornerRadius: requestedRadius,
+                            points: roundedPoints,
+                            __pathCornerBase: baseForStore,
+                        };
+                        if (!shape._pathWasEdited) {
+                            nextShape._pathWasEdited = true;
+                        }
+                        return nextShape;
                     }
                     return shape;
                 }
@@ -3307,6 +3436,9 @@ export default function Canvas({
                 newShape = createShape('circle', {
                     ...baseProps,
                     radius: 1,
+                    arcStart: 0,
+                    arcSweep: FULL_ARC_SWEEP,
+                    arcRatio: 0,
                     fill: '#d9d9d9',
                     fillType: resolvedFillType,
                     fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
@@ -3319,6 +3451,9 @@ export default function Canvas({
                     ...baseProps,
                     radiusX: 1,
                     radiusY: 1,
+                    arcStart: 0,
+                    arcSweep: FULL_ARC_SWEEP,
+                    arcRatio: 0,
                     fill: '#d9d9d9',
                     fillType: resolvedFillType,
                     fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
@@ -4128,6 +4263,7 @@ export default function Canvas({
                 // clean up metadata
                 delete reverted.__pathOriginal;
                 delete reverted._pathWasEdited;
+                delete reverted.__pathCornerBase;
 
                 changed = true;
                 return reverted;
@@ -4411,22 +4547,68 @@ export default function Canvas({
             node.scaleY(1);
             applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, width: newWidth, height: newHeight, x: node.x(), y: node.y(), rotation: snapAngle(rotation) } : s)));
         } else if (shape.type === 'circle') {
-            // use scaleX to keep circle uniform
-            const scaleVal = node.scaleX();
-            const newRadius = Math.max(1, node.radius() * scaleVal);
+            const scaleX = node.scaleX();
+            const scaleY = node.scaleY();
+            const uniformScale = Math.max(scaleX, scaleY);
+            let baseRadius;
+            if (typeof node.radius === 'function') {
+                baseRadius = node.radius();
+            } else if (typeof node.outerRadius === 'function') {
+                baseRadius = node.outerRadius();
+            } else {
+                baseRadius = Number(node.getAttr('radius'));
+            }
+            if (!Number.isFinite(baseRadius) || baseRadius <= 0) {
+                baseRadius = shape.radius || 0;
+            }
+            const newRadius = Math.max(1, baseRadius * uniformScale);
             const rotation = node.rotation() || 0;
             node.scaleX(1);
             node.scaleY(1);
-            applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, radius: newRadius, x: node.x(), y: node.y(), rotation: snapAngle(rotation) } : s)));
+            applyChange((prev) =>
+                prev.map((s) =>
+                    s.id === id
+                        ? { ...s, radius: newRadius, x: node.x(), y: node.y(), rotation: snapAngle(rotation) }
+                        : s
+                )
+            );
         } else if (shape.type === 'ellipse') {
             const scaleX = node.scaleX();
             const scaleY = node.scaleY();
-            const newRadiusX = Math.max(1, node.radiusX() * scaleX);
-            const newRadiusY = Math.max(1, node.radiusY() * scaleY);
+            let baseRadiusX;
+            let baseRadiusY;
+            if (typeof node.radiusX === 'function' && typeof node.radiusY === 'function') {
+                baseRadiusX = node.radiusX();
+                baseRadiusY = node.radiusY();
+            } else {
+                baseRadiusX = Number(node.getAttr('radiusX'));
+                baseRadiusY = Number(node.getAttr('radiusY'));
+            }
+            if (!Number.isFinite(baseRadiusX) || baseRadiusX <= 0) {
+                baseRadiusX = shape.radiusX || 0;
+            }
+            if (!Number.isFinite(baseRadiusY) || baseRadiusY <= 0) {
+                baseRadiusY = shape.radiusY || 0;
+            }
+            const newRadiusX = Math.max(1, baseRadiusX * scaleX);
+            const newRadiusY = Math.max(1, baseRadiusY * scaleY);
             const rotation = node.rotation() || 0;
             node.scaleX(1);
             node.scaleY(1);
-            applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, radiusX: newRadiusX, radiusY: newRadiusY, x: node.x(), y: node.y(), rotation: snapAngle(rotation) } : s)));
+            applyChange((prev) =>
+                prev.map((s) =>
+                    s.id === id
+                        ? {
+                              ...s,
+                              radiusX: newRadiusX,
+                              radiusY: newRadiusY,
+                              x: node.x(),
+                              y: node.y(),
+                              rotation: snapAngle(rotation),
+                          }
+                        : s
+                )
+            );
         } else if (shape.type === 'polygon') {
             const scaleVal = node.scaleX();
             const newRadius = Math.max(1, node.radius() * scaleVal);
@@ -5449,6 +5631,99 @@ export default function Canvas({
         };
     };
 
+    const normalizeArcAttributes = (shape) => {
+        const rawStart = Number(shape?.arcStart);
+        const rawSweep = Number(shape?.arcSweep);
+        const rawRatio = Number(shape?.arcRatio);
+        const start = Number.isFinite(rawStart)
+            ? ((rawStart % FULL_ARC_SWEEP) + FULL_ARC_SWEEP) % FULL_ARC_SWEEP
+            : 0;
+        const sweep = Number.isFinite(rawSweep) ? clampValue(rawSweep, 0, FULL_ARC_SWEEP) : FULL_ARC_SWEEP;
+        const ratio = Number.isFinite(rawRatio) ? clampValue(rawRatio, 0, ARC_RATIO_MAX) : 0;
+        return { start, sweep, ratio };
+    };
+
+    const shouldRenderArcForShape = (shape, radiusX, radiusY) => {
+        if (!shape || radiusX <= 0 || radiusY <= 0) {
+            return false;
+        }
+        const { sweep, ratio } = normalizeArcAttributes(shape);
+        return sweep < FULL_ARC_SWEEP - 0.001 || ratio > ARC_EPSILON;
+    };
+
+    const drawArcPath = (ctx, radiusX, radiusY, start, sweep, ratio) => {
+        const startRad = toRadians(start);
+        const sweepRad = toRadians(sweep);
+        if (sweepRad <= ARC_EPSILON) {
+            const startX = radiusX * Math.cos(startRad);
+            const startY = radiusY * Math.sin(startRad);
+            ctx.moveTo(startX, startY);
+            return;
+        }
+
+        const fullSweep = sweepRad >= Math.PI * 2 - ARC_EPSILON;
+        const hasHole = ratio > ARC_EPSILON;
+        const innerRadiusX = radiusX * ratio;
+        const innerRadiusY = radiusY * ratio;
+
+        if (fullSweep) {
+            ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2, false);
+            if (hasHole) {
+                ctx.moveTo(innerRadiusX, 0);
+                ctx.ellipse(0, 0, innerRadiusX, innerRadiusY, 0, 0, Math.PI * 2, true);
+            }
+            return;
+        }
+
+        const endRad = startRad + sweepRad;
+        const startX = radiusX * Math.cos(startRad);
+        const startY = radiusY * Math.sin(startRad);
+        ctx.moveTo(startX, startY);
+        ctx.ellipse(0, 0, radiusX, radiusY, 0, startRad, endRad, false);
+
+        if (hasHole) {
+            const innerEndX = innerRadiusX * Math.cos(endRad);
+            const innerEndY = innerRadiusY * Math.sin(endRad);
+            ctx.lineTo(innerEndX, innerEndY);
+            ctx.ellipse(0, 0, innerRadiusX, innerRadiusY, 0, endRad, startRad, true);
+        } else {
+            ctx.lineTo(0, 0);
+        }
+    };
+
+    const renderArcShape = (shape, radiusX, radiusY, commonProps, fillProps) => {
+        const { start, sweep, ratio } = normalizeArcAttributes(shape);
+        if (sweep <= ARC_EPSILON) {
+            return null;
+        }
+
+        return (
+            <Shape
+                {...commonProps}
+                x={shape.x}
+                y={shape.y}
+                rotation={shape.rotation || 0}
+                {...fillProps}
+                stroke={shape.stroke}
+                strokeWidth={shape.strokeWidth}
+                radiusX={radiusX}
+                radiusY={radiusY}
+                arcStart={start}
+                arcSweep={sweep}
+                arcRatio={ratio}
+                perfectDrawEnabled={false}
+                sceneFunc={(ctx, node) => {
+                    ctx.save();
+                    ctx.beginPath();
+                    drawArcPath(ctx, radiusX, radiusY, start, sweep, ratio);
+                    ctx.closePath();
+                    ctx.fillStrokeShape(node);
+                    ctx.restore();
+                }}
+            />
+        );
+    };
+
     const renderShapeNode = (shape) => {
         if (shape.visible === false) {
             return null;
@@ -5542,33 +5817,44 @@ export default function Canvas({
                         rotation={shape.rotation || 0}
                     />
                 );
-            case 'circle':
+            case 'circle': {
+                const radius = Math.max(0, shape.radius || 0);
+                if (shouldRenderArcForShape(shape, radius, radius)) {
+                    return renderArcShape(shape, radius, radius, commonProps, fillProps);
+                }
                 return (
                     <Circle
                         {...commonProps}
                         x={shape.x}
                         y={shape.y}
-                        radius={shape.radius}
+                        radius={radius}
                         {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
                         rotation={shape.rotation || 0}
                     />
                 );
-            case 'ellipse':
+            }
+            case 'ellipse': {
+                const radiusX = Math.max(0, shape.radiusX || 0);
+                const radiusY = Math.max(0, shape.radiusY || 0);
+                if (shouldRenderArcForShape(shape, radiusX, radiusY)) {
+                    return renderArcShape(shape, radiusX, radiusY, commonProps, fillProps);
+                }
                 return (
                     <Ellipse
                         {...commonProps}
                         x={shape.x}
                         y={shape.y}
-                        radiusX={shape.radiusX}
-                        radiusY={shape.radiusY}
+                        radiusX={radiusX}
+                        radiusY={radiusY}
                         {...fillProps}
                         stroke={shape.stroke}
                         strokeWidth={shape.strokeWidth}
                         rotation={shape.rotation || 0}
                     />
                 );
+            }
             case 'polygon': {
                 const radius = Math.max(1, shape.radius || 0);
                 const sides = Math.max(3, Math.floor(shape.sides || 5));
