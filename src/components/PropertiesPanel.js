@@ -3960,7 +3960,7 @@ export default function PropertiesPanel({
         const raw = typeof nextValue === 'string' ? nextValue : polygonSidesDraft;
         const numeric = Number(raw);
         if (!Number.isFinite(numeric)) return;
-        const clamped = Math.max(3, Math.floor(numeric));
+        const clamped = clamp(Math.floor(numeric), 3, 60);
         onPolygonSidesChange(clamped);
         setPolygonSidesDraft(String(clamped));
     };
