@@ -3013,10 +3013,15 @@ export default function Canvas({
 
         const computeTargetStrokeWidth = (shape) => {
             if (!shape) return desiredWidth;
-            if (desiredWidth <= 0 && (shape.type === 'line' || shape.type === 'path')) {
-                const currentWidth = typeof shape.strokeWidth === 'number' ? shape.strokeWidth : 0;
+
+            // Lines must stay visible → keep minimum width 1
+            if (shape.type === 'line' && desiredWidth <= 0) {
+                const currentWidth =
+                    typeof shape.strokeWidth === 'number' ? shape.strokeWidth : 0;
                 return currentWidth > 0 ? currentWidth : 1;
             }
+
+            // Paths (and others) can go down to 0
             return desiredWidth;
         };
 
@@ -6277,10 +6282,9 @@ export default function Canvas({
                     typeof shape.stroke === 'string' && shape.stroke.trim().length
                         ? shape.stroke
                         : '#000000';
-                const strokeWidth =
-                    typeof shape.strokeWidth === 'number' && shape.strokeWidth > 0
-                        ? shape.strokeWidth
-                        : 1;
+                const rawstrokeWidth =
+                    typeof shape.strokeWidth === 'number' ? shape.strokeWidth : 0;
+                const strokeWidth = rawstrokeWidth < 0 ? 0 : rawstrokeWidth;
                 const pathFillProps = shape.closed ? fillProps : { fillEnabled: false };
                 return (
                     <Path
