@@ -4236,25 +4236,34 @@ export default function PropertiesPanel({
         }
     };
 
-    const handleNumericInputKeyDown = (event, { step = 1, min, max, onChange, onCommit, onKeyDown }) => {
+    const handleNumericInputKeyDown = (
+        event,
+        { step = 1, min, max, onChange, onCommit, onKeyDown }
+    ) => {
+        const target = event.currentTarget; // capture BEFORE any async work
+
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             event.preventDefault();
             const direction = event.key === 'ArrowUp' ? 1 : -1;
             const multiplier = event.shiftKey ? 10 : 1;
-            const nextValue = adjustNumericDraftValue(event.currentTarget.value, {
+
+            const nextValue = adjustNumericDraftValue(target.value, {
                 step,
                 direction,
                 multiplier,
                 min,
                 max,
-                fallbackValue: event.currentTarget.dataset.lastValid ?? event.currentTarget.dataset.focusValue,
+                fallbackValue: target.dataset.lastValid ?? target.dataset.focusValue,
             });
-            event.currentTarget.dataset.lastValid = nextValue;
+
+            target.dataset.lastValid = nextValue;
+
             if (typeof onChange === 'function') {
                 onChange(nextValue);
             } else {
-                event.currentTarget.value = nextValue;
+                target.value = nextValue;
             }
+
             scheduleFrame(() => {
                 if (typeof onCommit === 'function') {
                     onCommit();
@@ -4269,24 +4278,28 @@ export default function PropertiesPanel({
                 onCommit();
             }
             scheduleFrame(() => {
-                event.currentTarget.blur();
+                if (target && typeof target.blur === 'function') {
+                    target.blur();
+                }
             });
             return;
         }
 
         if (event.key === 'Escape') {
             event.preventDefault();
-            const focusValue = event.currentTarget.dataset.focusValue ?? '';
+            const focusValue = target.dataset.focusValue ?? '';
             if (typeof onChange === 'function') {
                 onChange(focusValue);
             } else {
-                event.currentTarget.value = focusValue;
+                target.value = focusValue;
             }
             scheduleFrame(() => {
                 if (typeof onCommit === 'function') {
                     onCommit();
                 }
-                event.currentTarget.blur();
+                if (target && typeof target.blur === 'function') {
+                    target.blur();
+                }
             });
             return;
         }
