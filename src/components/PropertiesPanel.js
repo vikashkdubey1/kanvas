@@ -1586,7 +1586,7 @@ const ColorControl = ({
             String(
                 Math.round(
                     Math.min(Math.max(Number.isFinite(stop.position) ? stop.position : 0, 0), 1) *
-                        100
+                    100
                 )
             )
         )
@@ -3207,8 +3207,8 @@ const NumberControl = ({
                 typeof latestValueRef.current === 'number' && !Number.isNaN(latestValueRef.current)
                     ? latestValueRef.current
                     : typeof value === 'number' && !Number.isNaN(value)
-                    ? clampValue(value)
-                    : clampValue(min ?? 0);
+                        ? clampValue(value)
+                        : clampValue(min ?? 0);
             const formatted = String(fallback);
             setDraftValue(formatted);
             focusValueRef.current = fallback;
@@ -3351,7 +3351,7 @@ export default function PropertiesPanel({
     onCornerSmoothingChange,
     onArcChange,
     onPolygonSidesChange = () => { },
-    onRadiusChange = () => {},
+    onRadiusChange = () => { },
 }) {
     const isTextShape = shape?.type === 'text';
     const supportsFill =
@@ -3616,7 +3616,8 @@ export default function PropertiesPanel({
 
     useEffect(() => {
         if (isPolygonLikeShape) {
-            const sides = Math.max(3, Math.floor(primaryShape?.sides || 5));
+            const raw = Math.floor(primaryShape?.sides || 5);
+            const sides = clamp(raw, 3, 60);
             setPolygonSidesDraft(String(sides));
         } else {
             setPolygonSidesDraft('5');
@@ -3633,43 +3634,6 @@ export default function PropertiesPanel({
             setPolygonRadiusDraft('0');
         }
     }, [isPolygonLikeShape, primaryShape?.radius, primaryShape?.id]);
-
-    const [arcDraft, setArcDraft] = useState({ start: '0', sweep: '100', ratio: '0' });
-    const arcDraftRef = useRef({ start: '0', sweep: '100', ratio: '0' });
-
-    useEffect(() => {
-        if (supportsArc && primaryShape) {
-            const rawStart = Number(primaryShape.arcStart);
-            const rawSweep = Number(primaryShape.arcSweep);
-            const rawRatio = Number(primaryShape.arcRatio);
-            const start = Number.isFinite(rawStart)
-                ? ((rawStart % FULL_CIRCLE_DEGREES) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES
-                : 0;
-            const sweepDegrees = Number.isFinite(rawSweep)
-                ? clamp(rawSweep, 0, FULL_CIRCLE_DEGREES)
-                : FULL_CIRCLE_DEGREES;
-            const ratio = Number.isFinite(rawRatio)
-                ? clamp(rawRatio, 0, ARC_RATIO_PERCENT_MAX / 100)
-                : 0;
-            const next = {
-                start: formatNumeric(start, 1),
-                sweep: formatNumeric((sweepDegrees / FULL_CIRCLE_DEGREES) * 100, 1),
-                ratio: formatNumeric(ratio * 100, 1),
-            };
-            arcDraftRef.current = next;
-            setArcDraft(next);
-        } else {
-            const reset = { start: '0', sweep: '100', ratio: '0' };
-            arcDraftRef.current = reset;
-            setArcDraft(reset);
-        }
-    }, [
-        primaryShape?.arcStart,
-        primaryShape?.arcSweep,
-        primaryShape?.arcRatio,
-        primaryShape?.id,
-        supportsArc,
-    ]);
 
     const [arcDraft, setArcDraft] = useState({ start: '0', sweep: '100', ratio: '0' });
     const arcDraftRef = useRef({ start: '0', sweep: '100', ratio: '0' });
@@ -3997,7 +3961,7 @@ export default function PropertiesPanel({
         const raw = typeof nextValue === 'string' ? nextValue : polygonSidesDraft;
         const numeric = Number(raw);
         if (!Number.isFinite(numeric)) return;
-        const clamped = Math.max(3, Math.floor(numeric));
+        const clamped = clamp(Math.floor(numeric), 3, 60);
         onPolygonSidesChange(clamped);
         setPolygonSidesDraft(String(clamped));
     };
@@ -4780,10 +4744,12 @@ export default function PropertiesPanel({
                                     onChange: handlePolygonSidesInputChange,
                                     onCommit: commitPolygonSides,
                                     step: 1,
+                                    min: 3,
+                                    max: 60,
                                     suffix: '',
                                     prefix: '',
                                     disabled: !hasSelection,
-                                })}
+                                })} 
                                 {renderNumericInput({
                                     label: 'Radius',
                                     value: polygonRadiusDraft,
