@@ -110,8 +110,8 @@ export default function App() {
                 typeof shape.fill === 'string'
                     ? shape.fill
                     : ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame'].includes(
-                          shape.type
-                      )
+                        shape.type
+                    )
                         ? DEFAULT_FILL_STYLE.value
                         : prev.value;
             return { type: nextType, value: nextValue };
@@ -186,7 +186,7 @@ export default function App() {
 
     const handlePropertiesResizeStart = useCallback(
         (event) => {
-if (event.pointerType === 'mouse' && event.button !== 0) {
+            if (event.pointerType === 'mouse' && event.button !== 0) {
                 return;
             }
             if (typeof event.clientX !== 'number') return;
@@ -322,7 +322,8 @@ if (event.pointerType === 'mouse' && event.button !== 0) {
 
     const handlePolygonSidesChange = useCallback(
         (value) => {
-            const next = Math.max(3, Math.floor(Number(value)) || 0);
+            const raw = Math.floor(Number(value) || 0);
+            const next = Math.min(60, Math.max(3, raw));
             emitShapePropertyChange('polygonSides', next);
         },
         [emitShapePropertyChange]
@@ -342,9 +343,9 @@ if (event.pointerType === 'mouse' && event.button !== 0) {
     }, []);
 
     return (
-    <>
-        <style>
-            {`
+        <>
+            <style>
+                {`
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
           html, body, * {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -354,93 +355,93 @@ if (event.pointerType === 'mouse' && event.button !== 0) {
             -moz-osx-font-smoothing: grayscale;
           }
         `}
-      </style>
+            </style>
 
-        <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
-            <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
+            <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f4f6f8' }}>
+                <Toolbar selectedTool={selectedTool} onSelect={setSelectedTool} />
 
-            <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <Canvas
-                        selectedTool={selectedTool}
-                        onToolChange={setSelectedTool}
-                        fillStyle={fillStyle}
-                        strokeStyle={strokeStyle}
-                        strokeWidth={strokeWidth}
-                        strokeWidthVersion={strokeWidthVersion}
-                        textOptions={textOptions}
-                        onSelectionChange={handleSelectionChange}
-                        showGradientHandles={isGradientPickerOpen}
-                        gradientInteractionRef={gradientInteractionRef}
-                        shapePropertyRequest={shapePropertyRequest}
-                        onShapePropertyRequestHandled={handleShapePropertyRequestHandled}
-                    />
-                </div>
+                <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <Canvas
+                            selectedTool={selectedTool}
+                            onToolChange={setSelectedTool}
+                            fillStyle={fillStyle}
+                            strokeStyle={strokeStyle}
+                            strokeWidth={strokeWidth}
+                            strokeWidthVersion={strokeWidthVersion}
+                            textOptions={textOptions}
+                            onSelectionChange={handleSelectionChange}
+                            showGradientHandles={isGradientPickerOpen}
+                            gradientInteractionRef={gradientInteractionRef}
+                            shapePropertyRequest={shapePropertyRequest}
+                            onShapePropertyRequestHandled={handleShapePropertyRequestHandled}
+                        />
+                    </div>
 
-                <div
-                    role="separator"
-                    aria-orientation="vertical"
-                    onPointerDown={handlePropertiesResizeStart}
-                    style={{
-                        flex: '0 0 auto',
-                        width: 1,
-                        padding: '0',
-                        cursor: 'col-resize',
-                        display: 'flex',
-                        alignItems: 'stretch',
-                        touchAction: 'none',
-                        background: 'transparent',
-                    }}
-                >
                     <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        onPointerDown={handlePropertiesResizeStart}
                         style={{
-                            flex: 1,
-                            borderLeft: '1px solid #dfe3eb',
-                            borderRight: '1px solid #dfe3eb',
-                            background: '#f3f5f9',
+                            flex: '0 0 auto',
+                            width: 1,
+                            padding: '0',
+                            cursor: 'col-resize',
+                            display: 'flex',
+                            alignItems: 'stretch',
+                            touchAction: 'none',
+                            background: 'transparent',
                         }}
+                    >
+                        <div
+                            style={{
+                                flex: 1,
+                                borderLeft: '1px solid #dfe3eb',
+                                borderRight: '1px solid #dfe3eb',
+                                background: '#f3f5f9',
+                            }}
+                        />
+                    </div>
+
+                    <PropertiesPanel
+                        panelWidth={propertiesPanelWidth}
+                        shape={activeShape}
+                        fillStyle={fillStyle}
+                        onFillStyleChange={setFillStyle}
+                        onGradientPickerToggle={setGradientPickerOpen}
+                        gradientInteractionRef={gradientInteractionRef}
+                        strokeStyle={strokeStyle}
+                        onStrokeStyleChange={setStrokeStyle}
+                        strokeWidth={strokeWidth}
+                        onStrokeWidthChange={handleStrokeWidthChange}
+                        textFontFamily={textFontFamily}
+                        onTextFontFamilyChange={setTextFontFamily}
+                        textFontStyle={textFontStyle}
+                        onTextFontStyleChange={setTextFontStyle}
+                        textFontSize={textFontSize}
+                        onTextFontSizeChange={setTextFontSize}
+                        textLineHeight={textLineHeight}
+                        onTextLineHeightChange={setTextLineHeight}
+                        textLetterSpacing={textLetterSpacing}
+                        onTextLetterSpacingChange={setTextLetterSpacing}
+                        textAlign={textAlign}
+                        onTextAlignChange={setTextAlign}
+                        textVerticalAlign={textVerticalAlign}
+                        onTextVerticalAlignChange={setTextVerticalAlign}
+                        textDecoration={textDecoration}
+                        onTextDecorationChange={setTextDecoration}
+                        onPositionChange={handlePositionChange}
+                        onDimensionChange={handleDimensionChange}
+                        onRotationChange={handleRotationChange}
+                        onOpacityChange={handleOpacityChange}
+                        onCornerRadiusChange={handleCornerRadiusChange}
+                        onCornerSmoothingChange={handleCornerSmoothingChange}
+                        onArcChange={handleArcChange}
+                        onPolygonSidesChange={handlePolygonSidesChange}
+                        onRadiusChange={handleRadiusChange}
                     />
                 </div>
-
-                <PropertiesPanel
-                    panelWidth={propertiesPanelWidth}
-                    shape={activeShape}
-                    fillStyle={fillStyle}
-                    onFillStyleChange={setFillStyle}
-                    onGradientPickerToggle={setGradientPickerOpen}
-                    gradientInteractionRef={gradientInteractionRef}
-                    strokeStyle={strokeStyle}
-                    onStrokeStyleChange={setStrokeStyle}
-                    strokeWidth={strokeWidth}
-                    onStrokeWidthChange={handleStrokeWidthChange}
-                    textFontFamily={textFontFamily}
-                    onTextFontFamilyChange={setTextFontFamily}
-                    textFontStyle={textFontStyle}
-                    onTextFontStyleChange={setTextFontStyle}
-                    textFontSize={textFontSize}
-                    onTextFontSizeChange={setTextFontSize}
-                    textLineHeight={textLineHeight}
-                    onTextLineHeightChange={setTextLineHeight}
-                    textLetterSpacing={textLetterSpacing}
-                    onTextLetterSpacingChange={setTextLetterSpacing}
-                    textAlign={textAlign}
-                    onTextAlignChange={setTextAlign}
-                    textVerticalAlign={textVerticalAlign}
-                    onTextVerticalAlignChange={setTextVerticalAlign}
-                    textDecoration={textDecoration}
-                    onTextDecorationChange={setTextDecoration}
-                    onPositionChange={handlePositionChange}
-                    onDimensionChange={handleDimensionChange}
-                    onRotationChange={handleRotationChange}
-                    onOpacityChange={handleOpacityChange}
-                    onCornerRadiusChange={handleCornerRadiusChange}
-                    onCornerSmoothingChange={handleCornerSmoothingChange}
-                    onArcChange={handleArcChange}
-                    onPolygonSidesChange={handlePolygonSidesChange}
-                    onRadiusChange={handleRadiusChange}
-                />
             </div>
-        </div>
         </>
     );
 }
