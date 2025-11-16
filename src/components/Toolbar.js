@@ -53,6 +53,18 @@ const Icon = {
             />
         </svg>
     ),
+    roundedPolygon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+                d="M12 3.5c-.56 0-1.08.29-1.38.77L5.3 11.9c-.25.4-.29.9-.1 1.34l2.13 5.1c.2.49.67.82 1.2.82h6.98c.53 0 1-.33 1.2-.82l2.13-5.1c.18-.44.14-.94-.11-1.34l-5.3-7.63A1.6 1.6 0 0 0 12 3.5z"
+                stroke="currentColor"
+                strokeWidth="2"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    ),
     circle: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
@@ -90,6 +102,7 @@ export default function Toolbar({ selectedTool, onSelect }) {
         { id: 'anchor', icon: Icon.anchor, label: 'Anchor' },
         { id: 'rectangle', icon: Icon.rectangle, label: 'Rectangle' },
         { id: 'polygon', icon: Icon.polygon, label: 'Polygon' },
+        { id: 'roundedPolygon', icon: Icon.roundedPolygon, label: 'Rounded Polygon' },
         { id: 'circle', icon: Icon.circle, label: 'Circle' },
         { id: 'ellipse', icon: Icon.ellipse, label: 'Ellipse' },
         { id: 'line', icon: Icon.line, label: 'Line' },

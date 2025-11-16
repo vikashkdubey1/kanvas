@@ -460,8 +460,10 @@ const buildPolygonPath = (shape) => {
     const rotation = Number.isFinite(shape.rotation) ? (shape.rotation * Math.PI) / 180 : 0;
     const center = { x: shape.x || 0, y: shape.y || 0 };
     const rotated = rotation ? nodes.map((pt) => rotatePathPoint(pt, center, rotation)) : nodes;
+    const cornerRadius = Math.max(0, shape.cornerRadius || 0);
+    const rounded = cornerRadius > 0 ? roundPathCorners(rotated, cornerRadius) : rotated;
     return {
-        points: rotated,
+        points: rounded,
         closed: true,
         lineJoin: shape.lineJoin || 'miter',
     };
@@ -506,6 +508,7 @@ export const canConvertShapeToPath = (shape) => {
         case 'line':
             return Array.isArray(shape.points) && shape.points.length >= 4;
         case 'polygon':
+        case 'roundedPolygon':
             return Array.isArray(shape.points) && shape.points.length >= 6;
         case 'star':
             return (
@@ -534,6 +537,7 @@ export const shapeToPath = (shape) => {
         case 'line':
             return buildLinePath(shape);
         case 'polygon':
+        case 'roundedPolygon':
             return buildPolygonPath(shape);
         case 'star':
             if (Array.isArray(shape.points) && shape.points.length >= 6) {

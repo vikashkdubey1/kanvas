@@ -109,7 +109,9 @@ export default function App() {
             const nextValue =
                 typeof shape.fill === 'string'
                     ? shape.fill
-                    : ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type)
+                    : ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame'].includes(
+                          shape.type
+                      )
                         ? DEFAULT_FILL_STYLE.value
                         : prev.value;
             return { type: nextType, value: nextValue };
@@ -326,6 +328,14 @@ if (event.pointerType === 'mouse' && event.button !== 0) {
         [emitShapePropertyChange]
     );
 
+    const handleRadiusChange = useCallback(
+        (value) => {
+            const next = Math.max(0, Number(value) || 0);
+            emitShapePropertyChange('radius', next);
+        },
+        [emitShapePropertyChange]
+    );
+
     const handleStrokeWidthChange = useCallback((value) => {
         setStrokeWidth(value);
         setStrokeWidthVersion((prev) => prev + 1);
@@ -427,6 +437,7 @@ if (event.pointerType === 'mouse' && event.button !== 0) {
                     onCornerSmoothingChange={handleCornerSmoothingChange}
                     onArcChange={handleArcChange}
                     onPolygonSidesChange={handlePolygonSidesChange}
+                    onRadiusChange={handleRadiusChange}
                 />
             </div>
         </div>

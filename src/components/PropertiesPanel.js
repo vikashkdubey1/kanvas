@@ -3351,9 +3351,14 @@ export default function PropertiesPanel({
     onCornerSmoothingChange,
     onArcChange,
     onPolygonSidesChange = () => { },
+    onRadiusChange = () => {},
 }) {
     const isTextShape = shape?.type === 'text';
-    const supportsFill = !shape || ['rectangle', 'circle', 'ellipse', 'text', 'frame'].includes(shape.type);
+    const supportsFill =
+        !shape ||
+        ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame'].includes(
+            shape.type
+        );
     const disableStrokeControls = shape?.type === 'group';
 
     // ---- current values derived from the active selection ----
@@ -3380,6 +3385,9 @@ export default function PropertiesPanel({
     };
 
     const primaryShape = shape || selectionInfo?.shape || null;
+    const isPolygonLikeShape = Boolean(
+        primaryShape && ['polygon', 'roundedPolygon'].includes(primaryShape.type)
+    );
     const selectedIds = Array.isArray(selectionInfo?.selectedIds)
         ? selectionInfo.selectedIds
         : primaryShape?.id != null
@@ -3390,13 +3398,25 @@ export default function PropertiesPanel({
     const hasSelection = Boolean(primaryShape);
     const supportsCornerRadius = Boolean(
         primaryShape && (
-            ['rectangle', 'frame', 'group', 'polygon'].includes(primaryShape.type) ||
+            ['rectangle', 'frame', 'group'].includes(primaryShape.type) ||
+            isPolygonLikeShape ||
             (primaryShape.type === 'path' && primaryShape.closed)
         )
     );
     const supportsDimensions = Boolean(
         primaryShape &&
-        ['rectangle', 'frame', 'group', 'circle', 'ellipse', 'polygon', 'line', 'path', 'text'].includes(primaryShape.type)
+        [
+            'rectangle',
+            'frame',
+            'group',
+            'circle',
+            'ellipse',
+            'polygon',
+            'roundedPolygon',
+            'line',
+            'path',
+            'text',
+        ].includes(primaryShape.type)
     );
     const supportsArc = Boolean(primaryShape && ['circle', 'ellipse'].includes(primaryShape.type));
 
@@ -3459,7 +3479,8 @@ export default function PropertiesPanel({
                         width: Math.max(0, (target.radiusX || 0) * 2),
                         height: Math.max(0, (target.radiusY || 0) * 2),
                     };
-                case 'polygon': {
+                case 'polygon':
+                case 'roundedPolygon': {
                     const radius = Math.max(0, target.radius || 0);
                     return { width: radius * 2, height: radius * 2 };
                 }
@@ -3594,13 +3615,61 @@ export default function PropertiesPanel({
     const [polygonSidesDraft, setPolygonSidesDraft] = useState('5');
 
     useEffect(() => {
-        if (primaryShape?.type === 'polygon') {
-            const sides = Math.max(3, Math.floor(primaryShape.sides || 5));
+        if (isPolygonLikeShape) {
+            const sides = Math.max(3, Math.floor(primaryShape?.sides || 5));
             setPolygonSidesDraft(String(sides));
         } else {
             setPolygonSidesDraft('5');
         }
-    }, [primaryShape?.type, primaryShape?.sides, primaryShape?.id]);
+    }, [isPolygonLikeShape, primaryShape?.sides, primaryShape?.id]);
+
+    const [polygonRadiusDraft, setPolygonRadiusDraft] = useState('0');
+
+    useEffect(() => {
+        if (isPolygonLikeShape) {
+            const radius = Math.max(0, Number(primaryShape?.radius) || 0);
+            setPolygonRadiusDraft(formatNumeric(radius));
+        } else {
+            setPolygonRadiusDraft('0');
+        }
+    }, [isPolygonLikeShape, primaryShape?.radius, primaryShape?.id]);
+
+    const [arcDraft, setArcDraft] = useState({ start: '0', sweep: '100', ratio: '0' });
+    const arcDraftRef = useRef({ start: '0', sweep: '100', ratio: '0' });
+
+    useEffect(() => {
+        if (supportsArc && primaryShape) {
+            const rawStart = Number(primaryShape.arcStart);
+            const rawSweep = Number(primaryShape.arcSweep);
+            const rawRatio = Number(primaryShape.arcRatio);
+            const start = Number.isFinite(rawStart)
+                ? ((rawStart % FULL_CIRCLE_DEGREES) + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES
+                : 0;
+            const sweepDegrees = Number.isFinite(rawSweep)
+                ? clamp(rawSweep, 0, FULL_CIRCLE_DEGREES)
+                : FULL_CIRCLE_DEGREES;
+            const ratio = Number.isFinite(rawRatio)
+                ? clamp(rawRatio, 0, ARC_RATIO_PERCENT_MAX / 100)
+                : 0;
+            const next = {
+                start: formatNumeric(start, 1),
+                sweep: formatNumeric((sweepDegrees / FULL_CIRCLE_DEGREES) * 100, 1),
+                ratio: formatNumeric(ratio * 100, 1),
+            };
+            arcDraftRef.current = next;
+            setArcDraft(next);
+        } else {
+            const reset = { start: '0', sweep: '100', ratio: '0' };
+            arcDraftRef.current = reset;
+            setArcDraft(reset);
+        }
+    }, [
+        primaryShape?.arcStart,
+        primaryShape?.arcSweep,
+        primaryShape?.arcRatio,
+        primaryShape?.id,
+        supportsArc,
+    ]);
 
     const [arcDraft, setArcDraft] = useState({ start: '0', sweep: '100', ratio: '0' });
     const arcDraftRef = useRef({ start: '0', sweep: '100', ratio: '0' });
@@ -3924,7 +3993,7 @@ export default function PropertiesPanel({
     };
 
     const commitPolygonSides = (nextValue) => {
-        if (primaryShape?.type !== 'polygon' || typeof onPolygonSidesChange !== 'function') return;
+        if (!isPolygonLikeShape || typeof onPolygonSidesChange !== 'function') return;
         const raw = typeof nextValue === 'string' ? nextValue : polygonSidesDraft;
         const numeric = Number(raw);
         if (!Number.isFinite(numeric)) return;
@@ -3935,6 +4004,20 @@ export default function PropertiesPanel({
 
     const handlePolygonSidesInputChange = (value) => {
         setPolygonSidesDraft(value);
+    };
+
+    const commitPolygonRadius = (nextValue) => {
+        if (!isPolygonLikeShape || typeof onRadiusChange !== 'function') return;
+        const raw = typeof nextValue === 'string' ? nextValue : polygonRadiusDraft;
+        const numeric = Number(raw);
+        if (!Number.isFinite(numeric)) return;
+        const clamped = Math.max(0, numeric);
+        onRadiusChange(clamped);
+        setPolygonRadiusDraft(String(clamped));
+    };
+
+    const handlePolygonRadiusInputChange = (value) => {
+        setPolygonRadiusDraft(value);
     };
 
 
@@ -4689,8 +4772,8 @@ export default function PropertiesPanel({
                                 {isAspectLocked ? <LockClosedIcon /> : <LockOpenIcon />}
                             </button>
                         </div>
-                        {primaryShape?.type === 'polygon' ? (
-                            <div style={{ marginTop: 8 }}>
+                        {isPolygonLikeShape ? (
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
                                 {renderNumericInput({
                                     label: 'Sides',
                                     value: polygonSidesDraft,
@@ -4698,6 +4781,16 @@ export default function PropertiesPanel({
                                     onCommit: commitPolygonSides,
                                     step: 1,
                                     suffix: '',
+                                    prefix: '',
+                                    disabled: !hasSelection,
+                                })}
+                                {renderNumericInput({
+                                    label: 'Radius',
+                                    value: polygonRadiusDraft,
+                                    onChange: handlePolygonRadiusInputChange,
+                                    onCommit: commitPolygonRadius,
+                                    step: 1,
+                                    suffix: 'px',
                                     prefix: '',
                                     disabled: !hasSelection,
                                 })}
