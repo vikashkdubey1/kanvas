@@ -1586,7 +1586,7 @@ const ColorControl = ({
             String(
                 Math.round(
                     Math.min(Math.max(Number.isFinite(stop.position) ? stop.position : 0, 0), 1) *
-                        100
+                    100
                 )
             )
         )
@@ -3207,8 +3207,8 @@ const NumberControl = ({
                 typeof latestValueRef.current === 'number' && !Number.isNaN(latestValueRef.current)
                     ? latestValueRef.current
                     : typeof value === 'number' && !Number.isNaN(value)
-                    ? clampValue(value)
-                    : clampValue(min ?? 0);
+                        ? clampValue(value)
+                        : clampValue(min ?? 0);
             const formatted = String(fallback);
             setDraftValue(formatted);
             focusValueRef.current = fallback;
@@ -3351,7 +3351,7 @@ export default function PropertiesPanel({
     onCornerSmoothingChange,
     onArcChange,
     onPolygonSidesChange = () => { },
-    onRadiusChange = () => {},
+    onRadiusChange = () => { },
 }) {
     const isTextShape = shape?.type === 'text';
     const supportsFill =
@@ -3616,7 +3616,8 @@ export default function PropertiesPanel({
 
     useEffect(() => {
         if (isPolygonLikeShape) {
-            const sides = Math.max(3, Math.floor(primaryShape?.sides || 5));
+            const raw = Math.floor(primaryShape?.sides || 5);
+            const sides = clamp(raw, 3, 60);
             setPolygonSidesDraft(String(sides));
         } else {
             setPolygonSidesDraft('5');
@@ -4235,25 +4236,34 @@ export default function PropertiesPanel({
         }
     };
 
-    const handleNumericInputKeyDown = (event, { step = 1, min, max, onChange, onCommit, onKeyDown }) => {
+    const handleNumericInputKeyDown = (
+        event,
+        { step = 1, min, max, onChange, onCommit, onKeyDown }
+    ) => {
+        const target = event.currentTarget; // capture BEFORE any async work
+
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             event.preventDefault();
             const direction = event.key === 'ArrowUp' ? 1 : -1;
             const multiplier = event.shiftKey ? 10 : 1;
-            const nextValue = adjustNumericDraftValue(event.currentTarget.value, {
+
+            const nextValue = adjustNumericDraftValue(target.value, {
                 step,
                 direction,
                 multiplier,
                 min,
                 max,
-                fallbackValue: event.currentTarget.dataset.lastValid ?? event.currentTarget.dataset.focusValue,
+                fallbackValue: target.dataset.lastValid ?? target.dataset.focusValue,
             });
-            event.currentTarget.dataset.lastValid = nextValue;
+
+            target.dataset.lastValid = nextValue;
+
             if (typeof onChange === 'function') {
                 onChange(nextValue);
             } else {
-                event.currentTarget.value = nextValue;
+                target.value = nextValue;
             }
+
             scheduleFrame(() => {
                 if (typeof onCommit === 'function') {
                     onCommit();
@@ -4268,24 +4278,28 @@ export default function PropertiesPanel({
                 onCommit();
             }
             scheduleFrame(() => {
-                event.currentTarget.blur();
+                if (target && typeof target.blur === 'function') {
+                    target.blur();
+                }
             });
             return;
         }
 
         if (event.key === 'Escape') {
             event.preventDefault();
-            const focusValue = event.currentTarget.dataset.focusValue ?? '';
+            const focusValue = target.dataset.focusValue ?? '';
             if (typeof onChange === 'function') {
                 onChange(focusValue);
             } else {
-                event.currentTarget.value = focusValue;
+                target.value = focusValue;
             }
             scheduleFrame(() => {
                 if (typeof onCommit === 'function') {
                     onCommit();
                 }
-                event.currentTarget.blur();
+                if (target && typeof target.blur === 'function') {
+                    target.blur();
+                }
             });
             return;
         }
@@ -4743,10 +4757,12 @@ export default function PropertiesPanel({
                                     onChange: handlePolygonSidesInputChange,
                                     onCommit: commitPolygonSides,
                                     step: 1,
+                                    min: 3,
+                                    max: 60,
                                     suffix: '',
                                     prefix: '',
                                     disabled: !hasSelection,
-                                })}
+                                })} 
                                 {renderNumericInput({
                                     label: 'Radius',
                                     value: polygonRadiusDraft,
