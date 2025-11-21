@@ -193,6 +193,22 @@ const getShapeDimensions = (shape) => {
         }
         case 'polygon':
         case 'roundedPolygon': {
+            // If polygon has actual points (real geometry), use bounding box of those points
+            console.log("Shape bounding box");
+            if (Array.isArray(shape.points) && shape.points.length > 0) {
+                const bounds = getPointsBoundingBox(
+                    shape.points.map(p => ({ x: p.x, y: p.y }))
+                );
+                if (bounds) {
+                    return {
+                        width: Math.max(0, bounds.right - bounds.left),
+                        height: Math.max(0, bounds.bottom - bounds.top),
+                    };
+                    
+                }
+            }
+
+            // Fallback: old behavior (radius based)
             const radius = Math.max(0, shape.radius || 0);
             return { width: radius * 2, height: radius * 2 };
         }
@@ -7837,11 +7853,7 @@ export default function Canvas({
                             //rotationEnabled={false}
                             rotateEnabled={false}
                             //rotationAnchorOffset={-9999}
-                            resizeEnabled={
-                                selectedShape
-                                    ? !isPolygonLikeType(selectedShape.type)
-                                    : true
-                            }
+                            resizeEnabled={true}
                             enabledAnchors={[
                                 'top-left',
                                 'top-center',
