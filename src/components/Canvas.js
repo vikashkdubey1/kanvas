@@ -606,17 +606,22 @@ export default function Canvas({
     shapePropertyRequest = null,
     onShapePropertyRequestHandled = null,
 }) {
-    const resolvedFillType = fillStyle?.type || 'solid';
+    const primaryFillStyle = Array.isArray(fillStyle) ? fillStyle[0] : fillStyle;
+    const primaryStrokeStyle = Array.isArray(strokeStyle) ? strokeStyle[0] : strokeStyle;
+    const resolvedFillType = primaryFillStyle?.type || 'solid';
     const resolvedFillGradient = useMemo(
-        () => (resolvedFillType === 'gradient' ? normalizeGradient(fillStyle?.value) : null),
-        [resolvedFillType, fillStyle?.value]
+        () =>
+            resolvedFillType === 'gradient'
+                ? normalizeGradient(primaryFillStyle?.value)
+                : null,
+        [resolvedFillType, primaryFillStyle?.value]
     );
     const resolvedFillColor =
         resolvedFillType === 'gradient'
             ? getGradientFirstColor(resolvedFillGradient, '#d9d9d9')
-            : normalizeColor(fillStyle?.value, '#d9d9d9');
-    const resolvedStrokeType = strokeStyle?.type || 'solid';
-    const resolvedStrokeColor = normalizeColor(strokeStyle?.value, '#000000');
+            : normalizeColor(primaryFillStyle?.value, '#d9d9d9');
+    const resolvedStrokeType = primaryStrokeStyle?.type || 'solid';
+    const resolvedStrokeColor = normalizeColor(primaryStrokeStyle?.value, '#000000');
     const stageRef = useRef(null);
     const trRef = useRef(null);
     const idCounterRef = useRef(1); // stable id generator
@@ -2898,7 +2903,7 @@ export default function Canvas({
         const idsSet = new Set(ids);
 
         // Respect live-preview metadata (prevents color ping-pong)
-        const meta = fillStyle?.meta || null;
+        const meta = primaryFillStyle?.meta || null;
         const interactionId =
             meta && (typeof meta.interactionId === 'number' || typeof meta.interactionId === 'string')
                 ? meta.interactionId
@@ -2971,7 +2976,7 @@ export default function Canvas({
         applyChange(updater);
     }, [
         applyChange,
-        fillStyle?.meta,
+        primaryFillStyle?.meta,
         resolvedFillColor,
         resolvedFillGradient,
         resolvedFillType,
