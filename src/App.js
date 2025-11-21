@@ -34,8 +34,8 @@ const ARC_RATIO_MAX = 0.99;
 export default function App() {
     // Track which tool is currently selected.  Default is 'select'.
     const [selectedTool, setSelectedTool] = useState('select');
-    const [fillStyle, setFillStyle] = useState(DEFAULT_FILL_STYLE);
-    const [strokeStyle, setStrokeStyle] = useState(DEFAULT_STROKE_STYLE);
+    const [fillStyle, setFillStyle] = useState([DEFAULT_FILL_STYLE]);
+    const [strokeStyle, setStrokeStyle] = useState([DEFAULT_STROKE_STYLE]);
     const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
     const [strokeWidthVersion, setStrokeWidthVersion] = useState(0);
     const [isGradientPickerOpen, setGradientPickerOpen] = useState(false);
@@ -101,10 +101,13 @@ export default function App() {
         }
 
         setFillStyle((prev) => {
-            const nextType = typeof shape.fillType === 'string' ? shape.fillType : prev.type;
+            const previousPrimary = Array.isArray(prev) && prev.length ? prev[0] : DEFAULT_FILL_STYLE;
+            const nextType = typeof shape.fillType === 'string' ? shape.fillType : previousPrimary.type;
             if (nextType === 'gradient') {
-                const gradientValue = normalizeGradient(shape.fillGradient || prev.value || DEFAULT_GRADIENT);
-                return { type: 'gradient', value: gradientValue };
+                const gradientValue = normalizeGradient(
+                    shape.fillGradient || previousPrimary.value || DEFAULT_GRADIENT
+                );
+                return [{ type: 'gradient', value: gradientValue }];
             }
             const nextValue =
                 typeof shape.fill === 'string'
@@ -113,14 +116,15 @@ export default function App() {
                         shape.type
                     )
                         ? DEFAULT_FILL_STYLE.value
-                        : prev.value;
-            return { type: nextType, value: nextValue };
+                        : previousPrimary.value;
+            return [{ type: nextType, value: nextValue }];
         });
 
         setStrokeStyle((prev) => {
-            const nextType = typeof shape.strokeType === 'string' ? shape.strokeType : prev.type;
-            const nextValue = typeof shape.stroke === 'string' ? shape.stroke : prev.value;
-            return { type: nextType, value: nextValue };
+            const previousPrimary = Array.isArray(prev) && prev.length ? prev[0] : DEFAULT_STROKE_STYLE;
+            const nextType = typeof shape.strokeType === 'string' ? shape.strokeType : previousPrimary.type;
+            const nextValue = typeof shape.stroke === 'string' ? shape.stroke : previousPrimary.value;
+            return [{ type: nextType, value: nextValue }];
         });
 
         if (typeof shape.strokeWidth === 'number' && !Number.isNaN(shape.strokeWidth)) {

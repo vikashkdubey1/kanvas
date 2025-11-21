@@ -1518,6 +1518,202 @@ const normalizeHex = (value, fallback = '#000000') => {
     return fallback;
 };
 
+const clampPercent = (value) => {
+    if (!Number.isFinite(value)) return 0;
+    return Math.min(Math.max(value, 0), 100);
+};
+
+const normalizeStyleList = (styles, fallback) => {
+    const list = Array.isArray(styles)
+        ? styles.filter(Boolean)
+        : styles
+            ? [styles]
+            : [];
+    return list.length ? list : [fallback];
+};
+
+const deriveHexAndOpacity = (style) => {
+    if (style?.type === 'gradient') {
+        const gradient = normalizeGradient(style?.value, DEFAULT_GRADIENT);
+        const stop = gradient.stops[0] || { color: '#000000', opacity: 1 };
+        const rgba = parseColorString(stop.color, FALLBACK_SOLID_RGBA);
+        return {
+            hex: rgbaToHex({ ...rgba, a: 1 }).toUpperCase(),
+            opacity: clampPercent(Math.round((Number.isFinite(stop.opacity) ? stop.opacity : 1) * 100)),
+        };
+    }
+    const rgba = parseColorString(style?.value, FALLBACK_SOLID_RGBA);
+    return {
+        hex: rgbaToHex({ ...rgba, a: 1 }).toUpperCase(),
+        opacity: clampPercent(Math.round((Number.isFinite(rgba.a) ? rgba.a : 1) * 100)),
+    };
+};
+
+const applyHexToStyle = (style, hex) => {
+    const normalizedHex = normalizeHex(hex, '#000000');
+    if (style?.type === 'gradient') {
+        const gradient = normalizeGradient(style.value, DEFAULT_GRADIENT);
+        const nextStops = gradient.stops.map((stop, index) =>
+            index === 0 ? { ...stop, color: normalizedHex } : stop
+        );
+        return { ...style, type: 'gradient', value: { ...gradient, stops: nextStops } };
+    }
+    const baseRgba = parseColorString(style?.value, FALLBACK_SOLID_RGBA);
+    const nextRgb = parseColorString(normalizedHex, FALLBACK_SOLID_RGBA);
+    return {
+        ...style,
+        type: style?.type || 'solid',
+        value: rgbaToCss({ ...nextRgb, a: Number.isFinite(baseRgba.a) ? baseRgba.a : 1 }),
+    };
+};
+
+const applyOpacityToStyle = (style, opacityPercent) => {
+    const ratio = clampPercent(opacityPercent) / 100;
+    if (style?.type === 'gradient') {
+        const gradient = normalizeGradient(style.value, DEFAULT_GRADIENT);
+        const nextStops = gradient.stops.map((stop, index) =>
+            index === 0 ? { ...stop, opacity: ratio } : stop
+        );
+        return { ...style, type: 'gradient', value: { ...gradient, stops: nextStops } };
+    }
+    const base = parseColorString(style?.value, FALLBACK_SOLID_RGBA);
+    return {
+        ...style,
+        type: style?.type || 'solid',
+        value: rgbaToCss({ ...base, a: ratio }),
+    };
+};
+
+const ColorListControl = ({
+    label,
+    styles,
+    onStyleChange,
+    disabled = false,
+    onGradientPopoverToggle,
+    gradientInteractionRef,
+    fallbackStyle = DEFAULT_FILL_STYLE,
+}) => {
+    const normalizedStyles = useMemo(
+        () => normalizeStyleList(styles, fallbackStyle),
+        [styles, fallbackStyle]
+    );
+
+    const handleUpdate = useCallback(
+        (nextStyles) => {
+            if (typeof onStyleChange !== 'function') return;
+            onStyleChange(nextStyles);
+        },
+        [onStyleChange]
+    );
+
+    const handleEntryChange = useCallback(
+        (index, nextStyle) => {
+            if (disabled) return;
+            const next = [...normalizedStyles];
+            next[index] = nextStyle;
+            handleUpdate(next);
+        },
+        [disabled, handleUpdate, normalizedStyles]
+    );
+
+    const handleHexChange = useCallback(
+        (index, hex) => {
+            const target = normalizedStyles[index];
+            if (!target) return;
+            handleEntryChange(index, applyHexToStyle(target, hex));
+        },
+        [handleEntryChange, normalizedStyles]
+    );
+
+    const handleOpacityChange = useCallback(
+        (index, value) => {
+            const target = normalizedStyles[index];
+            if (!target) return;
+            const numeric = Number(value);
+            const clamped = Number.isFinite(numeric) ? numeric : 0;
+            handleEntryChange(index, applyOpacityToStyle(target, clamped));
+        },
+        [handleEntryChange, normalizedStyles]
+    );
+
+    const handleAdd = useCallback(() => {
+        if (disabled) return;
+        const last = normalizedStyles[normalizedStyles.length - 1] || fallbackStyle;
+        handleUpdate([...normalizedStyles, { ...last, meta: undefined }]);
+    }, [disabled, fallbackStyle, handleUpdate, normalizedStyles]);
+
+    const handleRemove = useCallback(
+        (index) => {
+            if (disabled) return;
+            if (normalizedStyles.length <= 1) return;
+            const next = normalizedStyles.filter((_, i) => i !== index);
+            handleUpdate(next.length ? next : [fallbackStyle]);
+        },
+        [disabled, fallbackStyle, handleUpdate, normalizedStyles]
+    );
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span style={sectionSubheadingStyle}>{label}</span>
+            {normalizedStyles.map((entry, index) => {
+                const { hex, opacity } = deriveHexAndOpacity(entry);
+                return (
+                    <div
+                        key={entry?.meta?.id ?? entry?.id ?? index}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                        <div style={{ flex: '0 0 auto' }}>
+                            <ColorControl
+                                label=""
+                                style={entry}
+                                onStyleChange={(next) => handleEntryChange(index, next)}
+                                disabled={disabled}
+                                onGradientPopoverToggle={onGradientPopoverToggle}
+                                gradientInteractionRef={gradientInteractionRef}
+                            />
+                        </div>
+                        <input
+                            type="text"
+                            value={hex}
+                            onChange={(event) => handleHexChange(index, event.target.value)}
+                            style={{ ...numberInputStyle, width: 90 }}
+                            disabled={disabled}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                value={opacity}
+                                onChange={(event) => handleOpacityChange(index, event.target.value)}
+                                style={{ ...numberInputStyle, width: 48, textAlign: 'right' }}
+                                disabled={disabled}
+                            />
+                            <span style={fieldLabelStyle}>%</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => handleRemove(index)}
+                            disabled={disabled || normalizedStyles.length <= 1}
+                            style={{ ...toggleButtonStyle, padding: '6px 8px', alignSelf: 'stretch' }}
+                            title="Remove"
+                        >
+                            ×
+                        </button>
+                    </div>
+                );
+            })}
+            <button
+                type="button"
+                onClick={handleAdd}
+                disabled={disabled}
+                style={{ ...toggleButtonStyle, alignSelf: 'flex-start' }}
+            >
+                Add {label}
+            </button>
+        </div>
+    );
+};
+
 const ColorControl = ({
     label,
     style,
@@ -4933,24 +5129,28 @@ export default function PropertiesPanel({
                 <div style={dividerStyle} />
 
                 <Section title="Fill">
-                    <ColorControl
-                        label=""
-                        style={supportsFill ? fillStyle : { type: 'solid', value: '#000000' }}
+                    <ColorListControl
+                        label="Fill"
+                        styles={supportsFill ? fillStyle : [
+                            { type: 'solid', value: '#000000' },
+                        ]}
                         onStyleChange={supportsFill ? onFillStyleChange : undefined}
                         disabled={!supportsFill}
                         onGradientPopoverToggle={supportsFill ? onGradientPickerToggle : undefined}
                         gradientInteractionRef={gradientInteractionRef}
+                        fallbackStyle={{ type: 'solid', value: '#000000' }}
                     />
                 </Section>
 
                 <div style={dividerStyle} />
 
                 <Section title="Stroke">
-                    <ColorControl
-                        label=""
-                        style={strokeStyle}
+                    <ColorListControl
+                        label="Stroke"
+                        styles={strokeStyle}
                         onStyleChange={disableStrokeControls ? undefined : onStrokeStyleChange}
                         disabled={disableStrokeControls}
+                        fallbackStyle={{ type: 'solid', value: '#000000' }}
                     />
                     <NumberControl
                         label="Stroke Width"
