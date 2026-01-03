@@ -41,6 +41,115 @@ import PATH_NODE_TYPES, {
  */
 const normalizeColor = (value, fallback) => (typeof value === 'string' ? value : fallback);
 
+const normalizeStyleList = (styles, fallbackList, { allowEmpty = true } = {}) => {
+    const list = Array.isArray(styles)
+        ? [...styles]
+        : styles
+            ? [styles]
+            : [];
+    if (Array.isArray(styles)) {
+        return list;
+    }
+    if (!allowEmpty && list.length === 0) {
+        return [...fallbackList];
+    }
+    return list.length ? list : [...fallbackList];
+};
+
+const parseColorToRgba = (value, fallback = { r: 217, g: 217, b: 217, a: 1 }) => {
+    if (typeof value === 'string') {
+        const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+        if (hexMatch) {
+            const hex = hexMatch[1];
+            const isShort = hex.length === 3;
+            const r = parseInt(isShort ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+            const g = parseInt(isShort ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+            const b = parseInt(isShort ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+            return { r, g, b, a: 1 };
+        }
+        const rgbaMatch = value.match(/rgba?\s*\(([^)]+)\)/i);
+        if (rgbaMatch) {
+            const parts = rgbaMatch[1]
+                .split(',')
+                .map((p) => Number.parseFloat(p.trim()))
+                .filter((n) => Number.isFinite(n));
+            const [r, g, b, a = 1] = parts;
+            if (parts.length >= 3) {
+                return { r: clampValue(r, 0, 255), g: clampValue(g, 0, 255), b: clampValue(b, 0, 255), a: clampValue(a, 0, 1) };
+            }
+        }
+    }
+    return fallback;
+};
+
+const colorFromStyle = (style, fallbackColor = '#d9d9d9') => {
+    if (!style) {
+        const fb = parseColorToRgba(fallbackColor);
+        return { ...fb };
+    }
+    if (style.type === 'gradient') {
+        const gradient = normalizeGradient(style.value);
+        const stop = gradient.stops?.[0];
+        const color = getGradientFirstColor(gradient, fallbackColor);
+        const base = parseColorToRgba(color, parseColorToRgba(fallbackColor));
+        const opacity = typeof stop?.opacity === 'number' ? clampValue(stop.opacity, 0, 1) : 1;
+        return { ...base, a: opacity };
+    }
+    const base = parseColorToRgba(style.value, parseColorToRgba(fallbackColor));
+    return { ...base };
+};
+
+// Return alpha for a style entry (solid or gradient). Defaults to 1.
+const getStyleAlpha = (style) => {
+    const rgba = colorFromStyle(style);
+    return clampValue(rgba.a ?? 1, 0, 1);
+};
+
+// Pick the first visible style (alpha > 0) from a list (top-first). Returns both style and color.
+const pickVisibleStyle = (styles, fallbackColor) => {
+    const list = Array.isArray(styles)
+        ? styles.filter((entry) => entry && !entry?.meta?.hidden)
+        : styles
+            ? [styles].filter((entry) => entry && !entry?.meta?.hidden)
+            : [];
+    for (let i = 0; i < list.length; i += 1) {
+        const style = list[i];
+        const alpha = getStyleAlpha(style);
+        const hasAlpha = typeof alpha === 'number' && alpha > 0.0001;
+        if (!hasAlpha) continue;
+        if (style.type === 'gradient') {
+            const gradient = normalizeGradient(style.value);
+            return { style, color: getGradientFirstColor(gradient, fallbackColor) };
+        }
+        return { style, color: normalizeColor(style.value, fallbackColor) };
+    }
+    return { style: null, color: fallbackColor };
+};
+
+const compositeStyles = (styles, fallbackColor) => {
+    const list = Array.isArray(styles)
+        ? styles.filter((entry) => entry && !entry?.meta?.hidden)
+        : styles
+            ? [styles].filter((entry) => entry && !entry?.meta?.hidden)
+            : [];
+    if (!list.length) {
+        return 'rgba(0,0,0,0)';
+    }
+    let acc = colorFromStyle({ type: 'solid', value: fallbackColor });
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+        const cur = colorFromStyle(list[i], fallbackColor);
+        const a = clampValue(cur.a ?? 1, 0, 1);
+        const inv = 1 - a;
+        acc = {
+            r: Math.round(cur.r * a + acc.r * inv),
+            g: Math.round(cur.g * a + acc.g * inv),
+            b: Math.round(cur.b * a + acc.b * inv),
+            a: clampValue(a + acc.a * inv, 0, 1),
+        };
+    }
+    return `rgba(${acc.r},${acc.g},${acc.b},${acc.a})`;
+};
+
 const toRadians = (value) => (value * Math.PI) / 180;
 
 const clampValue = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -621,23 +730,46 @@ export default function Canvas({
     gradientInteractionRef = null,
     shapePropertyRequest = null,
     onShapePropertyRequestHandled = null,
+    alignRequest = null,
+    onAlignRequestHandled = null,
 }) {
     const primaryFillStyle = Array.isArray(fillStyle) ? fillStyle[0] : fillStyle;
     const primaryStrokeStyle = Array.isArray(strokeStyle) ? strokeStyle[0] : strokeStyle;
-    const resolvedFillType = primaryFillStyle?.type || 'solid';
+
+    const normalizedFillStyles = useMemo(
+        () => normalizeStyleList(fillStyle, [{ type: 'solid', value: '#d9d9d9' }]),
+        [fillStyle]
+    );
+    const visibleFill = useMemo(
+        () => pickVisibleStyle(normalizedFillStyles, '#d9d9d9'),
+        [normalizedFillStyles]
+    );
+    const resolvedFillType = visibleFill.style?.type || 'solid';
     const resolvedFillGradient = useMemo(
         () =>
             resolvedFillType === 'gradient'
-                ? normalizeGradient(primaryFillStyle?.value)
+                ? normalizeGradient(visibleFill.style?.value)
                 : null,
-        [resolvedFillType, primaryFillStyle?.value]
+        [resolvedFillType, visibleFill.style?.value]
     );
-    const resolvedFillColor =
-        resolvedFillType === 'gradient'
-            ? getGradientFirstColor(resolvedFillGradient, '#d9d9d9')
-            : normalizeColor(primaryFillStyle?.value, '#d9d9d9');
-    const resolvedStrokeType = primaryStrokeStyle?.type || 'solid';
-    const resolvedStrokeColor = normalizeColor(primaryStrokeStyle?.value, '#000000');
+    const resolvedFillColor = useMemo(
+        () => compositeStyles(normalizedFillStyles, 'rgba(0,0,0,0)'),
+        [normalizedFillStyles]
+    );
+
+    const normalizedStrokeStyles = useMemo(
+        () => normalizeStyleList(strokeStyle, [{ type: 'solid', value: '#000000' }]),
+        [strokeStyle]
+    );
+    const visibleStroke = useMemo(
+        () => pickVisibleStyle(normalizedStrokeStyles, '#000000'),
+        [normalizedStrokeStyles]
+    );
+    const resolvedStrokeType = visibleStroke.style?.type || 'solid';
+    const resolvedStrokeColor = useMemo(
+        () => compositeStyles(normalizedStrokeStyles, 'rgba(0,0,0,0)'),
+        [normalizedStrokeStyles]
+    );
     const stageRef = useRef(null);
     const trRef = useRef(null);
     const idCounterRef = useRef(1); // stable id generator
@@ -758,10 +890,33 @@ export default function Canvas({
     const lineAnchorDragRef = useRef(null);
     const strokeWidthVersionRef = useRef(strokeWidthVersion);
     const [activePathSelection, setActivePathSelection] = useState(null);
+    const [measurementOverlay, setMeasurementOverlay] = useState(null);
+
+    useEffect(() => {
+        const handleKeyUp = (e) => {
+            if (!e.altKey && measurementOverlay) {
+                setMeasurementOverlay(null);
+            }
+        };
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keyup', handleKeyUp);
+        };
+    }, [measurementOverlay]);
 
 
     const [shapes, setShapes] = useState([]);
     const shapesRef = useRef(shapes);
+    // Keep id counter ahead of any numeric ids already in state (e.g., after loading persisted data)
+    useEffect(() => {
+        const maxId = shapes.reduce((max, shape) => {
+            const val = typeof shape?.id === 'number' && Number.isFinite(shape.id) ? shape.id : max;
+            return val > max ? val : max;
+        }, 0);
+        if (maxId + 1 > idCounterRef.current) {
+            idCounterRef.current = maxId + 1;
+        }
+    }, [shapes]);
 
     const initialPageStateRef = useRef(null);
     if (!initialPageStateRef.current) {
@@ -1154,18 +1309,41 @@ export default function Canvas({
 
     const frameLabelDragRef = useRef({ armed: false, start: null, frameId: null, evt: null });
 
-    // Insert a new shape at the TOP of its parent (i.e., above siblings)
+    // Insert a new shape at the TOP of its parent (i.e., before existing siblings)
     // parentId null => top of root; otherwise top within that container
     const insertShapeAtTop = (prevShapes, shape) => {
         const parentKey = shape.parentId ?? null;
-        const lastSibling = findLastIndex(prevShapes, s => (s.parentId ?? null) === parentKey);
-        if (lastSibling === -1) {
+        const firstSibling = prevShapes.findIndex((s) => (s.parentId ?? null) === parentKey);
+        if (firstSibling === -1) {
             // no siblings yet for that parent — append
             return [...prevShapes, shape];
         }
         const next = [...prevShapes];
-        next.splice(lastSibling + 1, 0, shape);
+        next.splice(firstSibling, 0, shape);
         return next;
+    };
+
+    const insertShapeAboveSibling = (prevShapes, shape, anchorId) => {
+        const parentKey = shape.parentId ?? null;
+        if (anchorId != null) {
+            const anchorIndex = prevShapes.findIndex((s) => s.id === anchorId);
+            if (anchorIndex >= 0 && (prevShapes[anchorIndex].parentId ?? null) === parentKey) {
+                const next = [...prevShapes];
+                next.splice(anchorIndex, 0, shape); // place directly above the anchor
+                return next;
+            }
+        }
+        return insertShapeAtTop(prevShapes, shape);
+    };
+
+    const getInsertAnchorForParent = (parentId) => {
+        const lastSelectedId = selectedIds?.length ? selectedIds[selectedIds.length - 1] : selectedId;
+        if (!lastSelectedId) return null;
+        const anchorShape = getShapeById(lastSelectedId, shapesRef.current);
+        if (anchorShape && (anchorShape.parentId ?? null) === (parentId ?? null)) {
+            return anchorShape.id;
+        }
+        return null;
     };
 
     // Move an existing shape to the TOP of its (possibly new) parent
@@ -1217,6 +1395,34 @@ export default function Canvas({
     // IDs to apply changes to: prefer multi, else single
     const getActiveSelectionIds = () =>
         selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
+
+    const focusNextLayer = (direction = 1) => {
+        const ids = getLayerPanelIds();
+        if (!ids.length) return null;
+        const primary = selectedId ?? (selectedIds.length ? selectedIds[selectedIds.length - 1] : null);
+        const currentIndex = primary != null ? ids.indexOf(primary) : -1;
+        const nextIndex = (currentIndex + direction + ids.length) % ids.length;
+        const nextId = ids[nextIndex];
+        selectSingle(nextId);
+        lastLayerAnchorIndexRef.current = nextIndex;
+        if (typeof onToolChange === 'function') onToolChange('select');
+        return nextId;
+    };
+
+    const focusNextTextLayerEdit = (currentId, direction = 1) => {
+        const textIds = (layerList || [])
+            .map(({ shape }) => shape)
+            .filter((shape) => shape.type === 'text')
+            .map((shape) => shape.id);
+        if (!textIds.length) return;
+        if (textIds.length === 1 && textIds[0] === currentId) return;
+        const currentIndex = currentId != null ? textIds.indexOf(currentId) : -1;
+        const nextIndex = (currentIndex + direction + textIds.length) % textIds.length;
+        const nextId = textIds[nextIndex];
+        setSelectedId(nextId);
+        setSelectedIds([nextId]);
+        requestAnimationFrame(() => openTextEditor(nextId));
+    };
 
     // Keep a Set for fast membership checks inside effects
     const selectionSetRef = useRef(new Set());
@@ -1428,6 +1634,9 @@ export default function Canvas({
     useEffect(() => {
         activeContainerPathRef.current = activeContainerPath;
     }, [activeContainerPath]);
+    const activeTextEditIdRef = useRef(null);
+    const lastFillStylesRef = useRef(null);
+    const lastStrokeStylesRef = useRef(null);
 
     const allocateShapeId = () => {
         const nextId = idCounterRef.current;
@@ -1453,9 +1662,11 @@ export default function Canvas({
     const createShape = (type, overrides = {}) => {
         const id = overrides.id ?? allocateShapeId();
         const parentId =
-            overrides.parentId !== undefined
-                ? overrides.parentId
-                : getActiveContainerId();
+            type === 'frame'
+                ? null
+                : overrides.parentId !== undefined
+                    ? overrides.parentId
+                    : getActiveContainerId();
         const parentShape =
             parentId != null ? shapesRef.current.find((shape) => shape.id === parentId) : null;
         const resolvedPageId =
@@ -1477,6 +1688,18 @@ export default function Canvas({
             ),
             blendMode: overrides.blendMode || 'normal',
             pageId: resolvedPageId,
+            fillStyles: normalizeStyleList(
+                overrides.fillStyles ?? fillStyle,
+                [{ type: 'solid', value: '#d9d9d9' }],
+                { allowEmpty: false }
+            ),
+            strokeStyles: normalizeStyleList(
+                overrides.strokeStyles ?? strokeStyle,
+                [{ type: 'solid', value: '#000000' }],
+                { allowEmpty: true }
+            ),
+            layoutWidthMode: overrides.layoutWidthMode || 'fixed',
+            layoutHeightMode: overrides.layoutHeightMode || 'fixed',
             ...overrides,
         };
         return shape;
@@ -1487,6 +1710,358 @@ export default function Canvas({
         return source.find((shape) => shape.id === id) || null;
     };
 
+    const getContainerIdAtPoint = (point) => {
+        if (!point) return null;
+        const container = findContainerAtPoint(point, new Set(), activeShapesRef.current);
+        return container ? container.id : null;
+    };
+
+    const applyAutoLayoutForParent = (source, parentId) => {
+        const parent = source.find((s) => s.id === parentId);
+        if (!parent || parent.layout !== 'auto') return source;
+        const children = source.filter((s) => s.parentId === parentId && s.visible !== false);
+        if (!children.length) return source;
+
+        const layoutFlow = parent.layoutFlow || 'stack';
+        const axis = parent.layoutAxis === 'horizontal' ? 'horizontal' : 'vertical';
+        const spacing = Number.isFinite(parent.layoutSpacing) ? parent.layoutSpacing : 8;
+        const padRaw = parent.layoutPadding;
+        const pad =
+            typeof padRaw === 'number'
+                ? { top: padRaw, right: padRaw, bottom: padRaw, left: padRaw }
+                : {
+                    top: Number.isFinite(padRaw?.top) ? padRaw.top : 12,
+                    right: Number.isFinite(padRaw?.right) ? padRaw.right : 12,
+                    bottom: Number.isFinite(padRaw?.bottom) ? padRaw.bottom : 12,
+                    left: Number.isFinite(padRaw?.left) ? padRaw.left : 12,
+                };
+        const alignCross = parent.layoutAlignCross || parent.layoutAlign || 'start'; // cross-axis
+        const alignMain = parent.layoutAlignMain || 'start'; // along flow axis
+        const parentMainMode = axis === 'vertical' ? parent.layoutHeightMode || 'fixed' : parent.layoutWidthMode || 'fixed';
+        const parentCrossMode = axis === 'vertical' ? parent.layoutWidthMode || 'fixed' : parent.layoutHeightMode || 'fixed';
+
+        // Split auto-positioned vs absolute children
+        const orderMap = new Map();
+        source.forEach((s, idx) => orderMap.set(s.id, idx));
+
+        const autoChildren = children
+            .filter((c) => (c.layoutPositioning || 'auto') === 'auto')
+            .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+        const absoluteChildren = children.filter((c) => (c.layoutPositioning || 'auto') === 'absolute');
+
+        const childDims = children.map((child) => {
+            const dim = getShapeDimensions(child);
+            return {
+                id: child.id,
+                width: dim.width || 0,
+                height: dim.height || 0,
+                shape: child,
+            };
+        });
+
+        const padMain = axis === 'vertical' ? pad.top + pad.bottom : pad.left + pad.right;
+        const padCross = axis === 'vertical' ? pad.left + pad.right : pad.top + pad.bottom;
+
+        const parentMainFixed =
+            axis === 'vertical'
+                ? Math.max(0, (parent.height || 0) - padMain)
+                : Math.max(0, (parent.width || 0) - padMain);
+        const parentCrossFixed =
+            axis === 'vertical'
+                ? Math.max(0, (parent.width || 0) - padCross)
+                : Math.max(0, (parent.height || 0) - padCross);
+
+        if (layoutFlow === 'grid') {
+            const colGap = Number.isFinite(parent.layoutGridColumnGap) ? parent.layoutGridColumnGap : spacing;
+            const rowGap = Number.isFinite(parent.layoutGridRowGap) ? parent.layoutGridRowGap : spacing;
+            const colsFromParent = Math.max(1, Math.floor(parent.layoutGridColumns || 0));
+            const cols = colsFromParent > 0 ? colsFromParent : Math.max(1, Math.ceil(Math.sqrt(autoChildren.length || 1)));
+            const requestedRows = Math.max(1, Math.floor(parent.layoutGridRows || 0));
+            let rows = requestedRows > 0 ? requestedRows : Math.max(1, Math.ceil(autoChildren.length / cols));
+            const neededCells = autoChildren.length;
+            if (neededCells > rows * cols) {
+                rows = Math.max(rows, Math.ceil(neededCells / cols));
+            }
+            const parentInnerWidth = Math.max(0, (parent.width || 0) - pad.left - pad.right);
+            const parentInnerHeight = Math.max(0, (parent.height || 0) - pad.top - pad.bottom);
+            const colMode = parent.layoutGridColumnMode || 'fixed';
+            const rowMode = parent.layoutGridRowMode || 'fixed';
+
+            const dims = autoChildren.map((child) => {
+                const dim = getShapeDimensions(child);
+                return { id: child.id, width: dim.width || 0, height: dim.height || 0, shape: child };
+            });
+
+            const colWidths = new Array(cols).fill(0);
+            const rowHeights = new Array(rows).fill(0);
+            const maxChildWidth = Math.max(0, ...dims.map((d) => d.width));
+            const maxChildHeight = Math.max(0, ...dims.map((d) => d.height));
+            const baseColWidth = (() => {
+                if (colMode === 'fill') {
+                    const totalGap = Math.max(0, cols - 1) * colGap;
+                    return cols > 0 ? Math.max(0, (parentInnerWidth - totalGap) / cols) : 0;
+                }
+                if (colMode === 'hug') {
+                    return Math.max(1, maxChildWidth || 1);
+                }
+                return Math.max(0, (parentInnerWidth - Math.max(0, cols - 1) * colGap) / cols);
+            })();
+            const baseRowHeight = (() => {
+                if (rowMode === 'fill') {
+                    const totalGap = Math.max(0, rows - 1) * rowGap;
+                    return rows > 0 ? Math.max(0, (parentInnerHeight - totalGap) / rows) : 0;
+                }
+                if (rowMode === 'hug') {
+                    return Math.max(1, maxChildHeight || 1);
+                }
+                return Math.max(0, (parentInnerHeight - Math.max(0, rows - 1) * rowGap) / rows);
+            })();
+            autoChildren.forEach((child, idx) => {
+                const dim = dims.find((d) => d.id === child.id) || { width: 0, height: 0 };
+                const row = Math.floor(idx / cols);
+                const col = idx % cols;
+                colWidths[col] = Math.max(colWidths[col], dim.width, baseColWidth);
+                rowHeights[row] = Math.max(rowHeights[row], dim.height, baseRowHeight);
+            });
+            // ensure empty columns/rows still get base size
+            for (let c = 0; c < cols; c += 1) {
+                colWidths[c] = Math.max(colWidths[c], baseColWidth);
+            }
+            for (let r = 0; r < rows; r += 1) {
+                rowHeights[r] = Math.max(rowHeights[r], baseRowHeight);
+            }
+
+            const contentWidth =
+                colWidths.reduce((sum, w) => sum + w, 0) + Math.max(0, cols - 1) * colGap;
+            const contentHeight =
+                rowHeights.reduce((sum, h) => sum + h, 0) + Math.max(0, rows - 1) * rowGap;
+
+            const newWidth =
+                (parent.layoutWidthMode || 'fixed') === 'hug'
+                    ? contentWidth + pad.left + pad.right
+                    : parent.width || contentWidth + pad.left + pad.right;
+            const newHeight =
+                (parent.layoutHeightMode || 'fixed') === 'hug'
+                    ? contentHeight + pad.top + pad.bottom
+                    : parent.height || contentHeight + pad.top + pad.bottom;
+
+            const startX = parent.x - newWidth / 2 + pad.left;
+            const startY = parent.y - newHeight / 2 + pad.top;
+
+            const colOffsets = [];
+            colWidths.reduce((acc, w, idx) => {
+                colOffsets[idx] = acc;
+                return acc + w + colGap;
+            }, 0);
+            const rowOffsets = [];
+            rowHeights.reduce((acc, h, idx) => {
+                rowOffsets[idx] = acc;
+                return acc + h + rowGap;
+            }, 0);
+
+            const updated = new Map();
+            autoChildren.forEach((child, idx) => {
+                const row = Math.floor(idx / cols);
+                const col = idx % cols;
+                const width = colWidths[col] || 0;
+                const height = rowHeights[row] || 0;
+                const x = startX + (colOffsets[col] || 0) + width / 2;
+                const y = startY + (rowOffsets[row] || 0) + height / 2;
+                updated.set(child.id, { x, y });
+            });
+
+            let changed = false;
+            const result = source.map((s) => {
+                if (s.id === parentId) {
+                    const same =
+                        Math.abs((s.width || 0) - newWidth) < 0.001 &&
+                        Math.abs((s.height || 0) - newHeight) < 0.001;
+                    changed = changed || !same;
+                    return { ...s, width: newWidth, height: newHeight };
+                }
+                if (updated.has(s.id)) {
+                    const pos = updated.get(s.id);
+                    const same =
+                        Math.abs((s.x || 0) - pos.x) < 0.001 &&
+                        Math.abs((s.y || 0) - pos.y) < 0.001;
+                    changed = changed || !same;
+                    return {
+                        ...s,
+                        x: pos.x,
+                        y: pos.y,
+                        layoutPositioning: 'auto',
+                    };
+                }
+                return s;
+            });
+            return changed ? result : source;
+        }
+
+        // Resolve sizes for auto children (stack flow)
+        const autoEntries = autoChildren.map((child) => {
+            const dim = childDims.find((d) => d.id === child.id) || { width: 0, height: 0 };
+            const mainMode = (axis === 'vertical' ? child.layoutHeightMode : child.layoutWidthMode) || 'fixed';
+            const crossMode = (axis === 'vertical' ? child.layoutWidthMode : child.layoutHeightMode) || 'fixed';
+            const intrinsicMain = axis === 'vertical' ? dim.height : dim.width;
+            const intrinsicCross = axis === 'vertical' ? dim.width : dim.height;
+            let mainSize = intrinsicMain;
+            let crossSize = intrinsicCross;
+
+            if (mainMode === 'fixed') {
+                mainSize = axis === 'vertical' ? (child.height || intrinsicMain) : (child.width || intrinsicMain);
+            }
+            // hug uses intrinsicMain (already)
+            const entry = {
+                id: child.id,
+                mainMode,
+                crossMode,
+                intrinsicMain,
+                intrinsicCross,
+                mainSize,
+                crossSize,
+            };
+            return entry;
+        });
+
+        const mainSpacingCount = Math.max(0, autoEntries.length - 1);
+        const spacingTotal = mainSpacingCount * spacing;
+
+        const sumFixedMain = autoEntries.reduce((sum, entry) => {
+            if (entry.mainMode === 'fill') return sum;
+            return sum + entry.mainSize;
+        }, 0);
+        const maxCrossNonFill = autoEntries.reduce((max, entry) => {
+            if (entry.crossMode === 'fill') return max;
+            return Math.max(max, entry.crossSize);
+        }, 0);
+        const fillCount = autoEntries.filter((e) => e.mainMode === 'fill').length;
+
+        // Determine parent main/cross inner sizes
+        let innerMain = parentMainFixed;
+        let innerCross = parentCrossFixed;
+
+        // If parent hugs main axis, compute after sizes; still need base available for fill resolution
+        if (parentMainMode === 'hug') {
+            const totalMain = sumFixedMain + spacingTotal + autoEntries
+                .filter((e) => e.mainMode === 'fill')
+                .reduce((sum, e) => sum + e.intrinsicMain, 0);
+            innerMain = totalMain;
+        }
+        if (parentCrossMode === 'hug') {
+            const crossUsed = Math.max(maxCrossNonFill, ...autoEntries.map((e) => e.crossSize));
+            innerCross = crossUsed;
+        }
+
+        // Resolve fill sizes along main axis when parent is fixed
+        if (fillCount > 0 && parentMainMode !== 'hug') {
+            const availableMain = Math.max(0, innerMain - sumFixedMain - spacingTotal);
+            const fillShare = availableMain / fillCount;
+            autoEntries.forEach((entry) => {
+                if (entry.mainMode === 'fill') {
+                    entry.mainSize = fillShare;
+                }
+            });
+        } else {
+            // If parent hugs, fill behaves like hug (use intrinsic)
+            autoEntries.forEach((entry) => {
+                if (entry.mainMode === 'fill') {
+                    entry.mainSize = entry.intrinsicMain;
+                }
+            });
+        }
+
+        // Resolve cross fill/stretch via align = stretch
+        autoEntries.forEach((entry) => {
+            if (entry.crossMode === 'fill' || alignCross === 'stretch') {
+                entry.crossSize = innerCross;
+            }
+        });
+
+        const totalContentMain =
+            autoEntries.reduce((sum, e) => sum + e.mainSize, 0) + spacingTotal;
+        const newInnerMain =
+            parentMainMode === 'hug' ? totalContentMain : innerMain;
+        const newInnerCross =
+            parentCrossMode === 'hug'
+                ? Math.max(
+                    innerCross,
+                    autoEntries.reduce((max, e) => Math.max(max, e.crossSize), 0)
+                )
+                : innerCross;
+
+        const newWidth =
+            axis === 'vertical'
+                ? newInnerCross + pad.left + pad.right
+                : newInnerMain + pad.left + pad.right;
+        const newHeight =
+            axis === 'vertical'
+                ? newInnerMain + pad.top + pad.bottom
+                : newInnerCross + pad.top + pad.bottom;
+
+        const startMain = axis === 'vertical' ? parent.y - newHeight / 2 + pad.top : parent.x - newWidth / 2 + pad.left;
+        const startCross = axis === 'vertical' ? parent.x - newWidth / 2 + pad.left : parent.y - newHeight / 2 + pad.top;
+
+        const extraMain = newInnerMain - totalContentMain;
+        let offsetMain = 0;
+        const spacingStep = spacing;
+        if (extraMain > 0) {
+            if (alignMain === 'center') {
+                offsetMain = extraMain / 2;
+            } else if (alignMain === 'end') {
+                offsetMain = extraMain;
+            }
+        }
+
+        const updated = new Map();
+        autoEntries.forEach((entry, idx) => {
+            const mainCenter = startMain + offsetMain + entry.mainSize / 2;
+            let crossOffset = 0;
+            if (alignCross === 'center') {
+                crossOffset = (newInnerCross - entry.crossSize) / 2;
+            } else if (alignCross === 'end') {
+                crossOffset = newInnerCross - entry.crossSize;
+            } else if (alignCross === 'stretch') {
+                crossOffset = 0;
+            } else {
+                crossOffset = 0; // start
+            }
+            const crossCenter = startCross + crossOffset + entry.crossSize / 2;
+
+            const nextX = axis === 'vertical' ? crossCenter : mainCenter;
+            const nextY = axis === 'vertical' ? mainCenter : crossCenter;
+
+            // Only position children; do not resize them
+            updated.set(entry.id, { x: nextX, y: nextY });
+
+            offsetMain += entry.mainSize + spacingStep;
+        });
+
+        let changed = false;
+        const result = source.map((s) => {
+            if (s.id === parentId) {
+                const nextParent = {
+                    ...s,
+                    width: newWidth,
+                    height: newHeight,
+                };
+                const same =
+                    Math.abs((s.width || 0) - newWidth) < 0.001 &&
+                    Math.abs((s.height || 0) - newHeight) < 0.001;
+                changed = changed || !same;
+                return nextParent;
+            }
+            if (updated.has(s.id)) {
+                const pos = updated.get(s.id);
+                const same =
+                    Math.abs((s.x || 0) - pos.x) < 0.001 &&
+                    Math.abs((s.y || 0) - pos.y) < 0.001;
+                changed = changed || !same;
+                return { ...s, x: pos.x, y: pos.y };
+            }
+            return s;
+        });
+        return changed ? result : source;
+    };
     const updatePathShape = useCallback(
         (shapeId, mutator, options = {}) => {
             if (!shapeId || typeof mutator !== 'function') return;
@@ -2072,89 +2647,46 @@ export default function Canvas({
         scaleX,
         scaleY
     ) => {
+        // Only translate children when their container is scaled; keep their size unchanged
         const prevX = prevContainer?.x || 0;
         const prevY = prevContainer?.y || 0;
         const nextX = nextContainer?.x || 0;
         const nextY = nextContainer?.y || 0;
-        const offsetX = (shape.x || 0) - prevX;
-        const offsetY = (shape.y || 0) - prevY;
+        const dx = nextX - prevX;
+        const dy = nextY - prevY;
         const updated = {
             ...shape,
-            x: nextX + offsetX * scaleX,
-            y: nextY + offsetY * scaleY,
+            x: (shape.x || 0) + dx,
+            y: (shape.y || 0) + dy,
         };
 
-        switch (shape.type) {
-            case 'rectangle':
-            case 'frame':
-            case 'group':
-                return {
-                    ...updated,
-                    width: Math.max(1, (shape.width || 0) * scaleX),
-                    height: Math.max(1, (shape.height || 0) * scaleY),
-                };
-            case 'circle': {
-                const radius = shape.radius || 0;
-                const scaledRadius = Math.max(1, radius * Math.max(scaleX, scaleY));
-                return { ...updated, radius: scaledRadius };
-            }
-            case 'ellipse':
-                return {
-                    ...updated,
-                    radiusX: Math.max(1, (shape.radiusX || 0) * scaleX),
-                    radiusY: Math.max(1, (shape.radiusY || 0) * scaleY),
-                };
-            case 'line': {
-                const points = Array.isArray(shape.points) ? [...shape.points] : [];
-                const scaledPoints = points.map((value, index) => {
-                    if (index % 2 === 0) {
-                        const absolute = value - prevX;
-                        return nextX + absolute * scaleX;
-                    }
-                    const absolute = value - prevY;
-                    return nextY + absolute * scaleY;
-                });
-                return { ...updated, points: scaledPoints };
-            }
-            case 'path': {
-                const points = getPathPoints(shape);
-                const scaledPoints = points.map((point) => {
-                    const nextPoint = clonePathPoint(point);
-                    nextPoint.x = nextX + (point.x - prevX) * scaleX;
-                    nextPoint.y = nextY + (point.y - prevY) * scaleY;
-                    if (point.handles) {
-                        nextPoint.handles = {};
-                        if (point.handles.left) {
-                            nextPoint.handles.left = {
-                                x: nextX + (point.handles.left.x - prevX) * scaleX,
-                                y: nextY + (point.handles.left.y - prevY) * scaleY,
-                            };
-                        }
-                        if (point.handles.right) {
-                            nextPoint.handles.right = {
-                                x: nextX + (point.handles.right.x - prevX) * scaleX,
-                                y: nextY + (point.handles.right.y - prevY) * scaleY,
-                            };
-                        }
-                        if (!nextPoint.handles.left && !nextPoint.handles.right) {
-                            delete nextPoint.handles;
-                        }
-                    }
-                    return nextPoint;
-                });
-                return { ...updated, points: scaledPoints };
-            }
-            case 'text': {
-                const averageScale = (scaleX + scaleY) / 2;
-                return {
-                    ...updated,
-                    fontSize: Math.max(1, (shape.fontSize || textFontSize) * averageScale),
-                    lineHeight: Math.max(0.1, (shape.lineHeight || textLineHeight) * scaleY),
-                };
-            }
-            default:
-                return updated;
+        if (shape.type === 'line') {
+            const points = Array.isArray(shape.points) ? [...shape.points] : [];
+            const translated = points.map((value, index) => (index % 2 === 0 ? value + dx : value + dy));
+            return { ...updated, points: translated };
         }
+        if (shape.type === 'path') {
+            const points = getPathPoints(shape).map((point) => {
+                const nextPoint = clonePathPoint(point);
+                nextPoint.x = point.x + dx;
+                nextPoint.y = point.y + dy;
+                if (point.handles) {
+                    nextPoint.handles = {};
+                    if (point.handles.left) {
+                        nextPoint.handles.left = { x: point.handles.left.x + dx, y: point.handles.left.y + dy };
+                    }
+                    if (point.handles.right) {
+                        nextPoint.handles.right = { x: point.handles.right.x + dx, y: point.handles.right.y + dy };
+                    }
+                    if (!nextPoint.handles.left && !nextPoint.handles.right) {
+                        delete nextPoint.handles;
+                    }
+                }
+                return nextPoint;
+            });
+            return { ...updated, points };
+        }
+        return updated;
     };
 
     // zoom state
@@ -2448,39 +2980,57 @@ export default function Canvas({
     function handleDuplicate() {
         if (!selectedIds?.length) return;
 
-        setShapes(prev => {
-            const now = Date.now();
-            const clones = [];
-            let maxId = Math.max(0, ...prev.map(s => s.id));
+        const makeDuplicateName = (originalName, takenNames) => {
+            const base = (originalName || 'Layer').trim();
+            const root = base.replace(/\s+copy(?:\s+\d+)?$/i, '') || base;
+            let candidate = `${root} copy`;
+            let counter = 2;
+            while (takenNames.has(candidate)) {
+                candidate = `${root} copy ${counter}`;
+                counter += 1;
+            }
+            takenNames.add(candidate);
+            return candidate;
+        };
 
-            selectedIds.forEach(id => {
-                const src = prev.find(s => s.id === id);
-                if (!src) return;
+        const newSelection = [];
+        applyChange((prev) => {
+            const takenNames = new Set(prev.map((s) => s.name).filter(Boolean));
+            let maxId = Math.max(0, ...prev.map((s) => (typeof s.id === 'number' ? s.id : 0)));
+            const selectedSet = new Set(selectedIds);
+            const next = [];
+            const parentIds = new Set();
 
-                maxId += 1;
-                const baseName = src.name || `${src.type}-${src.id}`;
-                const newName = baseName.endsWith('copy') ? `${baseName} 2` : `${baseName} copy`;
+            for (let i = 0; i < prev.length; i += 1) {
+                const shape = prev[i];
+                next.push(shape); // keep original in place
+                if (selectedSet.has(shape.id)) {
+                    maxId += 1;
+                    const clone = {
+                        ...shape,
+                        id: maxId,
+                        name: makeDuplicateName(shape.name, takenNames),
+                        x: (shape.x ?? 0) + 20, // slight offset so it’s visible
+                        y: (shape.y ?? 0) + 20,
+                        selected: false,
+                    };
+                    next.push(clone); // place clone above original
+                    newSelection.push(clone.id);
+                    if (clone.parentId != null) parentIds.add(clone.parentId);
+                }
+            }
 
-                clones.push({
-                    ...src,
-                    id: maxId,
-                    name: newName,
-                    x: (src.x ?? 0) + 20,    // slight offset so it’s visible
-                    y: (src.y ?? 0) + 20,
-                    selected: false,
-                });
+            let withLayout = next;
+            parentIds.forEach((pid) => {
+                withLayout = applyAutoLayoutForParent(withLayout, pid);
             });
+            return withLayout;
+        }, { baseState: shapesRef.current });
 
-            // push the new clones to the end
-            return [...prev, ...clones];
-        });
-
-        // auto-select the duplicated shape(s)
-        setSelectedIds(prev => {
-            const all = shapesRef.current || [];
-            const maxId = Math.max(0, ...all.map(s => s.id));
-            return [maxId]; // select the newest one if only one; works fine for multiples too
-        });
+        const primary = newSelection[newSelection.length - 1] ?? null;
+        setSelectedIds(newSelection);
+        setSelectedId(primary);
+        if (typeof onToolChange === 'function') onToolChange('select');
     }
 
     const handleDeletePage = useCallback(
@@ -2558,7 +3108,17 @@ export default function Canvas({
         if (fillPreviewRef.current?.isPreview) return;
         if (typeof onSelectionChange !== 'function') return;
         const shape = selectedId ? shapes.find((s) => s.id === selectedId) : null;
-        onSelectionChange(shape ? { ...shape } : null);
+        if (shape) {
+            const parent = shape.parentId != null ? shapes.find((s) => s.id === shape.parentId) : null;
+            const siblings =
+                parent != null
+                    ? shapes.filter((s) => s.parentId === parent.id && s.id !== shape.id).map((s) => ({ ...s }))
+                    : [];
+            const selectionIds = selectedIds.length ? [...selectedIds] : [shape.id];
+            onSelectionChange({ shape: { ...shape, __parent: parent ? { ...parent } : null, __siblings: siblings }, selectedIds: selectionIds });
+        } else {
+            onSelectionChange(null);
+        }
     }, [selectedId, shapes, onSelectionChange]);
 
     useEffect(() => {
@@ -2567,16 +3127,17 @@ export default function Canvas({
 
     // keyboard shortcuts
     useEffect(() => {
+        const isTypingInFormField = (target) => {
+            if (!target) return false;
+            const tag = target.tagName ? target.tagName.toLowerCase() : '';
+            if (['input', 'textarea', 'select', 'option', 'button'].includes(tag)) return true;
+            if (target.isContentEditable) return true;
+            if (typeof target.closest === 'function' && target.closest('[contenteditable=\"true\"]')) return true;
+            return false;
+        };
+
         const onKeyDown = (e) => {
-            const target = e.target;
-            if (
-                target &&
-                (target.tagName === 'INPUT' ||
-                    target.tagName === 'TEXTAREA' ||
-                    target.isContentEditable)
-            ) {
-                return;
-            }
+            if (isTypingInFormField(e.target)) return;
 
             const ctrlOrMeta = e.ctrlKey || e.metaKey;
 
@@ -2688,7 +3249,26 @@ export default function Canvas({
                 if (selectedIds.length || selectedId) {
                     e.preventDefault();
                     const idsToRemove = new Set(selectedIds.length ? selectedIds : [selectedId]);
-                    applyChange((prev) => prev.filter((shape) => !idsToRemove.has(shape.id)));
+                    const parentIds = new Set();
+                    const snapshot = shapesRef.current;
+                    // include descendants so containers remove their children
+                    [...idsToRemove].forEach((id) => {
+                        collectDescendantIds(snapshot, id).forEach((cid) => idsToRemove.add(cid));
+                    });
+                    [...idsToRemove]
+                        .map((id) => getShapeById(id, snapshot))
+                        .filter(Boolean)
+                        .forEach((s) => {
+                            if (s.parentId != null) parentIds.add(s.parentId);
+                        });
+                    applyChange((prev) => {
+                        const filtered = prev.filter((shape) => !idsToRemove.has(shape.id));
+                        let next = filtered;
+                        parentIds.forEach((pid) => {
+                            next = applyAutoLayoutForParent(next, pid);
+                        });
+                        return next;
+                    });
                     setSelectedId(null);
                     setSelectedIds([]);
                     return;
@@ -2822,6 +3402,14 @@ export default function Canvas({
                 }
                 return;
             }
+            if (e.key === 'Tab' && selectedTool === 'select') {
+                if (activeTextEditIdRef.current) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const direction = e.shiftKey ? -1 : 1;
+                focusNextLayer(direction);
+                return;
+            }
             if (!ctrlOrMeta) return;
 
             if ((e.key === 'g' || e.key === 'G') && (e.ctrlKey || e.metaKey)) {
@@ -2901,11 +3489,14 @@ export default function Canvas({
         }
     }, [selectedTool]);
 
+    const lastFillSelectionSigRef = useRef(null);
+    const lastStrokeSelectionSigRef = useRef(null);
+
     useEffect(() => {
         const ids = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
         if (!ids.length) return;
-
-        // Only apply on shapes that can have fills
+        const fillSig = JSON.stringify(normalizedFillStyles);
+        const selectionSig = JSON.stringify(ids);
         const supportsFill = new Set([
             'rectangle',
             'circle',
@@ -2918,7 +3509,7 @@ export default function Canvas({
         ]);
         const idsSet = new Set(ids);
 
-        // Respect live-preview metadata (prevents color ping-pong)
+        // Only apply on shapes that can have fills
         const meta = primaryFillStyle?.meta || null;
         const interactionId =
             meta && (typeof meta.interactionId === 'number' || typeof meta.interactionId === 'string')
@@ -2933,14 +3524,19 @@ export default function Canvas({
             fillPreviewRef.current.interactionId === interactionId
         );
 
-        // If this effect is firing due to simple selection-sync (no meta), ignore it
-        if (!meta) return;
-
         // Target style to apply
         const targetGradient =
             resolvedFillType === 'gradient' && resolvedFillGradient
                 ? normalizeGradient(resolvedFillGradient)
                 : null;
+        const nextFillStyles = normalizedFillStyles;
+
+        // Meta-less updates are UI syncs from selection; ignore as edits
+        if (!meta) {
+            lastFillStylesRef.current = fillSig;
+            lastFillSelectionSigRef.current = selectionSig;
+            return;
+        }
 
         const updater = (source) =>
             source.map((s) => {
@@ -2949,6 +3545,7 @@ export default function Canvas({
                 if (targetGradient) {
                     return {
                         ...s,
+                        fillStyles: nextFillStyles,
                         fill: getGradientFirstColor(targetGradient, resolvedFillColor),
                         fillType: 'gradient',
                         fillGradient: targetGradient,
@@ -2956,6 +3553,7 @@ export default function Canvas({
                 }
                 return {
                     ...s,
+                    fillStyles: nextFillStyles,
                     fill: resolvedFillColor,
                     fillType: resolvedFillType,
                     fillGradient: null,
@@ -2977,6 +3575,7 @@ export default function Canvas({
                 fillPreviewRef.current.isPreview = true;
             }
             setShapes((prev) => updater(prev));
+            lastFillStylesRef.current = fillSig;
             return;
         }
 
@@ -2984,18 +3583,45 @@ export default function Canvas({
             // Commit preview as a single history entry
             const baseState = fillPreviewRef.current?.baseState || shapesRef.current;
             fillPreviewRef.current = null;
-            applyChange(updater, { baseState });
+            applyChange((prev) => {
+                const next = updater(prev);
+                const parentId = ids[0] ? getShapeById(ids[0], prev)?.parentId : null;
+                return parentId != null ? applyAutoLayoutForParent(next, parentId) : next;
+            }, { baseState });
+            lastFillStylesRef.current = fillSig;
             return;
         }
 
-        // Non-preview, user-initiated direct change (with meta) -> record normally
-        applyChange(updater);
+        // Non-preview path: avoid churn if nothing would change
+        const needsChange = (() => {
+            const src = shapesRef.current;
+            for (let i = 0; i < src.length; i += 1) {
+                const s = src[i];
+                if (!idsSet.has(s.id) || !supportsFill.has(s.type)) continue;
+                const curStyles = Array.isArray(s.fillStyles) ? s.fillStyles : [];
+                const sameStyles =
+                    curStyles.length === normalizedFillStyles.length &&
+                    curStyles.every((entry, idx) => JSON.stringify(entry) === JSON.stringify(normalizedFillStyles[idx]));
+                if (!sameStyles) return true;
+            }
+            return false;
+        })();
+        if (needsChange) {
+            applyChange((prev) => {
+                const next = updater(prev);
+                const parentId = ids[0] ? getShapeById(ids[0], prev)?.parentId : null;
+                return parentId != null ? applyAutoLayoutForParent(next, parentId) : next;
+            });
+        }
+        lastFillStylesRef.current = fillSig;
+        lastFillSelectionSigRef.current = selectionSig;
     }, [
         applyChange,
         primaryFillStyle?.meta,
         resolvedFillColor,
         resolvedFillGradient,
         resolvedFillType,
+        normalizedFillStyles,
         selectedIds,
         selectedId
     ]);
@@ -3007,6 +3633,8 @@ export default function Canvas({
         // Active selection (multi preferred, else single)
         const ids = selectedIds.length ? selectedIds : (selectedId ? [selectedId] : []);
         if (!ids.length) return;
+        const strokeSig = JSON.stringify(normalizedStrokeStyles);
+        const selectionSig = JSON.stringify(ids);
 
         // Shapes that can have stroke
         const supportsStroke = new Set([
@@ -3026,11 +3654,20 @@ export default function Canvas({
         const desiredStroke = resolvedStrokeColor;                     // string like '#000000'
         const desiredType = resolvedStrokeType;                      // e.g., 'solid'
         const desiredWidth = typeof strokeWidth === 'number' ? strokeWidth : 0;
+        const desiredStrokeStyles = normalizedStrokeStyles;
 
         const strokeMeta = strokeStyle && typeof strokeStyle === 'object' ? strokeStyle.meta || null : null;
         const versionChanged = prevStrokeVersion !== strokeWidthVersion;
-        const shouldApply = Boolean(strokeMeta) || versionChanged;
+        const stylesChanged = strokeSig !== lastStrokeStylesRef.current;
+        const shouldApply = Boolean(strokeMeta) || versionChanged || stylesChanged;
         if (!shouldApply) return;
+
+        // Meta-less updates are UI syncs from selection; ignore as edits
+        if (!strokeMeta && !versionChanged && !stylesChanged) {
+            lastStrokeStylesRef.current = strokeSig;
+            lastStrokeSelectionSigRef.current = selectionSig;
+            return;
+        }
 
         const computeTargetStrokeWidth = (shape) => {
             if (!shape) return desiredWidth;
@@ -3056,7 +3693,11 @@ export default function Canvas({
                 const targetWidth = computeTargetStrokeWidth(s);
                 const curStroke = typeof s.stroke === 'string' ? s.stroke : null;
                 const curType = typeof s.strokeType === 'string' ? s.strokeType : 'solid';
-                if (curWidth !== targetWidth || curStroke !== desiredStroke || curType !== desiredType) {
+                const curStyles = Array.isArray(s.strokeStyles) ? s.strokeStyles : [];
+                const needsStyles =
+                    curStyles.length !== desiredStrokeStyles.length ||
+                    curStyles.some((entry, idx) => JSON.stringify(entry) !== JSON.stringify(desiredStrokeStyles[idx]));
+                if (curWidth !== targetWidth || curStroke !== desiredStroke || curType !== desiredType || needsStyles) {
                     return true;
                 }
             }
@@ -3068,25 +3709,31 @@ export default function Canvas({
         strokeTxnRef.current = true;
 
         // Commit change to all selected stroke-capable shapes
-        applyChange((prev) =>
-            prev.map((s) => {
+        applyChange((prev) => {
+            const next = prev.map((s) => {
                 if (!selectedSet.has(s.id) || !supportsStroke.has(s.type)) return s;
                 return {
                     ...s,
+                    strokeStyles: desiredStrokeStyles,
                     stroke: desiredStroke,
                     strokeType: desiredType,
                     strokeWidth: computeTargetStrokeWidth(s),
                 };
-            })
-        );
+            });
+            const parentId = ids[0] ? getShapeById(ids[0], prev)?.parentId : null;
+            return parentId != null ? applyAutoLayoutForParent(next, parentId) : next;
+        });
         setTimeout(() => { strokeTxnRef.current = false; }, 0);
+        lastStrokeStylesRef.current = strokeSig;
+        lastStrokeSelectionSigRef.current = selectionSig;
     }, [
         applyChange,
         resolvedStrokeColor,   // color from panel
         resolvedStrokeType,    // 'solid' etc.
         strokeWidth,           // numeric width
         selectedIds, selectedId,
-        strokeStyle?.meta
+        strokeStyle?.meta,
+        normalizedStrokeStyles
     ]);
 
     useEffect(() => {
@@ -3258,6 +3905,89 @@ export default function Canvas({
                         return { ...shape, points: nextPoints };
                     }
                     return shape;
+                }
+                case 'layout': {
+                    if (!value || (shape.type !== 'frame' && shape.type !== 'group')) return shape;
+                    const next = { ...shape };
+                    next.layout = value.enabled ? 'auto' : null;
+                    if (value.axis) next.layoutAxis = value.axis;
+                    if (value.flow) next.layoutFlow = value.flow;
+                    if (value.spacing !== undefined) {
+                        const spacingValue = Number.isFinite(value.spacing) ? value.spacing : shape.layoutSpacing ?? 8;
+                        next.layoutSpacing = spacingValue;
+                    }
+                    if (value.padding !== undefined) {
+                        if (typeof value.padding === 'number') {
+                            next.layoutPadding = value.padding;
+                        } else {
+                            next.layoutPadding = {
+                                top: value.padding.top ?? shape.layoutPadding?.top ?? 12,
+                                right: value.padding.right ?? shape.layoutPadding?.right ?? 12,
+                                bottom: value.padding.bottom ?? shape.layoutPadding?.bottom ?? 12,
+                                left: value.padding.left ?? shape.layoutPadding?.left ?? 12,
+                            };
+                        }
+                    }
+                    if (value.align) {
+                        next.layoutAlign = value.align;
+                        next.layoutAlignCross = value.alignCross || value.align;
+                    }
+                    if (value.alignCross) next.layoutAlignCross = value.alignCross;
+                    if (value.alignMain) next.layoutAlignMain = value.alignMain;
+                    if (value.flow === 'grid' || next.layoutFlow === 'grid') {
+                        if (value.gridColumns !== undefined) {
+                            const num = Number(value.gridColumns);
+                            next.layoutGridColumns = Number.isFinite(num) ? Math.max(1, Math.floor(num)) : next.layoutGridColumns;
+                        }
+                        if (value.gridRows !== undefined) {
+                            const num = Number(value.gridRows);
+                            next.layoutGridRows = Number.isFinite(num) ? Math.max(1, Math.floor(num)) : next.layoutGridRows;
+                        }
+                        if (value.gridColumnGap !== undefined) {
+                            const num = Number(value.gridColumnGap);
+                            next.layoutGridColumnGap = Number.isFinite(num) ? Math.max(0, num) : next.layoutGridColumnGap;
+                        }
+                        if (value.gridRowGap !== undefined) {
+                            const num = Number(value.gridRowGap);
+                            next.layoutGridRowGap = Number.isFinite(num) ? Math.max(0, num) : next.layoutGridRowGap;
+                        }
+                        if (value.gridColumnMode) next.layoutGridColumnMode = value.gridColumnMode;
+                        if (value.gridRowMode) next.layoutGridRowMode = value.gridRowMode;
+                        if (!value.widthMode) next.layoutWidthMode = 'hug';
+                        if (!value.heightMode) next.layoutHeightMode = 'hug';
+                    }
+                    if (value.widthMode) next.layoutWidthMode = value.widthMode;
+                    if (value.heightMode) next.layoutHeightMode = value.heightMode;
+                    if (Number.isFinite(value.width)) next.width = value.width;
+                    if (Number.isFinite(value.height)) next.height = value.height;
+                    if (typeof value.clipContent === 'boolean') {
+                        if (shape.type === 'frame') {
+                            next.clipContent = value.clipContent;
+                        } else if (shape.type === 'group') {
+                            next.clipChildren = value.clipContent;
+                        }
+                    }
+                    next.layoutAxis = next.layoutAxis || shape.layoutAxis || 'vertical';
+                    if (!Number.isFinite(next.layoutSpacing)) {
+                        next.layoutSpacing = Number.isFinite(shape.layoutSpacing) ? shape.layoutSpacing : 8;
+                    }
+                    if (next.layoutPadding === undefined) {
+                        next.layoutPadding =
+                            shape.layoutPadding !== undefined
+                                ? shape.layoutPadding
+                                : { top: 12, right: 12, bottom: 12, left: 12 };
+                    }
+                    if (!next.layoutWidthMode) next.layoutWidthMode = shape.layoutWidthMode || 'fixed';
+                    if (!next.layoutHeightMode) next.layoutHeightMode = shape.layoutHeightMode || 'fixed';
+                    return next;
+                }
+                case 'layoutChild': {
+                    const next = { ...shape };
+                    if (value?.widthMode) next.layoutWidthMode = value.widthMode;
+                    if (value?.heightMode) next.layoutHeightMode = value.heightMode;
+                    if (value?.width != null) next.width = value.width;
+                    if (value?.height != null) next.height = value.height;
+                    return next;
                 }
                 case 'arc': {
                     if (shape.type !== 'circle' && shape.type !== 'ellipse') {
@@ -3505,16 +4235,25 @@ export default function Canvas({
         };
 
         let didApply = false;
-        applyChange((prev) =>
-            prev.map((shape) => {
+        const targetShapeCurrent = shapesRef.current.find((s) => s.id === targetId) || null;
+        const autoLayoutParentId =
+            payload.type === 'layout'
+                ? targetId
+                : targetShapeCurrent && targetShapeCurrent.parentId != null
+                    ? targetShapeCurrent.parentId
+                    : null;
+
+        applyChange((prev) => {
+            const mapped = prev.map((shape) => {
                 if (shape.id !== targetId) return shape;
                 const nextShape = applyForShape(shape);
                 if (nextShape !== shape) {
                     didApply = true;
                 }
                 return nextShape;
-            })
-        );
+            });
+            return autoLayoutParentId != null ? applyAutoLayoutForParent(mapped, autoLayoutParentId) : mapped;
+        });
 
         if (typeof onShapePropertyRequestHandled === 'function') {
             onShapePropertyRequestHandled(version, didApply);
@@ -3524,6 +4263,152 @@ export default function Canvas({
         onShapePropertyRequestHandled,
         shapePropertyRequest,
     ]);
+
+    useEffect(() => {
+        if (!alignRequest) return;
+        const { version, mode } = alignRequest;
+        const finish = (ok = false) => {
+            if (typeof onAlignRequestHandled === 'function') {
+                onAlignRequestHandled(version ?? null, ok);
+            }
+        };
+
+        const ids = selectedIds.length ? selectedIds : selectedId != null ? [selectedId] : [];
+        if (!mode || ids.length < 2) {
+            finish(false);
+            return;
+        }
+        const idSet = new Set(ids);
+        const current = shapesRef.current.filter((s) => idSet.has(s.id));
+        const alignable = current
+            .map((shape) => {
+                if (!shape || shape.locked) return null;
+                const parent =
+                    shape.parentId != null
+                        ? shapesRef.current.find((candidate) => candidate.id === shape.parentId)
+                        : null;
+                const isAutoChild =
+                    parent && parent.layout === 'auto' && (shape.layoutPositioning || 'auto') === 'auto';
+                if (isAutoChild) return null;
+                const box = getShapeBoundingBox(shape);
+                if (!box) return null;
+                return { shape, box, parent };
+            })
+            .filter(Boolean);
+
+        if (alignable.length < 2) {
+            finish(false);
+            return;
+        }
+
+        const bounds = unionBoundingBoxes(alignable.map((entry) => entry.box));
+        if (!bounds) {
+            finish(false);
+            return;
+        }
+
+        const deltas = new Map();
+        const modeParts = (() => {
+            switch (mode) {
+                case 'top-left':
+                    return { h: 'left', v: 'top' };
+                case 'top-center':
+                    return { h: 'center', v: 'top' };
+                case 'top-right':
+                    return { h: 'right', v: 'top' };
+                case 'middle-left':
+                case 'left':
+                    return { h: 'left', v: 'middle' };
+                case 'center':
+                    return { h: 'center', v: 'middle' };
+                case 'middle-right':
+                case 'right':
+                    return { h: 'right', v: 'middle' };
+                case 'bottom-left':
+                    return { h: 'left', v: 'bottom' };
+                case 'bottom-center':
+                    return { h: 'center', v: 'bottom' };
+                case 'bottom-right':
+                    return { h: 'right', v: 'bottom' };
+                case 'top':
+                    return { h: null, v: 'top' };
+                case 'bottom':
+                    return { h: null, v: 'bottom' };
+                case 'middle':
+                    return { h: null, v: 'middle' };
+                default:
+                    return { h: null, v: null };
+            }
+        })();
+        alignable.forEach(({ shape, box }) => {
+            let dx = 0;
+            let dy = 0;
+            if (modeParts.h === 'left') {
+                dx = bounds.left - box.left;
+            } else if (modeParts.h === 'right') {
+                dx = bounds.right - box.right;
+            } else if (modeParts.h === 'center') {
+                dx = (bounds.left + bounds.right) / 2 - (box.left + box.right) / 2;
+            }
+            if (modeParts.v === 'top') {
+                dy = bounds.top - box.top;
+            } else if (modeParts.v === 'bottom') {
+                dy = bounds.bottom - box.bottom;
+            } else if (modeParts.v === 'middle') {
+                dy = (bounds.top + bounds.bottom) / 2 - (box.top + box.bottom) / 2;
+            }
+            if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+                deltas.set(shape.id, { dx, dy });
+            }
+        });
+
+        if (!deltas.size) {
+            finish(true);
+            return;
+        }
+
+        applyChange((prev) => {
+            let changed = false;
+            const parentIds = new Set();
+            const next = prev.map((shape) => {
+                const delta = deltas.get(shape.id);
+                if (!delta) return shape;
+                const { dx, dy } = delta;
+                if (!dx && !dy) return shape;
+
+                let updated = shape;
+                if (shape.type === 'path') {
+                    const points = translatePathPoints(getPathPoints(shape), dx, dy);
+                    updated = { ...shape, x: (shape.x || 0) + dx, y: (shape.y || 0) + dy, points };
+                } else if (shape.type === 'line') {
+                    const points = translateLinePoints(Array.isArray(shape.points) ? shape.points : [], dx, dy);
+                    updated = { ...shape, points, x: (shape.x || 0) + dx, y: (shape.y || 0) + dy };
+                } else {
+                    updated = { ...shape, x: (shape.x || 0) + dx, y: (shape.y || 0) + dy };
+                }
+
+                if (updated !== shape) {
+                    changed = true;
+                    if (updated.parentId != null) {
+                        const parent = prev.find((s) => s.id === updated.parentId);
+                        if (parent && parent.layout === 'auto') {
+                            parentIds.add(parent.id);
+                        }
+                    }
+                }
+                return updated;
+            });
+
+            let withLayout = next;
+            parentIds.forEach((pid) => {
+                withLayout = applyAutoLayoutForParent(withLayout, pid);
+            });
+
+            return changed ? withLayout : prev;
+        });
+
+        finish(true);
+    }, [alignRequest, applyChange, onAlignRequestHandled, selectedId, selectedIds]);
 
     useEffect(() => {
         if (!selectedId) return;
@@ -3696,7 +4581,12 @@ export default function Canvas({
                     fillType: resolvedFillType,
                     fillGradient: resolvedFillType === 'gradient' ? resolvedFillGradient : null,
                 });
-                applyChange((prev) => insertShapeAtTop(prev, newShape));
+                const insertAnchor = getInsertAnchorForParent(containerId ?? null);
+                applyChange((prev) => {
+                    const next = insertShapeAboveSibling(prev, newShape, insertAnchor);
+                    const parentId = containerId ?? null;
+                    return parentId != null ? applyAutoLayoutForParent(next, parentId) : next;
+                });
                 pathInteractionRef.current = {
                     shapeId: newShape.id,
                     pendingPoint: { index: 0, start: pointer, hasDragged: false, altKey },
@@ -3767,11 +4657,13 @@ export default function Canvas({
         if (dragTools.includes(selectedTool)) {
             const pos = getCanvasPointer();
             if (!pos) return;
+            const pointerContainerId =
+                containerIdFromTarget != null ? containerIdFromTarget : getContainerIdAtPoint(pos);
             const baseProps = {
                 x: pos.x,
                 y: pos.y,
                 rotation: 0,
-                parentId: containerIdFromTarget ?? undefined,
+                parentId: selectedTool === 'frame' ? null : pointerContainerId ?? undefined,
             };
             let newShape = null;
             if (selectedTool === 'rectangle') {
@@ -3854,7 +4746,7 @@ export default function Canvas({
                     strokeType: resolvedStrokeType,
                     strokeWidth: effectiveStrokeWidth,
                     rotation: 0,
-                    parentId: containerIdFromTarget ?? undefined,
+                    parentId: pointerContainerId ?? undefined,
                 });
             } else if (selectedTool === 'frame') {
                 newShape = createShape('frame', {
@@ -3881,7 +4773,12 @@ export default function Canvas({
             currentDrawingIdRef.current = newShape.id;
             drawingStartRef.current = pos;
             isDrawingRef.current = true;
-            applyChange((prev) => insertShapeAtTop(prev, newShape));
+            const insertAnchor = getInsertAnchorForParent(newShape.parentId ?? null);
+            applyChange((prev) => {
+                const next = insertShapeAboveSibling(prev, newShape, insertAnchor);
+                const parentId = newShape.parentId ?? null;
+                return parentId != null ? applyAutoLayoutForParent(next, parentId) : next;
+            });
             selectSingle(newShape.id);
             return;
         }
@@ -3916,7 +4813,11 @@ export default function Canvas({
                 letterSpacing: resolvedTextOptions.letterSpacing,
             });
             newShape.name = getNextName(newShape.type);
-            applyChange((prev) => insertShapeAtTop(prev, newShape));
+            const insertAnchor = getInsertAnchorForParent(parentId ?? null);
+            applyChange((prev) => {
+                const next = insertShapeAboveSibling(prev, newShape, insertAnchor);
+                return parentId != null ? applyAutoLayoutForParent(next, parentId) : next;
+            });
             pendingTextEditRef.current = newShape.id;
             setSelectedId(newShape.id);
             if (typeof onToolChange === 'function') onToolChange('select');
@@ -3931,9 +4832,176 @@ export default function Canvas({
 
 
     // handle mouse move for panning (hand tool) and drawing
-    const handleStageMouseMove = () => {
+    const handleStageMouseMove = (e) => {
         const stage = stageRef.current;
         if (!stage) return;
+        const evt = e?.evt;
+        const altKey = !!(evt?.altKey);
+        const metaAlt = altKey && (!!evt?.metaKey || !!evt?.ctrlKey);
+
+        // distance measurement overlay
+        if (altKey && isSelectLikeTool) {
+            const baseId = selectedIds?.length ? selectedIds[selectedIds.length - 1] : selectedId;
+            const baseShape = getShapeById(baseId, shapesRef.current);
+            if (baseShape) {
+                const pointer = getCanvasPointer();
+                const pickTarget = () => {
+                    if (!pointer) return null;
+                    // If meta+alt and base is container, prefer its descendants
+                    if (metaAlt && isContainerShape(baseShape)) {
+                        const childId = pickTopmostChildAtPoint(baseShape, pointer.x, pointer.y);
+                        if (childId != null) return getShapeById(childId, shapesRef.current);
+                    }
+                    // otherwise topmost visible shape under pointer (excluding base)
+                    for (let i = shapesRef.current.length - 1; i >= 0; i -= 1) {
+                        const s = shapesRef.current[i];
+                        if (!s || s.id === baseId) continue;
+                        if (s.visible === false || s.locked) continue;
+                        if (s.pageId && s.pageId !== activePageId) continue;
+                        if (pointInShape(s, pointer.x, pointer.y)) {
+                            return s;
+                        }
+                    }
+                    return null;
+                };
+                        const targetShape = pickTarget();
+                        if (targetShape) {
+                            const baseBox = getShapeBoundingBox(baseShape);
+                            const targetBox = getShapeBoundingBox(targetShape);
+                            if (baseBox && targetBox) {
+                                const baseContainsTarget =
+                                    baseBox.left <= targetBox.left &&
+                                    baseBox.right >= targetBox.right &&
+                                    baseBox.top <= targetBox.top &&
+                                    baseBox.bottom >= targetBox.bottom;
+                                const targetContainsBase =
+                                    targetBox.left <= baseBox.left &&
+                                    targetBox.right >= baseBox.right &&
+                                    targetBox.top <= baseBox.top &&
+                                    targetBox.bottom >= baseBox.bottom;
+                                if (baseContainsTarget || targetContainsBase) {
+                                    const outer = baseContainsTarget ? baseBox : targetBox;
+                                    const inner = baseContainsTarget ? targetBox : baseBox;
+                                    const midY = (inner.top + inner.bottom) / 2;
+                                    const midX = (inner.left + inner.right) / 2;
+                                    const leftGap = Math.max(0, inner.left - outer.left);
+                                    const rightGap = Math.max(0, outer.right - inner.right);
+                                    const topGap = Math.max(0, inner.top - outer.top);
+                                    const bottomGap = Math.max(0, outer.bottom - inner.bottom);
+                                    setMeasurementOverlay({
+                                        type: 'contain',
+                                        baseId,
+                                        targetId: targetShape.id,
+                                        sides: {
+                                            left: { x1: outer.left, y1: midY, x2: inner.left, y2: midY, dist: Math.round(leftGap) },
+                                            right: { x1: inner.right, y1: midY, x2: outer.right, y2: midY, dist: Math.round(rightGap) },
+                                            top: { x1: midX, y1: outer.top, x2: midX, y2: inner.top, dist: Math.round(topGap) },
+                                            bottom: { x1: midX, y1: inner.bottom, x2: midX, y2: outer.bottom, dist: Math.round(bottomGap) },
+                                        },
+                                    });
+                                    return;
+                                }
+                                const h = (() => {
+                                    const overlapYTop = Math.max(baseBox.top, targetBox.top);
+                                    const overlapYBottom = Math.min(baseBox.bottom, targetBox.bottom);
+                                    const midY = overlapYTop <= overlapYBottom
+                                        ? (overlapYTop + overlapYBottom) / 2
+                                : (Math.min(baseBox.bottom, targetBox.bottom) + Math.max(baseBox.top, targetBox.top)) / 2;
+                            // gap left/right
+                            let gap = 0;
+                            let x1 = 0;
+                            let x2 = 0;
+                            if (targetBox.left >= baseBox.right) {
+                                gap = targetBox.left - baseBox.right;
+                                x1 = baseBox.right;
+                                x2 = targetBox.left;
+                            } else if (baseBox.left >= targetBox.right) {
+                                gap = baseBox.left - targetBox.right;
+                                x1 = targetBox.right;
+                                x2 = baseBox.left;
+                            } else {
+                                // overlap in X: measure side-to-side smallest offset
+                                const gapLeft = Math.abs(targetBox.left - baseBox.left);
+                                const gapRight = Math.abs(targetBox.right - baseBox.right);
+                                if (gapLeft <= gapRight) {
+                                    gap = gapLeft;
+                                    x1 = Math.min(baseBox.left, targetBox.left);
+                                    x2 = Math.max(baseBox.left, targetBox.left);
+                                } else {
+                                    gap = gapRight;
+                                    x1 = Math.min(baseBox.right, targetBox.right);
+                                    x2 = Math.max(baseBox.right, targetBox.right);
+                                }
+                            }
+                            return {
+                                x1,
+                                y1: midY,
+                                x2,
+                                y2: midY,
+                                dist: Math.max(0, Math.round(gap)),
+                            };
+                        })();
+                        const v = (() => {
+                            const overlapXLeft = Math.max(baseBox.left, targetBox.left);
+                            const overlapXRight = Math.min(baseBox.right, targetBox.right);
+                            const midX = overlapXLeft <= overlapXRight
+                                ? (overlapXLeft + overlapXRight) / 2
+                                : (Math.min(baseBox.right, targetBox.right) + Math.max(baseBox.left, targetBox.left)) / 2;
+                            let gap = 0;
+                            let y1 = 0;
+                            let y2 = 0;
+                            if (targetBox.top >= baseBox.bottom) {
+                                gap = targetBox.top - baseBox.bottom;
+                                y1 = baseBox.bottom;
+                                y2 = targetBox.top;
+                            } else if (baseBox.top >= targetBox.bottom) {
+                                gap = baseBox.top - targetBox.bottom;
+                                y1 = targetBox.bottom;
+                                y2 = baseBox.top;
+                            } else {
+                                const gapTop = Math.abs(targetBox.top - baseBox.top);
+                                const gapBottom = Math.abs(targetBox.bottom - baseBox.bottom);
+                                if (gapTop <= gapBottom) {
+                                    gap = gapTop;
+                                    y1 = Math.min(baseBox.top, targetBox.top);
+                                    y2 = Math.max(baseBox.top, targetBox.top);
+                                } else {
+                                    gap = gapBottom;
+                                    y1 = Math.min(baseBox.bottom, targetBox.bottom);
+                                    y2 = Math.max(baseBox.bottom, targetBox.bottom);
+                                }
+                            }
+                            return {
+                                x1: midX,
+                                y1,
+                                x2: midX,
+                                y2,
+                                dist: Math.max(0, Math.round(gap)),
+                            };
+                        })();
+                        const showH = h.dist > 0;
+                        const showV = v.dist > 0;
+                        setMeasurementOverlay({
+                            baseId,
+                            targetId: targetShape.id,
+                            horizontal: h,
+                            vertical: v,
+                            showH,
+                            showV,
+                            type: 'gap',
+                        });
+                    } else {
+                        setMeasurementOverlay(null);
+                    }
+                } else {
+                    setMeasurementOverlay(null);
+                }
+            } else {
+                setMeasurementOverlay(null);
+            }
+        } else {
+            if (measurementOverlay) setMeasurementOverlay(null);
+        }
         if (selectedTool === 'path') {
             const pointer = getCanvasPointer();
             const state = pathInteractionRef.current;
@@ -4885,6 +5953,28 @@ export default function Canvas({
 
     const handleTransformEnd = (shape, node) => {
         const id = shape.id;
+        const reflowAutoAncestors = (state, ids) => {
+            if (!ids || !ids.length) return state;
+            const queue = [...ids.filter(Boolean)];
+            const visited = new Set();
+            let nextState = state;
+            while (queue.length) {
+                const pid = queue.shift();
+                if (visited.has(pid)) continue;
+                visited.add(pid);
+                nextState = applyAutoLayoutForParent(nextState, pid);
+                const parentShape = nextState.find((s) => s.id === pid);
+                const ancestorId = parentShape?.parentId;
+                if (ancestorId != null) {
+                    const ancestor = nextState.find((s) => s.id === ancestorId);
+                    if (ancestor?.layout === 'auto') {
+                        queue.push(ancestorId);
+                    }
+                }
+            }
+            return nextState;
+        };
+
         if (shape.type === 'frame' || shape.type === 'group') {
             const scaleX = node.scaleX();
             const scaleY = node.scaleY();
@@ -4900,8 +5990,12 @@ export default function Canvas({
             const scaleFactorX = prevWidth ? newWidth / prevWidth : 1;
             const scaleFactorY = prevHeight ? newHeight / prevHeight : 1;
             const nextContainer = { x: nextX, y: nextY };
-            applyChange((prev) =>
-                prev.map((s) => {
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) => {
                     if (s.id === id) {
                         return { ...s, x: nextX, y: nextY, width: newWidth, height: newHeight };
                     }
@@ -4915,8 +6009,9 @@ export default function Canvas({
                         );
                     }
                     return s;
-                })
-            );
+                });
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         } else if (shape.type === 'rectangle') {
             const scaleX = node.scaleX();
             const scaleY = node.scaleY();
@@ -4926,7 +6021,18 @@ export default function Canvas({
             // reset scale back to1
             node.scaleX(1);
             node.scaleY(1);
-            applyChange((prev) => prev.map((s) => (s.id === id ? { ...s, width: newWidth, height: newHeight, x: node.x(), y: node.y(), rotation: snapAngle(rotation) } : s)));
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) =>
+                    s.id === id
+                        ? { ...s, width: newWidth, height: newHeight, x: node.x(), y: node.y(), rotation: snapAngle(rotation) }
+                        : s
+                );
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         } else if (shape.type === 'circle') {
             const scaleX = node.scaleX();
             const scaleY = node.scaleY();
@@ -4946,13 +6052,18 @@ export default function Canvas({
             const rotation = node.rotation() || 0;
             node.scaleX(1);
             node.scaleY(1);
-            applyChange((prev) =>
-                prev.map((s) =>
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) =>
                     s.id === id
                         ? { ...s, radius: newRadius, x: node.x(), y: node.y(), rotation: snapAngle(rotation) }
                         : s
-                )
-            );
+                );
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         } else if (shape.type === 'ellipse') {
             const scaleX = node.scaleX();
             const scaleY = node.scaleY();
@@ -4976,8 +6087,12 @@ export default function Canvas({
             const rotation = node.rotation() || 0;
             node.scaleX(1);
             node.scaleY(1);
-            applyChange((prev) =>
-                prev.map((s) =>
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) =>
                     s.id === id
                         ? {
                             ...s,
@@ -4988,8 +6103,9 @@ export default function Canvas({
                             rotation: snapAngle(rotation),
                         }
                         : s
-                )
-            );
+                );
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         } else if (isPolygonLikeShape(shape)) {
             const scaleVal = node.scaleX();
 
@@ -5021,8 +6137,12 @@ export default function Canvas({
                 snappedRotation
             );
 
-            applyChange((prev) =>
-                prev.map((s) =>
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) =>
                     s.id === id
                         ? {
                             ...s,
@@ -5033,8 +6153,9 @@ export default function Canvas({
                             points: updatedPoints,
                         }
                         : s
-                )
-            );
+                );
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         } else if (shape.type === 'line') {
             const rotation = node.rotation() || 0;
             const transform = typeof node.getTransform === 'function' ? node.getTransform().copy() : null;
@@ -5052,13 +6173,18 @@ export default function Canvas({
             }
             if (typeof node.scaleX === 'function') node.scaleX(1);
             if (typeof node.scaleY === 'function') node.scaleY(1);
-            applyChange((prev) =>
-                prev.map((s) =>
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) =>
                     s.id === id
                         ? { ...s, points: mappedPoints, rotation: snapAngle(rotation), x: 0, y: 0 }
                         : s
-                )
-            );
+                );
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         } else if (shape.type === 'path') {
             const transform = typeof node.getTransform === 'function' ? node.getTransform().copy() : null;
             if (!transform) return;
@@ -5089,9 +6215,14 @@ export default function Canvas({
             node.scaleX(1);
             node.scaleY(1);
             node.rotation(0);
-            applyChange((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, points: nextPoints } : s))
-            );
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) => (s.id === id ? { ...s, points: nextPoints } : s));
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         } else if (shape.type === 'text') {
             const scaleX = node.scaleX();
             const scaleY = node.scaleY();
@@ -5100,8 +6231,12 @@ export default function Canvas({
             const rotation = node.rotation() || 0;
             node.scaleX(1);
             node.scaleY(1);
-            applyChange((prev) =>
-                prev.map((s) =>
+            const parentId = shape.parentId;
+            const reflowTargets = [];
+            if (shape.layout === 'auto') reflowTargets.push(id);
+            if (parentId != null) reflowTargets.push(parentId);
+            applyChange((prev) => {
+                const mapped = prev.map((s) =>
                     s.id === id
                         ? {
                             ...s,
@@ -5112,8 +6247,9 @@ export default function Canvas({
                             rotation: snapAngle(rotation),
                         }
                         : s
-                )
-            )
+                );
+                return reflowAutoAncestors(mapped, reflowTargets);
+            });
         }
     };
 
@@ -5128,7 +6264,8 @@ export default function Canvas({
         const textNode = stage.findOne(`#shape-${shape.id}`);
         if (!textNode) return;
 
-        selectSingle(shape.id)
+        selectSingle(shape.id);
+        activeTextEditIdRef.current = shape.id;
 
         const originalText = typeof shape.text === 'string' ? shape.text : '';
         const originalHeight =
@@ -5303,6 +6440,7 @@ export default function Canvas({
             }
             stage.batchDraw?.();
             host.style.cursor = previousCursor;
+            activeTextEditIdRef.current = null;
         };
 
         const commit = (finalHeight = currentHeight) => {
@@ -5361,6 +6499,7 @@ export default function Canvas({
                 const measuredHeight = updateHeightFromContent();
                 applyLayout();
                 commit(measuredHeight);
+                focusNextTextLayerEdit(shape.id, evt.shiftKey ? -1 : 1);
             }
             evt.stopPropagation();
         };
@@ -5586,6 +6725,7 @@ export default function Canvas({
                 childId = pickTopmostChildAtPoint(shape, pointer.x, pointer.y);
             }
             setSelectedId(childId ?? shape.id);
+            setSelectedIds([childId ?? shape.id]);
 
             // Make absolutely sure no drag continues from the dblclick gesture
             try { event?.target?.stopDrag?.(); } catch { }
@@ -5600,15 +6740,15 @@ export default function Canvas({
             setActiveContainerPath([null, ...path]);
         }
         if (shape.type === 'text') {
-            openTextEditor(shape.id);
+            // Only select on double-click; text edit via Enter or toolbar
+            selectSingle(shape.id);
+            setSelectedIds([shape.id]);
             return;
         }
 
-        if (shape.type === 'path' || canConvertShapeToPath(shape)) {
-            enterAnchorModeForShape(shape.id);
-        } else {
-            selectSingle(shape.id);
-        }
+        // Non-container children: just select on double-click (no edit mode)
+        selectSingle(shape.id);
+        setSelectedIds([shape.id]);
     };
 
 
@@ -6122,10 +7262,10 @@ export default function Canvas({
         );
     };
 
-    const renderShapeNode = (shape) => {
-        if (shape.visible === false) {
-            return null;
-        }
+        const renderShapeNode = (shape) => {
+            if (shape.visible === false) {
+                return null;
+            }
         const opacity = clampValue(
             typeof shape.opacity === 'number' ? shape.opacity : 1,
             0,
@@ -6135,11 +7275,11 @@ export default function Canvas({
         const isSelectable = isSelectLikeTool;
         const isLocked = !!shape.locked;
         const canDragThis = isSelectable && !isLocked && Array.isArray(selectedIds) && selectedIds.includes(shape.id); // ✅ drag only if selected
-        const commonProps = {
-            key: shape.id,
-            id: `shape-${shape.id}`,
-            name: 'shape',
-            draggable: canDragThis,
+            const commonProps = {
+                key: shape.id,
+                id: `shape-${shape.id}`,
+                name: 'shape',
+                draggable: canDragThis,
             listening: true,
             onClick: (e) => handleShapeClick(shape, e),
             onTap: (e) => handleShapeClick(shape, e),
@@ -6160,27 +7300,150 @@ export default function Canvas({
             opacity,
             globalCompositeOperation: blendMode,
         };
-        const fillProps = getFillPropsForShape(shape);
+            const fillProps = getFillPropsForShape(shape);
 
-        switch (shape.type) {
-            case 'frame':
-                return (
-                    <Rect
-                        {...commonProps}
-                        name="frame"
-                        x={shape.x}
-                        y={shape.y}
-                        width={shape.width || 0}
-                        height={shape.height || 0}
-                        offset={{ x: (shape.width || 0) / 2, y: (shape.height || 0) / 2 }}
-                        {...fillProps}
-                        stroke={shape.stroke || '#1f2937'}
-                        strokeWidth={shape.strokeWidth || 1}
-                    />
-                );
-            case 'group':
-                const isSelected = Array.isArray(selectedIds) && selectedIds.includes(shape.id);
-                return (
+            switch (shape.type) {
+                case 'frame':
+                    const frameWidth = shape.width || 0;
+                    const frameHeight = shape.height || 0;
+                    const halfW = frameWidth / 2;
+                    const halfH = frameHeight / 2;
+                    const left = (shape.x || 0) - halfW;
+                    const top = (shape.y || 0) - halfH;
+                    const frameSelected = Array.isArray(selectedIds) && selectedIds.includes(shape.id);
+                    const gridLines = [];
+                    if (frameSelected && shape.layout === 'auto' && shape.layoutFlow === 'grid') {
+                        const cols = Math.max(1, Math.floor(shape.layoutGridColumns || 1));
+                        let rows = Math.max(1, Math.floor(shape.layoutGridRows || 1));
+                        const colGap = Number.isFinite(shape.layoutGridColumnGap) ? Math.max(0, shape.layoutGridColumnGap) : 0;
+                        const rowGap = Number.isFinite(shape.layoutGridRowGap) ? Math.max(0, shape.layoutGridRowGap) : 0;
+                        const padRaw = shape.layoutPadding;
+                        const pad =
+                            typeof padRaw === 'number'
+                            ? { top: padRaw, right: padRaw, bottom: padRaw, left: padRaw }
+                                : {
+                                    top: Number.isFinite(padRaw?.top) ? padRaw.top : 12,
+                                    right: Number.isFinite(padRaw?.right) ? padRaw.right : 12,
+                                    bottom: Number.isFinite(padRaw?.bottom) ? padRaw.bottom : 12,
+                                    left: Number.isFinite(padRaw?.left) ? padRaw.left : 12,
+                                };
+                        const innerWidth = Math.max(0, frameWidth - pad.left - pad.right);
+                        const innerHeight = Math.max(0, frameHeight - pad.top - pad.bottom);
+
+                        const children = childrenMap.get(shape.id) || [];
+                        const autoKids = children.filter((c) => (c.layoutPositioning || 'auto') === 'auto' && c.visible !== false);
+                        const dims = autoKids.map((child) => {
+                            const dim = getShapeDimensions(child);
+                            return { id: child.id, width: dim.width || 0, height: dim.height || 0 };
+                        });
+
+                        const colMode = shape.layoutGridColumnMode || 'fixed';
+                        const rowMode = shape.layoutGridRowMode || 'fixed';
+                        const colWidths = new Array(cols).fill(0);
+                        const rowHeights = new Array(rows).fill(0);
+                        const maxChildWidth = Math.max(0, ...dims.map((d) => d.width));
+                        const maxChildHeight = Math.max(0, ...dims.map((d) => d.height));
+                        const baseColWidth =
+                            colMode === 'fill'
+                                ? (cols > 0 ? Math.max(0, (innerWidth - Math.max(0, cols - 1) * colGap) / cols) : 0)
+                                : colMode === 'hug'
+                                    ? Math.max(1, maxChildWidth || 1)
+                                    : Math.max(0, (innerWidth - Math.max(0, cols - 1) * colGap) / cols);
+                        const baseRowHeight =
+                            rowMode === 'fill'
+                                ? (rows > 0 ? Math.max(0, (innerHeight - Math.max(0, rows - 1) * rowGap) / rows) : 0)
+                                : rowMode === 'hug'
+                                    ? Math.max(1, maxChildHeight || 1)
+                                    : Math.max(0, (innerHeight - Math.max(0, rows - 1) * rowGap) / rows);
+                        autoKids.forEach((child, idx) => {
+                            const dim = dims.find((d) => d.id === child.id) || { width: 0, height: 0 };
+                            const row = Math.floor(idx / cols);
+                            const col = idx % cols;
+                            colWidths[col] = Math.max(colWidths[col], dim.width, baseColWidth);
+                            rowHeights[row] = Math.max(rowHeights[row], dim.height, baseRowHeight);
+                        });
+                        const neededRows = Math.ceil((autoKids.length || 1) / cols);
+                        if (neededRows > rows) {
+                            const extra = neededRows - rows;
+                            for (let i = 0; i < extra; i += 1) {
+                                rowHeights.push(baseRowHeight);
+                            }
+                            rows = neededRows;
+                        }
+
+                        // Fallback to uniform cells when no children
+                        if (!autoKids.length) {
+                            const totalColGap = Math.max(0, cols - 1) * colGap;
+                            const totalRowGap = Math.max(0, rows - 1) * rowGap;
+                            const cellW = cols > 0 ? (innerWidth - totalColGap) / cols : innerWidth;
+                            const cellH = rows > 0 ? (innerHeight - totalRowGap) / rows : innerHeight;
+                            colWidths.fill(Math.max(cellW, baseColWidth));
+                            rowHeights.fill(Math.max(cellH, baseRowHeight));
+                        }
+                        for (let c = 0; c < cols; c += 1) colWidths[c] = Math.max(colWidths[c], baseColWidth);
+                        for (let r = 0; r < rows; r += 1) rowHeights[r] = Math.max(rowHeights[r], baseRowHeight);
+
+                        const startX = left + pad.left;
+                        const startY = top + pad.top;
+
+                        const colOffsets = [];
+                        colWidths.reduce((acc, w, idx) => {
+                            colOffsets[idx] = acc;
+                            return acc + w + colGap;
+                        }, 0);
+                        const rowOffsets = [];
+                        rowHeights.reduce((acc, h, idx) => {
+                            rowOffsets[idx] = acc;
+                            return acc + h + rowGap;
+                        }, 0);
+
+                        const strokeColor = '#7aa7ff';
+                        // division lines at gap centers
+                        for (let c = 1; c < cols; c += 1) {
+                            const xPos = startX + (colOffsets[c] || 0) - colGap / 2;
+                            gridLines.push(
+                                <Line
+                                    key={`frame-grid-col-${shape.id}-${c}`}
+                                    points={[xPos, top + pad.top, xPos, top + pad.top + innerHeight]}
+                                    stroke={strokeColor}
+                                    strokeWidth={1}
+                                    listening={false}
+                                />
+                            );
+                        }
+                        for (let r = 1; r < rows; r += 1) {
+                            const yPos = startY + (rowOffsets[r] || 0) - rowGap / 2;
+                            gridLines.push(
+                                <Line
+                                    key={`frame-grid-row-${shape.id}-${r}`}
+                                    points={[left + pad.left, yPos, left + pad.left + innerWidth, yPos]}
+                                    stroke={strokeColor}
+                                    strokeWidth={1}
+                                    listening={false}
+                                />
+                            );
+                        }
+                    }
+                    return (
+                        <>
+                            <Rect
+                                {...commonProps}
+                                name="frame"
+                                x={shape.x}
+                                y={shape.y}
+                                width={frameWidth}
+                                height={frameHeight}
+                                offset={{ x: frameWidth / 2, y: frameHeight / 2 }}
+                                {...fillProps}
+                                stroke={shape.stroke || '#1f2937'}
+                                strokeWidth={shape.strokeWidth || 1}
+                            />
+                            {gridLines}
+                        </>
+                    );
+                case 'group':
+                    const isSelected = Array.isArray(selectedIds) && selectedIds.includes(shape.id);
+                    return (
                     <Rect
                         {...commonProps}
                         name="group"
@@ -6625,7 +7888,7 @@ export default function Canvas({
         shapesOnActivePage.forEach((shape) => {
             map.set(shape.id, []);
         });
-        for (let i = shapesOnActivePage.length - 1; i >= 0; i -= 1) {
+        for (let i = 0; i < shapesOnActivePage.length; i += 1) {
             const shape = shapesOnActivePage[i];
             const key = shape.parentId ?? null;
             if (!map.has(key)) {
@@ -7286,19 +8549,29 @@ export default function Canvas({
         });
     };
 
+    const getLayerDropZone = (event, { canDropInside = true } = {}) => {
+        const bounds = event?.currentTarget?.getBoundingClientRect?.();
+        if (!bounds) return 'after';
+        const relativeY = bounds.height ? (event.clientY - bounds.top) / bounds.height : 0.5;
+        if (relativeY <= 0) return 'before';
+        if (relativeY >= 1) return 'after';
+        if (!canDropInside) return relativeY < 0.5 ? 'before' : 'after';
+        if (relativeY < 0.25) return 'before';
+        if (relativeY > 0.75) return 'after';
+        return 'inside';
+    };
+
     const handleLayerDrop = (event, targetId) => {
         event.preventDefault();
         if (!draggedLayerId || !targetId) return;
 
-        const bounds = event.currentTarget.getBoundingClientRect();
-        const relativeY = bounds.height ? (event.clientY - bounds.top) / bounds.height : 0.5;
-        let dropType = 'after';
-        if (relativeY < 0.25) dropType = 'before';
-        else if (relativeY > 0.75) dropType = 'after';
-        else dropType = 'inside';
+        const targetIndex = layerList.findIndex((entry) => entry.shape.id === targetId);
         const targetShape = shapesRef.current.find((shape) => shape.id === targetId) || null;
+        const canDropInside = !!(targetShape && isContainerShape(targetShape) && !targetShape.locked);
+
+        let dropType = getLayerDropZone(event, { canDropInside });
         if (dropType === 'inside' && (!targetShape || !isContainerShape(targetShape) || targetShape.locked)) {
-            dropType = 'after';
+            dropType = getLayerDropZone(event, { canDropInside: false });
         }
         reorderLayers(draggedLayerId, targetId, dropType);
         if (dropType === 'inside') {
@@ -7576,44 +8849,53 @@ export default function Canvas({
                             <div style={{ fontSize: 12, color: '#888' }}>No shapes yet</div>
                         ) : (
                             <>
-                                <div
-                                    onDragOver={(event) => {
-                                        if (!isDraggingLayer) return;
-                                        event.preventDefault();
-                                        setDragOverLayerId(null);
-                                        setDragOverZone('top');
-                                    }}
-                                    onDragEnter={(event) => {
-                                        if (!isDraggingLayer) return;
-                                        event.preventDefault();
-                                        setDragOverLayerId(null);
-                                        setDragOverZone('top');
-                                    }}
-                                    onDragLeave={() => {
-                                        setDragOverZone((zone) => (zone === 'top' ? null : zone));
-                                    }}
-                                    onDrop={(event) => {
-                                        if (!isDraggingLayer || layerList.length === 0) return;
-                                        event.preventDefault();
-                                        const topShapeId = layerList[0]?.shape?.id;
-                                        if (!topShapeId) return;
-                                        reorderLayers(draggedLayerId, topShapeId, 'before');
-                                        setDraggedLayerId(null);
-                                        setDragOverLayerId(null);
-                                        setDragOverZone(null);
-                                    }}
-                                    style={{
-                                        height: isDraggingLayer ? 12 : 0,
-                                        margin: isDraggingLayer ? '0 0 8px' : 0,
-                                        borderRadius: 6,
-                                        border: isDraggingLayer
-                                            ? `1px dashed ${dragOverZone === 'top' ? '#4d90fe' : '#c7d7ff'}`
-                                            : '1px dashed transparent',
-                                        transition: 'all 0.12s ease',
-                                        pointerEvents: isDraggingLayer ? 'auto' : 'none',
-                                    }}
-                                />
-                                {layerList.map(({ shape, depth }) => {
+                                {isDraggingLayer && (
+                                    <div
+                                        onDragOver={(event) => {
+                                            event.preventDefault();
+                                            setDragOverLayerId(null);
+                                            setDragOverZone('top');
+                                        }}
+                                        onDragEnter={(event) => {
+                                            event.preventDefault();
+                                            setDragOverLayerId(null);
+                                            setDragOverZone('top');
+                                        }}
+                                        onDragLeave={(event) => {
+                                            setDragOverZone((zone) => (zone === 'top' ? null : zone));
+                                        }}
+                                        onDrop={(event) => {
+                                            event.preventDefault();
+                                            const topShapeId = layerList[0]?.shape?.id;
+                                            if (!draggedLayerId || !topShapeId) return;
+                                            reorderLayers(draggedLayerId, topShapeId, 'before');
+                                            setDraggedLayerId(null);
+                                            setDragOverLayerId(null);
+                                            setDragOverZone(null);
+                                        }}
+                                        style={{
+                                            position: 'relative',
+                                            height: 10,
+                                            marginBottom: 6,
+                                            pointerEvents: 'auto',
+                                        }}
+                                    >
+                                        {dragOverZone === 'top' && (
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    inset: '3px 4px auto 4px',
+                                                    height: 4,
+                                                    borderRadius: 999,
+                                                    background: '#4d90fe',
+                                                    boxShadow: '0 0 0 1px #c7d7ff',
+                                                    pointerEvents: 'none',
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+                                )}
+                                {layerList.map(({ shape, depth }, index) => {
                                     const fallbackLabel = `${typeLabels[shape.type] || 'Shape'} ${shape.id}`;
                                     const label =
                                         typeof shape.name === 'string' && shape.name.trim()
@@ -7627,6 +8909,10 @@ export default function Canvas({
                                     const isContainer = isContainerShape(shape);
                                     const isCollapsed = isContainer && collapsedContainers.has(shape.id);
                                     const indent = depth * 16;
+                                    const isDropBefore = isDragOver && dragOverZone === 'before';
+                                    const isDropAfter = isDragOver && dragOverZone === 'after';
+                                    const dropBackground = isDragOver && dragOverZone === 'inside';
+                                    const canDropInside = isContainer && !shape.locked;
 
                                     return (
                                         <div
@@ -7637,8 +8923,39 @@ export default function Canvas({
                                                 gap: 4,
                                                 marginBottom: 4,
                                                 paddingLeft: indent,
+                                                position: 'relative',
                                             }}
                                         >
+                                            {isDropBefore && (
+                                                <div
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: -2,
+                                                        left: 6,
+                                                        right: 6,
+                                                        height: 4,
+                                                        borderRadius: 999,
+                                                        background: '#4d90fe',
+                                                        boxShadow: '0 0 0 1px #c7d7ff',
+                                                        pointerEvents: 'none',
+                                                    }}
+                                                />
+                                            )}
+                                            {isDropAfter && (
+                                                <div
+                                                    style={{
+                                                        position: 'absolute',
+                                                        bottom: -2,
+                                                        left: 6,
+                                                        right: 6,
+                                                        height: 4,
+                                                        borderRadius: 999,
+                                                        background: '#4d90fe',
+                                                        boxShadow: '0 0 0 1px #c7d7ff',
+                                                        pointerEvents: 'none',
+                                                    }}
+                                                />
+                                            )}
                                             {isContainer ? (
                                                 <button
                                                     type="button"
@@ -7692,12 +9009,12 @@ export default function Canvas({
                                                 onDragOver={(event) => {
                                                     event.preventDefault();
                                                     setDragOverLayerId(shape.id);
-                                                    setDragOverZone(null);
+                                                    setDragOverZone(getLayerDropZone(event, { canDropInside }));
                                                 }}
                                                 onDragEnter={(event) => {
                                                     event.preventDefault();
                                                     setDragOverLayerId(shape.id);
-                                                    setDragOverZone(null);
+                                                    setDragOverZone(getLayerDropZone(event, { canDropInside }));
                                                 }}
                                                 onDragLeave={(event) => {
                                                     if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -7716,11 +9033,13 @@ export default function Canvas({
                                                     border: 'none',
                                                     background: isDragged
                                                         ? '#dbe9ff'
-                                                        : isDragOver
-                                                            ? '#f0f6ff'
-                                                            : isSelected
-                                                                ? '#e8f2ff'
-                                                                : 'transparent',
+                                                        : dropBackground
+                                                            ? '#eaf1ff'
+                                                            : isDragOver
+                                                                ? '#f0f6ff'
+                                                                : isSelected
+                                                                    ? '#e8f2ff'
+                                                                    : 'transparent',
                                                     borderRadius: 6,
                                                     cursor: isDragged ? 'grabbing' : 'grab',
                                                     color: '#222',
@@ -7746,43 +9065,52 @@ export default function Canvas({
                                         </div>
                                     );
                                 })}
-                                <div
-                                    onDragOver={(event) => {
-                                        if (!isDraggingLayer) return;
-                                        event.preventDefault();
-                                        setDragOverLayerId(null);
-                                        setDragOverZone('bottom');
-                                    }}
-                                    onDragEnter={(event) => {
-                                        if (!isDraggingLayer) return;
-                                        event.preventDefault();
-                                        setDragOverLayerId(null);
-                                        setDragOverZone('bottom');
-                                    }}
-                                    onDragLeave={() => {
-                                        setDragOverZone((zone) => (zone === 'bottom' ? null : zone));
-                                    }}
-                                    onDrop={(event) => {
-                                        if (!isDraggingLayer || layerList.length === 0) return;
-                                        event.preventDefault();
-                                        const bottomShapeId = layerList[layerList.length - 1]?.shape?.id;
-                                        if (!bottomShapeId) return;
-                                        reorderLayers(draggedLayerId, bottomShapeId, 'after');
-                                        setDraggedLayerId(null);
-                                        setDragOverLayerId(null);
-                                        setDragOverZone(null);
-                                    }}
-                                    style={{
-                                        height: isDraggingLayer ? 12 : 0,
-                                        margin: isDraggingLayer ? '8px 0 0' : 0,
-                                        borderRadius: 6,
-                                        border: isDraggingLayer
-                                            ? `1px dashed ${dragOverZone === 'bottom' ? '#4d90fe' : '#c7d7ff'}`
-                                            : '1px dashed transparent',
-                                        transition: 'all 0.12s ease',
-                                        pointerEvents: isDraggingLayer ? 'auto' : 'none',
-                                    }}
-                                />
+                                {isDraggingLayer && (
+                                    <div
+                                        onDragOver={(event) => {
+                                            event.preventDefault();
+                                            setDragOverLayerId(null);
+                                            setDragOverZone('bottom');
+                                        }}
+                                        onDragEnter={(event) => {
+                                            event.preventDefault();
+                                            setDragOverLayerId(null);
+                                            setDragOverZone('bottom');
+                                        }}
+                                        onDragLeave={() => {
+                                            setDragOverZone((zone) => (zone === 'bottom' ? null : zone));
+                                        }}
+                                        onDrop={(event) => {
+                                            event.preventDefault();
+                                            const bottomShapeId = layerList[layerList.length - 1]?.shape?.id;
+                                            if (!draggedLayerId || !bottomShapeId) return;
+                                            reorderLayers(draggedLayerId, bottomShapeId, 'after');
+                                            setDraggedLayerId(null);
+                                            setDragOverLayerId(null);
+                                            setDragOverZone(null);
+                                        }}
+                                        style={{
+                                            position: 'relative',
+                                            height: 10,
+                                            marginTop: 6,
+                                            pointerEvents: 'auto',
+                                        }}
+                                    >
+                                        {dragOverZone === 'bottom' && (
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    inset: 'auto 4px 3px 4px',
+                                                    height: 4,
+                                                    borderRadius: 999,
+                                                    background: '#4d90fe',
+                                                    boxShadow: '0 0 0 1px #c7d7ff',
+                                                    pointerEvents: 'none',
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>
@@ -7900,6 +9228,111 @@ export default function Canvas({
                     </Layer>
                     <Layer listening={isSelectLikeTool}>{renderCornerRadiusHandles()}</Layer>
                     <Layer listening={isSelectLikeTool}>{renderGradientHandles()}</Layer>
+                    {measurementOverlay && (
+                        <Layer listening={false}>
+                            {measurementOverlay.type === 'contain' ? (
+                                <>
+                                    {['left', 'right'].map((side) => {
+                                        const data = measurementOverlay.sides[side];
+                                        if (!data || data.dist < 0) return null;
+                                        return (
+                                            <React.Fragment key={side}>
+                                                <Line
+                                                    points={[data.x1, data.y1, data.x2, data.y2]}
+                                                    stroke="#ef4444"
+                                                    strokeWidth={1.5}
+                                                    listening={false}
+                                                    dash={[4, 4]}
+                                                />
+                                                <Text
+                                                    x={(data.x1 + data.x2) / 2 - 16}
+                                                    y={data.y1 - 16}
+                                                    text={`${data.dist}px`}
+                                                    fontSize={12}
+                                                    fill="#ef4444"
+                                                    listening={false}
+                                                />
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                    {['top', 'bottom'].map((side) => {
+                                        const data = measurementOverlay.sides[side];
+                                        if (!data || data.dist < 0) return null;
+                                        return (
+                                            <React.Fragment key={side}>
+                                                <Line
+                                                    points={[data.x1, data.y1, data.x2, data.y2]}
+                                                    stroke="#ef4444"
+                                                    strokeWidth={1.5}
+                                                    listening={false}
+                                                    dash={[4, 4]}
+                                                />
+                                                <Text
+                                                    x={data.x1 + 8}
+                                                    y={(data.y1 + data.y2) / 2 - 6}
+                                                    text={`${data.dist}px`}
+                                                    fontSize={12}
+                                                    fill="#ef4444"
+                                                    listening={false}
+                                                />
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </>
+                            ) : (
+                                <>
+                                    {measurementOverlay.showH && measurementOverlay.horizontal.dist >= 0 && (
+                                        <>
+                                            <Line
+                                                points={[
+                                                    measurementOverlay.horizontal.x1,
+                                                    measurementOverlay.horizontal.y1,
+                                                    measurementOverlay.horizontal.x2,
+                                                    measurementOverlay.horizontal.y2,
+                                                ]}
+                                                stroke="#ef4444"
+                                                strokeWidth={1.5}
+                                                listening={false}
+                                                dash={[4, 4]}
+                                            />
+                                            <Text
+                                                x={(measurementOverlay.horizontal.x1 + measurementOverlay.horizontal.x2) / 2 - 16}
+                                                y={measurementOverlay.horizontal.y1 - 16}
+                                                text={`${measurementOverlay.horizontal.dist}px`}
+                                                fontSize={12}
+                                                fill="#ef4444"
+                                                listening={false}
+                                            />
+                                        </>
+                                    )}
+                                    {measurementOverlay.showV && measurementOverlay.vertical.dist >= 0 && (
+                                        <>
+                                            <Line
+                                                points={[
+                                                    measurementOverlay.vertical.x1,
+                                                    measurementOverlay.vertical.y1,
+                                                    measurementOverlay.vertical.x2,
+                                                    measurementOverlay.vertical.y2,
+                                                ]}
+                                                stroke="#ef4444"
+                                                strokeWidth={1.5}
+                                                listening={false}
+                                                dash={[4, 4]}
+                                            />
+                                            <Text
+                                                x={measurementOverlay.vertical.x1 + 8}
+                                                y={(measurementOverlay.vertical.y1 + measurementOverlay.vertical.y2) / 2 - 6}
+                                                text={`${measurementOverlay.vertical.dist}px`}
+                                                fontSize={12}
+                                                fill="#ef4444"
+                                                listening={false}
+                                            />
+                                        </>
+                                    )}
+                                </>
+                            )}
+                        </Layer>
+                    )}
                     <PixelGrid
                         scale={scale}
                         stagePos={stagePos}

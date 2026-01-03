@@ -24,7 +24,7 @@ const DEFAULT_FONT_VARIATIONS = [
     { value: 'bold italic', label: 'Bold Italic' },
 ];
 
-const FONT_LIBRARY = [
+const WEB_SAFE_FONTS = [
     { value: 'system-ui', label: 'System UI', variations: DEFAULT_FONT_VARIATIONS },
     { value: '-apple-system', label: 'SF Pro (Apple)', variations: DEFAULT_FONT_VARIATIONS },
     { value: 'BlinkMacSystemFont', label: 'BlinkMacSystemFont', variations: DEFAULT_FONT_VARIATIONS },
@@ -55,6 +55,8 @@ const FONT_LIBRARY = [
     { value: 'serif', label: 'Serif', variations: DEFAULT_FONT_VARIATIONS },
     { value: 'monospace', label: 'Monospace', variations: DEFAULT_FONT_VARIATIONS },
 ];
+
+const FONT_LIBRARY = WEB_SAFE_FONTS;
 
 const DEFAULT_GRADIENT_ANGLES = {
     linear: 0,
@@ -217,6 +219,12 @@ const iconButtonDisabledStyle = {
     opacity: 0.45,
     cursor: 'not-allowed',
 };
+
+const getIconButtonStyles = (active, disabled) => ({
+    ...iconButtonStyle,
+    ...(active ? iconButtonActiveStyle : null),
+    ...(disabled ? iconButtonDisabledStyle : null),
+});
 
 const alignmentGridStyle = {
     display: 'grid',
@@ -1523,12 +1531,17 @@ const clampPercent = (value) => {
     return Math.min(Math.max(value, 0), 100);
 };
 
-const normalizeStyleList = (styles, fallback) => {
+const isStyleHidden = (style) => Boolean(style?.meta && style.meta.hidden);
+
+const normalizeStyleList = (styles, fallback, { allowEmpty = true } = {}) => {
     const list = Array.isArray(styles)
-        ? styles.filter(Boolean)
+        ? [...styles]
         : styles
             ? [styles]
             : [];
+    if (!allowEmpty && list.length === 0) {
+        return [fallback];
+    }
     return list.length ? list : [fallback];
 };
 
@@ -1594,14 +1607,21 @@ const ColorListControl = ({
     fallbackStyle = DEFAULT_FILL_STYLE,
 }) => {
     const normalizedStyles = useMemo(
-        () => normalizeStyleList(styles, fallbackStyle),
+        () => normalizeStyleList(styles, fallbackStyle, { allowEmpty: true }),
         [styles, fallbackStyle]
     );
 
     const handleUpdate = useCallback(
         (nextStyles) => {
             if (typeof onStyleChange !== 'function') return;
-            onStyleChange(nextStyles);
+            const withMeta = Array.isArray(nextStyles)
+                ? nextStyles.map((entry) => {
+                    if (!entry || typeof entry !== 'object') return entry;
+                    if (entry.meta && typeof entry.meta === 'object') return entry;
+                    return { ...entry, meta: { source: 'colorControl' } };
+                })
+                : nextStyles;
+            onStyleChange(withMeta);
         },
         [onStyleChange]
     );
@@ -1645,22 +1665,57 @@ const ColorListControl = ({
     const handleRemove = useCallback(
         (index) => {
             if (disabled) return;
-            if (normalizedStyles.length <= 1) return;
             const next = normalizedStyles.filter((_, i) => i !== index);
-            handleUpdate(next.length ? next : [fallbackStyle]);
+            handleUpdate(next);
         },
         [disabled, fallbackStyle, handleUpdate, normalizedStyles]
     );
 
+    const handleToggleVisibility = useCallback(
+        (index) => {
+            if (disabled) return;
+            const next = normalizedStyles.map((entry, i) =>
+                i === index
+                    ? { ...(entry || {}), meta: { ...(entry?.meta || {}), hidden: !isStyleHidden(entry) } }
+                    : entry
+            );
+            handleUpdate(next);
+        },
+        [disabled, handleUpdate, normalizedStyles]
+    );
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={sectionSubheadingStyle}>{label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={sectionSubheadingStyle}>{label}</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                        type="button"
+                        onClick={handleAdd}
+                        disabled={disabled}
+                        style={{ ...toggleButtonStyle, padding: '6px 10px' }}
+                        title="Add"
+                    >
+                        +
+                    </button>
+                </div>
+            </div>
+
             {normalizedStyles.map((entry, index) => {
                 const { hex, opacity } = deriveHexAndOpacity(entry);
+                const hidden = isStyleHidden(entry);
                 return (
                     <div
                         key={entry?.meta?.id ?? entry?.id ?? index}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'auto 1fr auto auto auto',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: '#2f343d',
+                            borderRadius: 10,
+                            padding: '6px 8px',
+                        }}
                     >
                         <div style={{ flex: '0 0 auto' }}>
                             <ColorControl
@@ -1676,7 +1731,7 @@ const ColorListControl = ({
                             type="text"
                             value={hex}
                             onChange={(event) => handleHexChange(index, event.target.value)}
-                            style={{ ...numberInputStyle, width: 90 }}
+                            style={{ ...numberInputStyle, width: '100%', background: 'transparent', color: '#f8fafc' }}
                             disabled={disabled}
                         />
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1685,31 +1740,32 @@ const ColorListControl = ({
                                 inputMode="decimal"
                                 value={opacity}
                                 onChange={(event) => handleOpacityChange(index, event.target.value)}
-                                style={{ ...numberInputStyle, width: 48, textAlign: 'right' }}
+                                style={{ ...numberInputStyle, width: 46, textAlign: 'right', background: 'transparent', color: '#f8fafc' }}
                                 disabled={disabled}
                             />
                             <span style={fieldLabelStyle}>%</span>
                         </div>
                         <button
                             type="button"
+                            onClick={() => handleToggleVisibility(index)}
+                            disabled={disabled}
+                            style={getIconButtonStyles(hidden, disabled)}
+                            title={hidden ? 'Show' : 'Hide'}
+                        >
+                            {hidden ? 'Show' : 'Hide'}
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => handleRemove(index)}
-                            disabled={disabled || normalizedStyles.length <= 1}
-                            style={{ ...toggleButtonStyle, padding: '6px 8px', alignSelf: 'stretch' }}
+                            disabled={disabled}
+                            style={getIconButtonStyles(false, disabled)}
                             title="Remove"
                         >
-                            ×
+                            —
                         </button>
                     </div>
                 );
             })}
-            <button
-                type="button"
-                onClick={handleAdd}
-                disabled={disabled}
-                style={{ ...toggleButtonStyle, alignSelf: 'flex-start' }}
-            >
-                Add {label}
-            </button>
         </div>
     );
 };
@@ -3548,14 +3604,21 @@ export default function PropertiesPanel({
     onArcChange,
     onPolygonSidesChange = () => { },
     onRadiusChange = () => { },
+    onLayoutChange = () => {},
 }) {
     const isTextShape = shape?.type === 'text';
-    const supportsFill =
-        !shape ||
-        ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame'].includes(
+    const canEditFill =
+        !!shape &&
+        ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'text', 'frame', 'path'].includes(
             shape.type
         );
-    const disableStrokeControls = shape?.type === 'group';
+    const canEditStroke =
+        !!shape &&
+        ['rectangle', 'circle', 'ellipse', 'polygon', 'roundedPolygon', 'line', 'path', 'text', 'frame'].includes(
+            shape.type
+        ) &&
+        shape.type !== 'group';
+    const disableStrokeControls = !canEditStroke;
 
     // ---- current values derived from the active selection ----
 
@@ -3584,6 +3647,7 @@ export default function PropertiesPanel({
     const isPolygonLikeShape = Boolean(
         primaryShape && ['polygon', 'roundedPolygon'].includes(primaryShape.type)
     );
+    const isContainerShape = Boolean(primaryShape && ['frame', 'group'].includes(primaryShape.type));
     const selectedIds = Array.isArray(selectionInfo?.selectedIds)
         ? selectionInfo.selectedIds
         : primaryShape?.id != null
@@ -3615,6 +3679,22 @@ export default function PropertiesPanel({
         ].includes(primaryShape.type)
     );
     const supportsArc = Boolean(primaryShape && ['circle', 'ellipse'].includes(primaryShape.type));
+    const parentAutoLayout = Boolean(primaryShape?.__parent && primaryShape.__parent.layout === 'auto');
+    const parentLayoutAxis = primaryShape?.__parent?.layoutAxis === 'horizontal' ? 'horizontal' : 'vertical';
+    const widthMode = primaryShape?.layoutWidthMode || 'fixed';
+    const heightMode = primaryShape?.layoutHeightMode || 'fixed';
+    const handleLayoutChildChange = useCallback(
+        (updates) => {
+            if (!primaryShape || !primaryShape.id) return;
+            if (typeof onLayoutChange !== 'function') return;
+            onLayoutChange({
+                version: Date.now(),
+                targetId: primaryShape.id,
+                payload: { type: 'layoutChild', value: updates },
+            });
+        },
+        [onLayoutChange, primaryShape]
+    );
 
     const [alignmentActive, setAlignmentActive] = useState(null);
     const [distributionActive, setDistributionActive] = useState(null);
@@ -4336,12 +4416,6 @@ export default function PropertiesPanel({
         onBlendModeChange(mode);
     };
 
-    const getIconButtonStyles = (active, disabled) => ({
-        ...iconButtonStyle,
-        ...(active ? iconButtonActiveStyle : null),
-        ...(disabled ? iconButtonDisabledStyle : null),
-    });
-
     const appearanceActions = (
         <>
             <button
@@ -4718,6 +4792,40 @@ export default function PropertiesPanel({
         { id: 'bottom', label: 'Bottom' },
     ];
 
+    const layoutEnabled = primaryShape?.layout === 'auto';
+    const layoutAxis = primaryShape?.layoutAxis || 'vertical';
+    const layoutFlow = primaryShape?.layoutFlow || 'stack';
+    const layoutSpacing = Number.isFinite(primaryShape?.layoutSpacing) ? primaryShape.layoutSpacing : 8;
+    const layoutPadding = (() => {
+        const raw = primaryShape?.layoutPadding;
+        if (typeof raw === 'number') {
+            return { top: raw, right: raw, bottom: raw, left: raw };
+        }
+        return {
+            top: Number.isFinite(raw?.top) ? raw.top : 12,
+            right: Number.isFinite(raw?.right) ? raw.right : 12,
+            bottom: Number.isFinite(raw?.bottom) ? raw.bottom : 12,
+            left: Number.isFinite(raw?.left) ? raw.left : 12,
+        };
+    })();
+    const layoutAlignCross = primaryShape?.layoutAlignCross || primaryShape?.layoutAlign || 'start';
+    const layoutAlignMain = primaryShape?.layoutAlignMain || 'start';
+    const layoutWidthMode = primaryShape?.layoutWidthMode || 'fixed';
+    const layoutHeightMode = primaryShape?.layoutHeightMode || 'fixed';
+    const layoutWidth = Number.isFinite(primaryShape?.width) ? primaryShape.width : 0;
+    const layoutHeight = Number.isFinite(primaryShape?.height) ? primaryShape.height : 0;
+    const layoutDimensionLabel = layoutEnabled ? 'Resize' : 'Dimension';
+    const layoutGridColumns = Number.isFinite(primaryShape?.layoutGridColumns) ? primaryShape.layoutGridColumns : 2;
+    const layoutGridRows = Number.isFinite(primaryShape?.layoutGridRows) ? primaryShape.layoutGridRows : 2;
+    const layoutGridColumnGap = Number.isFinite(primaryShape?.layoutGridColumnGap) ? primaryShape.layoutGridColumnGap : layoutSpacing;
+    const layoutGridRowGap = Number.isFinite(primaryShape?.layoutGridRowGap) ? primaryShape.layoutGridRowGap : layoutSpacing;
+    const layoutGridColumnMode = primaryShape?.layoutGridColumnMode || 'fixed';
+    const layoutGridRowMode = primaryShape?.layoutGridRowMode || 'fixed';
+    const layoutClipContent =
+        (primaryShape?.type === 'frame' && primaryShape.clipContent) ||
+        (primaryShape?.type === 'group' && primaryShape.clipChildren) ||
+        false;
+
     const shapeName = useMemo(() => {
         if (!shape) return 'No selection';
         const labels = {
@@ -4775,49 +4883,58 @@ export default function PropertiesPanel({
                 <Section title="Positions">
                     <div>
                         <div style={sectionSubheadingStyle}>Alignment</div>
-                        <div style={{ display: 'flex', flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                            <div style={alignmentGridStyle}>
-                                {horizontalAlignmentControls.map(({ id, label, icon: Icon }) => (
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 6,
+                                marginTop: 6,
+                                opacity: isMultiSelect ? 1 : 0.45,
+                                pointerEvents: isMultiSelect ? 'auto' : 'none',
+                            }}
+                        >
+                            {[
+                                { id: 'left', label: 'Align left', Icon: AlignLeftIcon },
+                                { id: 'center', label: 'Align center', Icon: AlignHCenterIcon },
+                                { id: 'right', label: 'Align right', Icon: AlignRightIcon },
+                                { id: 'top', label: 'Align top', Icon: AlignTopIcon },
+                                { id: 'middle', label: 'Align middle', Icon: AlignVMiddleIcon },
+                                { id: 'bottom', label: 'Align bottom', Icon: AlignBottomIcon },
+                            ].map(({ id, label, Icon }) => {
+                                const isActive = alignmentActive === id;
+                                return (
                                     <button
                                         key={id}
                                         type="button"
                                         title={label}
                                         onClick={() => handleAlignmentClick(id)}
+                                        style={{
+                                            ...getIconButtonStyles(isActive, !isMultiSelect),
+                                            width: 42,
+                                            height: 36,
+                                            borderRadius: 8,
+                                            background: isActive ? '#e8f0ff' : '#f8fafc',
+                                            border: '1px solid #d6e0f0',
+                                        }}
                                         disabled={!isMultiSelect}
-                                        style={getIconButtonStyles(alignmentActive === id, !isMultiSelect)}
                                     >
                                         <Icon />
                                     </button>
-                                ))}
-                            </div>
-                            <div style={alignmentGridStyle}>
-                                {verticalAlignmentControls.map(({ id, label, icon: Icon }) => (
-                                    <button
-                                        key={id}
-                                        type="button"
-                                        title={label}
-                                        onClick={() => handleAlignmentClick(id)}
-                                        disabled={!isMultiSelect}
-                                        style={getIconButtonStyles(alignmentActive === id, !isMultiSelect)}
-                                    >
-                                        <Icon />
-                                    </button>
-                                ))}
-                            </div>
-                            <div style={distributeRowStyle}>
-                                {distributionControls.map(({ id, label, icon: Icon }) => (
-                                    <button
-                                        key={id}
-                                        type="button"
-                                        title={label}
-                                        onClick={() => handleDistributionClick(id)}
-                                        disabled={!isMultiSelect}
-                                        style={getIconButtonStyles(distributionActive === id, !isMultiSelect)}
-                                    >
-                                        <Icon />
-                                    </button>
-                                ))}
-                            </div>
+                                );
+                            })}
+                        </div>
+                        <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
+                            {distributionControls.map(({ id, label, icon: Icon }) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    title={label}
+                                    onClick={() => handleDistributionClick(id)}
+                                    disabled={!isMultiSelect}
+                                    style={getIconButtonStyles(distributionActive === id, !isMultiSelect)}
+                                >
+                                    <Icon />
+                                </button>
+                            ))}
                         </div>
                     </div>
 
@@ -4898,85 +5015,88 @@ export default function PropertiesPanel({
 
                 <div style={dividerStyle} />
 
-                <Section title="Layout">
-                    <div>
-                        <div style={sectionSubheadingStyle}>Dimension</div>
-                        <div style={dimensionRowStyle}>
-                            {renderNumericInput({
-                                label: '',
-                                value: dimensionDraft.width,
-                                onChange: (value) => handleDimensionFieldChange('width', value),
-                                onCommit: commitDimensionDraft,
-                                onFocus: () => {
-                                    dimensionEditingRef.current = true;
-                                },
-                                step: 1,
-                                suffix: 'px',
-                                prefix: 'W',
-                                disabled: !supportsDimensions || !hasSelection,
-                            })}
-                            {renderNumericInput({
-                                label: '',
-                                value: dimensionDraft.height,
-                                onChange: (value) => handleDimensionFieldChange('height', value),
-                                onCommit: commitDimensionDraft,
-                                onFocus: () => {
-                                    dimensionEditingRef.current = true;
-                                },
-                                step: 1,
-                                suffix: 'px',
-                                prefix: 'H',
-                                disabled: !supportsDimensions || !hasSelection,
-                            })}
-                            <button
-                                type="button"
-                                title={isAspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-                                onClick={handleAspectToggle}
-                                disabled={!supportsDimensions || !hasSelection}
-                                style={{
-                                    ...toggleButtonStyle,
-                                    width: 24,
-                                    height: 24,
-                                    padding: 0,
-                                    ...(isAspectLocked ? toggleButtonActiveStyle : null),
-                                    pointerEvents: !supportsDimensions || !hasSelection ? 'none' : 'auto',
-                                }}
-                            >
-                                {isAspectLocked ? <LockClosedIcon /> : <LockOpenIcon />}
-                            </button>
-                        </div>
-                        {isPolygonLikeShape ? (
-                            <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
-                                {renderNumericInput({
-                                    label: 'Sides',
-                                    value: polygonSidesDraft,
-                                    onChange: handlePolygonSidesInputChange,
-                                    onCommit: commitPolygonSides,
-                                    step: 1,
-                                    min: 3,
-                                    max: 60,
-                                    suffix: '',
-                                    prefix: '',
-                                    disabled: !hasSelection,
-                                })} 
-                                {renderNumericInput({
-                                    label: 'Radius',
-                                    value: polygonRadiusDraft,
-                                    onChange: handlePolygonRadiusInputChange,
-                                    onCommit: commitPolygonRadius,
-                                    step: 1,
-                                    suffix: 'px',
-                                    prefix: '',
-                                    disabled: !hasSelection,
-                                })}
+                {!isContainerShape && (
+                    <Section title="Layout">
+                        <div>
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 10, opacity: layoutEnabled ? 1 : 0.45 }}>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        onLayoutChange({
+                                            version: Date.now(),
+                                            targetId: primaryShape.id,
+                                            payload: { type: 'layout', value: { enabled: true, axis: 'vertical', flow: 'stack' } },
+                                        })
+                                    }
+                                    disabled={!layoutEnabled}
+                                    style={getIconButtonStyles(layoutFlow !== 'grid' && layoutAxis === 'vertical', !layoutEnabled)}
+                                    title="Vertical flow"
+                                >
+                                    ↓
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        onLayoutChange({
+                                            version: Date.now(),
+                                            targetId: primaryShape.id,
+                                            payload: { type: 'layout', value: { enabled: true, axis: 'horizontal', flow: 'stack' } },
+                                        })
+                                    }
+                                    disabled={!layoutEnabled}
+                                    style={getIconButtonStyles(layoutFlow !== 'grid' && layoutAxis === 'horizontal', !layoutEnabled)}
+                                    title="Horizontal flow"
+                                >
+                                    →
+                                </button>
+                                {primaryShape?.type === 'frame' && (
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            onLayoutChange({
+                                                version: Date.now(),
+                                                targetId: primaryShape.id,
+                                                payload: { type: 'layout', value: { enabled: true, flow: 'grid' } },
+                                            })
+                                        }
+                                        disabled={!layoutEnabled}
+                                        style={getIconButtonStyles(layoutFlow === 'grid', !layoutEnabled)}
+                                        title="Grid flow"
+                                    >
+                                        ▦
+                                    </button>
+                                )}
                             </div>
-                        ) : null}
-                    </div>
-                </Section>
-
-                <div style={dividerStyle} />
-
-                <Section title="Appearance" actions={appearanceActions}>
+                            <div style={{ marginTop: 8 }}>
+                                <div style={sectionSubheadingStyle}>{layoutDimensionLabel}</div>
+                                <div style={dimensionRowStyle}>
+                                    {renderNumericInput({
+                                        label: '',
+                                        value: dimensionDraft.width,
+                                        onChange: (value) => handleDimensionFieldChange('width', value),
+                                        onCommit: commitDimensionDraft,
+                                        onFocus: () => { dimensionEditingRef.current = true; },
+                                        step: 1,
+                                        suffix: 'px',
+                                        prefix: 'W',
+                                        disabled: !supportsDimensions || !hasSelection || (layoutEnabled && layoutWidthMode !== 'fixed'),
+                                    })}
+                                    {renderNumericInput({
+                                        label: '',
+                                        value: dimensionDraft.height,
+                                        onChange: (value) => handleDimensionFieldChange('height', value),
+                                        onCommit: commitDimensionDraft,
+                                        onFocus: () => { dimensionEditingRef.current = true; },
+                                        step: 1,
+                                        suffix: 'px',
+                                        prefix: 'H',
+                                        disabled: !supportsDimensions || !hasSelection || (layoutEnabled && layoutHeightMode !== 'fixed'),
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </Section>
+                )}                <Section title="Appearance" actions={appearanceActions}>
                     <div>
                         <div style={appearanceRowStyle}>
                             {renderNumericInput({
@@ -5128,15 +5248,576 @@ export default function PropertiesPanel({
 
                 <div style={dividerStyle} />
 
+                {isContainerShape && (
+                    <>
+                        <Section
+                            title={layoutEnabled ? "Auto Layout" : "Layout"}
+                            actions={
+                                primaryShape?.type === 'frame' ? (
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={layoutEnabled}
+                                            onChange={(e) =>
+                                                onLayoutChange({
+                                                    version: Date.now(),
+                                                    targetId: primaryShape.id,
+                                                    payload: {
+                                                        type: 'layout',
+                                                        value: { enabled: e.target.checked },
+                                                    },
+                                                })
+                                            }
+                                        />
+                                        <span style={{ ...sectionSubheadingStyle, margin: 0 }}>Auto layout</span>
+                                    </label>
+                                ) : null
+                            }
+                        >
+                            {primaryShape?.type !== 'frame' && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={layoutEnabled}
+                                            onChange={(e) =>
+                                                onLayoutChange({
+                                                    version: Date.now(),
+                                                    targetId: primaryShape.id,
+                                                    payload: {
+                                                        type: 'layout',
+                                                        value: { enabled: e.target.checked },
+                                                    },
+                                                })
+                                            }
+                                        />
+                                        <span style={{ ...sectionSubheadingStyle, margin: 0 }}>Auto layout</span>
+                                    </label>
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 10, opacity: layoutEnabled ? 1 : 0.45 }}>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        onLayoutChange({
+                                            version: Date.now(),
+                                            targetId: primaryShape.id,
+                                            payload: { type: 'layout', value: { enabled: true, axis: 'vertical', flow: 'stack' } },
+                                        })
+                                    }
+                                    disabled={!layoutEnabled}
+                                    style={getIconButtonStyles(layoutFlow !== 'grid' && layoutAxis === 'vertical', !layoutEnabled)}
+                                    title="Vertical flow"
+                                >
+                                    ↓
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        onLayoutChange({
+                                            version: Date.now(),
+                                            targetId: primaryShape.id,
+                                            payload: { type: 'layout', value: { enabled: true, axis: 'horizontal', flow: 'stack' } },
+                                        })
+                                    }
+                                    disabled={!layoutEnabled}
+                                    style={getIconButtonStyles(layoutFlow !== 'grid' && layoutAxis === 'horizontal', !layoutEnabled)}
+                                    title="Horizontal flow"
+                                >
+                                    →
+                                </button>
+                                {primaryShape?.type === 'frame' && (
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            onLayoutChange({
+                                                version: Date.now(),
+                                                targetId: primaryShape.id,
+                                                payload: { type: 'layout', value: { enabled: true, flow: 'grid' } },
+                                            })
+                                        }
+                                        disabled={!layoutEnabled}
+                                        style={getIconButtonStyles(layoutFlow === 'grid', !layoutEnabled)}
+                                        title="Grid flow"
+                                    >
+                                        ▦
+                                    </button>
+                                )}
+                            </div>
+
+                                {layoutEnabled && layoutFlow === 'grid' && primaryShape?.type === 'frame' && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10, opacity: layoutEnabled ? 1 : 0.45 }}>
+                                        <NumberControl
+                                            label="Columns"
+                                        value={layoutGridColumns}
+                                        onChange={
+                                            layoutEnabled
+                                                ? (val) =>
+                                                    onLayoutChange({
+                                                        version: Date.now(),
+                                                        targetId: primaryShape.id,
+                                                        payload: { type: 'layout', value: { enabled: true, flow: 'grid', gridColumns: Math.max(1, Number(val) || 1) } },
+                                                    })
+                                                : undefined
+                                        }
+                                        min={1}
+                                        max={50}
+                                        step={1}
+                                        disabled={!layoutEnabled}
+                                    />
+                                    <NumberControl
+                                        label="Rows"
+                                        value={layoutGridRows}
+                                        onChange={
+                                            layoutEnabled
+                                                ? (val) =>
+                                                    onLayoutChange({
+                                                        version: Date.now(),
+                                                        targetId: primaryShape.id,
+                                                        payload: { type: 'layout', value: { enabled: true, flow: 'grid', gridRows: Math.max(1, Number(val) || 1) } },
+                                                    })
+                                                : undefined
+                                        }
+                                        min={1}
+                                        max={50}
+                                        step={1}
+                                        disabled={!layoutEnabled}
+                                    />
+                                    <NumberControl
+                                        label="Column Gap"
+                                        value={layoutGridColumnGap}
+                                        onChange={
+                                            layoutEnabled
+                                                ? (val) =>
+                                                    onLayoutChange({
+                                                        version: Date.now(),
+                                                        targetId: primaryShape.id,
+                                                        payload: { type: 'layout', value: { enabled: true, flow: 'grid', gridColumnGap: Number(val) || 0 } },
+                                                    })
+                                                : undefined
+                                        }
+                                        min={0}
+                                        max={500}
+                                        step={1}
+                                        disabled={!layoutEnabled}
+                                    />
+                                    <NumberControl
+                                        label="Row Gap"
+                                        value={layoutGridRowGap}
+                                        onChange={
+                                            layoutEnabled
+                                                ? (val) =>
+                                                    onLayoutChange({
+                                                        version: Date.now(),
+                                                        targetId: primaryShape.id,
+                                                        payload: { type: 'layout', value: { enabled: true, flow: 'grid', gridRowGap: Number(val) || 0 } },
+                                                    })
+                                                : undefined
+                                        }
+                                        min={0}
+                                        max={500}
+                                        step={1}
+                                        disabled={!layoutEnabled}
+                                    />
+                                    <div>
+                                        <span style={fieldLabelStyle}>Column mode</span>
+                                        <select
+                                            value={layoutGridColumnMode}
+                                            onChange={(e) =>
+                                                onLayoutChange({
+                                                    version: Date.now(),
+                                                    targetId: primaryShape.id,
+                                                    payload: {
+                                                        type: 'layout',
+                                                        value: { enabled: true, flow: 'grid', gridColumnMode: e.target.value },
+                                                    },
+                                                })
+                                            }
+                                            disabled={!layoutEnabled}
+                                            style={{ ...selectStyle, width: '100%' }}
+                                        >
+                                            <option value="fixed">Fixed</option>
+                                            <option value="fill">Fill</option>
+                                            <option value="hug">Hug</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <span style={fieldLabelStyle}>Row mode</span>
+                                        <select
+                                            value={layoutGridRowMode}
+                                            onChange={(e) =>
+                                                onLayoutChange({
+                                                    version: Date.now(),
+                                                    targetId: primaryShape.id,
+                                                    payload: {
+                                                        type: 'layout',
+                                                        value: { enabled: true, flow: 'grid', gridRowMode: e.target.value },
+                                                    },
+                                                })
+                                            }
+                                            disabled={!layoutEnabled}
+                                            style={{ ...selectStyle, width: '100%' }}
+                                        >
+                                            <option value="fixed">Fixed</option>
+                                            <option value="fill">Fill</option>
+                                            <option value="hug">Hug</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div style={{ marginTop: 8 }}>
+                                <div style={sectionSubheadingStyle}>{layoutDimensionLabel}</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginTop: 6, alignItems: 'end' }}>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                        <NumberControl
+                                            label="W"
+                                            value={layoutWidth}
+                                            onChange={
+                                                (!layoutEnabled || layoutWidthMode === 'fixed')
+                                                    ? (val) =>
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: { type: 'layout', value: { enabled: layoutEnabled, width: Number(val) } },
+                                                        })
+                                                    : undefined
+                                            }
+                                            min={0}
+                                            max={4000}
+                                            step={1}
+                                            disabled={!supportsDimensions || !hasSelection || (layoutEnabled ? layoutWidthMode !== 'fixed' : (parentAutoLayout && layoutWidthMode !== 'fixed'))}
+                                        />
+                                        <select
+                                            value={layoutWidthMode}
+                                            onChange={(e) =>
+                                                onLayoutChange({
+                                                    version: Date.now(),
+                                                    targetId: primaryShape.id,
+                                                    payload: { type: 'layout', value: { enabled: layoutEnabled, widthMode: e.target.value } },
+                                                })
+                                            }
+                                            disabled={!hasSelection || (!layoutEnabled && !parentAutoLayout)}
+                                            style={{ ...selectStyle, minWidth: 90 }}
+                                        >
+                                            <option value="fixed">Fixed</option>
+                                            <option value="hug">Hug</option>
+                                            <option value="fill">Fill</option>
+                                        </select>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                        <NumberControl
+                                            label="H"
+                                            value={layoutHeight}
+                                            onChange={
+                                                (!layoutEnabled || layoutHeightMode === 'fixed')
+                                                    ? (val) =>
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: { type: 'layout', value: { enabled: layoutEnabled, height: Number(val) } },
+                                                        })
+                                                    : undefined
+                                            }
+                                            min={0}
+                                            max={4000}
+                                            step={1}
+                                            disabled={!supportsDimensions || !hasSelection || (layoutEnabled ? layoutHeightMode !== 'fixed' : (parentAutoLayout && layoutHeightMode !== 'fixed'))}
+                                        />
+                                        <select
+                                            value={layoutHeightMode}
+                                            onChange={(e) =>
+                                                onLayoutChange({
+                                                    version: Date.now(),
+                                                    targetId: primaryShape.id,
+                                                    payload: { type: 'layout', value: { enabled: layoutEnabled, heightMode: e.target.value } },
+                                                })
+                                            }
+                                            disabled={!hasSelection || (!layoutEnabled && !parentAutoLayout)}
+                                            style={{ ...selectStyle, minWidth: 90 }}
+                                        >
+                                            <option value="fixed">Fixed</option>
+                                            <option value="hug">Hug</option>
+                                            <option value="fill">Fill</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        title={isAspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+                                        onClick={handleAspectToggle}
+                                        disabled={
+                                            !supportsDimensions ||
+                                            !hasSelection ||
+                                            (layoutEnabled
+                                                ? (layoutWidthMode !== 'fixed' || layoutHeightMode !== 'fixed')
+                                                : (parentAutoLayout && (layoutWidthMode !== 'fixed' || layoutHeightMode !== 'fixed')))
+                                        }
+                                        style={{
+                                            ...toggleButtonStyle,
+                                            width: 24,
+                                            height: 24,
+                                            padding: 0,
+                                            ...(isAspectLocked ? toggleButtonActiveStyle : null),
+                                            pointerEvents: !supportsDimensions || !hasSelection ? 'none' : 'auto',
+                                        }}
+                                    >
+                                        {isAspectLocked ? <LockClosedIcon /> : <LockOpenIcon />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, opacity: layoutEnabled ? 1 : 0.45 }}>
+
+                                <div>
+                                    <div style={sectionSubheadingStyle}>Alignment</div>
+                                    <div
+                                        style={{
+                                            display: 'inline-grid',
+                                            gridTemplateColumns: 'repeat(3, 40px)',
+                                            gridTemplateRows: 'repeat(3, 40px)',
+                                            gap: 8,
+                                            marginTop: 6,
+                                            opacity: layoutEnabled ? 1 : 0.45,
+                                            pointerEvents: layoutEnabled ? 'auto' : 'none',
+                                        }}
+                                    >
+                                        {[
+                                            { id: 'top-left', label: 'Align top left' },
+                                            { id: 'top-center', label: 'Align top center' },
+                                            { id: 'top-right', label: 'Align top right' },
+                                            { id: 'middle-left', label: 'Align left' },
+                                            { id: 'center', label: 'Align center' },
+                                            { id: 'middle-right', label: 'Align right' },
+                                            { id: 'bottom-left', label: 'Align bottom left' },
+                                            { id: 'bottom-center', label: 'Align bottom center' },
+                                            { id: 'bottom-right', label: 'Align bottom right' },
+                                        ].map(({ id, label }) => {
+                                            const resolveCellAlign = () => {
+                                                const mainStart = 'start';
+                                                const mainCenter = 'center';
+                                                const mainEnd = 'end';
+                                                const crossStart = 'start';
+                                                const crossCenter = 'center';
+                                                const crossEnd = 'end';
+                                                const row = id.startsWith('top')
+                                                    ? mainStart
+                                                    : id.startsWith('bottom')
+                                                        ? mainEnd
+                                                        : mainCenter;
+                                                const col = id.endsWith('left')
+                                                    ? crossStart
+                                                    : id.endsWith('right')
+                                                        ? crossEnd
+                                                        : crossCenter;
+                                                return { row, col };
+                                            };
+                                            const { row, col } = resolveCellAlign();
+                                            const isVertical = layoutAxis === 'vertical';
+                                            const activeRow = isVertical ? layoutAlignMain : layoutAlignCross;
+                                            const activeCol = isVertical ? layoutAlignCross : layoutAlignMain;
+                                            const isActive = activeRow === row && activeCol === col && layoutAlignCross !== 'stretch';
+                                            return (
+                                                <button
+                                                    key={id}
+                                                    type="button"
+                                                    title={label}
+                                                    onClick={() => {
+                                                        const nextMain = isVertical ? row : col;
+                                                        const nextCross = isVertical ? col : row;
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: {
+                                                                type: 'layout',
+                                                                value: {
+                                                                    enabled: true,
+                                                                    alignMain: nextMain,
+                                                                    alignCross: nextCross,
+                                                                },
+                                                            },
+                                                        });
+                                                    }}
+                                                    style={getIconButtonStyles(isActive, !layoutEnabled)}
+                                                    disabled={!layoutEnabled}
+                                                >
+                                                    {label.split(' ')[1]?.[0]?.toUpperCase()}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                onLayoutChange({
+                                                    version: Date.now(),
+                                                    targetId: primaryShape.id,
+                                                    payload: { type: 'layout', value: { enabled: true, alignCross: 'stretch' } },
+                                                })
+                                            }
+                                            disabled={!layoutEnabled}
+                                            style={getIconButtonStyles(layoutAlignCross === 'stretch', !layoutEnabled)}
+                                            title="Stretch cross-axis"
+                                        >
+                                            Stretch
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <NumberControl
+                                            label="Gap"
+                                            value={layoutSpacing}
+                                            onChange={
+                                                layoutEnabled
+                                                    ? (val) =>
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: { type: 'layout', value: { enabled: true, spacing: Number(val) } },
+                                                        })
+                                                    : undefined
+                                            }
+                                            min={0}
+                                            max={500}
+                                            step={1}
+                                            disabled={!layoutEnabled}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div style={sectionSubheadingStyle}>Padding</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 6 }}>
+                                        <NumberControl
+                                            label="Top"
+                                            value={layoutPadding.top}
+                                            onChange={
+                                                layoutEnabled
+                                                    ? (val) =>
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: {
+                                                                type: 'layout',
+                                                                value: {
+                                                                    enabled: true,
+                                                                    padding: { ...layoutPadding, top: Number(val) },
+                                                                },
+                                                            },
+                                                        })
+                                                    : undefined
+                                            }
+                                            min={0}
+                                            max={500}
+                                            step={1}
+                                            disabled={!layoutEnabled}
+                                        />
+                                        <NumberControl
+                                            label="Right"
+                                            value={layoutPadding.right}
+                                            onChange={
+                                                layoutEnabled
+                                                    ? (val) =>
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: {
+                                                                type: 'layout',
+                                                                value: {
+                                                                    enabled: true,
+                                                                    padding: { ...layoutPadding, right: Number(val) },
+                                                                },
+                                                            },
+                                                        })
+                                                    : undefined
+                                            }
+                                            min={0}
+                                            max={500}
+                                            step={1}
+                                            disabled={!layoutEnabled}
+                                        />
+                                        <NumberControl
+                                            label="Bottom"
+                                            value={layoutPadding.bottom}
+                                            onChange={
+                                                layoutEnabled
+                                                    ? (val) =>
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: {
+                                                                type: 'layout',
+                                                                value: {
+                                                                    enabled: true,
+                                                                    padding: { ...layoutPadding, bottom: Number(val) },
+                                                                },
+                                                            },
+                                                        })
+                                                    : undefined
+                                            }
+                                            min={0}
+                                            max={500}
+                                            step={1}
+                                            disabled={!layoutEnabled}
+                                        />
+                                        <NumberControl
+                                            label="Left"
+                                            value={layoutPadding.left}
+                                            onChange={
+                                                layoutEnabled
+                                                    ? (val) =>
+                                                        onLayoutChange({
+                                                            version: Date.now(),
+                                                            targetId: primaryShape.id,
+                                                            payload: {
+                                                                type: 'layout',
+                                                                value: {
+                                                                    enabled: true,
+                                                                    padding: { ...layoutPadding, left: Number(val) },
+                                                                },
+                                                            },
+                                                        })
+                                                    : undefined
+                                            }
+                                            min={0}
+                                            max={500}
+                                            step={1}
+                                            disabled={!layoutEnabled}
+                                        />
+                                    </div>
+                                </div>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, opacity: layoutEnabled ? 1 : 0.45 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={layoutClipContent}
+                                        onChange={(e) =>
+                                            onLayoutChange({
+                                                version: Date.now(),
+                                                targetId: primaryShape.id,
+                                                payload: { type: 'layout', value: { enabled: true, clipContent: e.target.checked } },
+                                            })
+                                        }
+                                        disabled={!layoutEnabled}
+                                    />
+                                    <span style={fieldLabelStyle}>Clip content</span>
+                                </label>
+                            </div>
+                        </Section>
+
+                        <div style={dividerStyle} />
+                    </>
+                )}
+
                 <Section title="Fill">
                     <ColorListControl
                         label="Fill"
-                        styles={supportsFill ? fillStyle : [
-                            { type: 'solid', value: '#000000' },
-                        ]}
-                        onStyleChange={supportsFill ? onFillStyleChange : undefined}
-                        disabled={!supportsFill}
-                        onGradientPopoverToggle={supportsFill ? onGradientPickerToggle : undefined}
+                        styles={canEditFill ? fillStyle : []}
+                        onStyleChange={canEditFill ? onFillStyleChange : undefined}
+                        disabled={!canEditFill}
+                        onGradientPopoverToggle={canEditFill ? onGradientPickerToggle : undefined}
                         gradientInteractionRef={gradientInteractionRef}
                         fallbackStyle={{ type: 'solid', value: '#000000' }}
                     />
@@ -5147,20 +5828,36 @@ export default function PropertiesPanel({
                 <Section title="Stroke">
                     <ColorListControl
                         label="Stroke"
-                        styles={strokeStyle}
+                        styles={canEditStroke ? strokeStyle : []}
                         onStyleChange={disableStrokeControls ? undefined : onStrokeStyleChange}
                         disabled={disableStrokeControls}
                         fallbackStyle={{ type: 'solid', value: '#000000' }}
                     />
-                    <NumberControl
-                        label="Stroke Width"
-                        value={strokeWidth}
-                        onChange={disableStrokeControls ? undefined : onStrokeWidthChange}
-                        min={0}
-                        max={64}
-                        step={1}
-                        disabled={disableStrokeControls}
-                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <div style={{ flex: 1 }}>
+                            <div style={sectionSubheadingStyle}>Position</div>
+                            <select
+                                value="inside"
+                                disabled
+                                style={{ ...selectStyle, width: '100%' }}
+                            >
+                                <option value="inside">Inside</option>
+                                <option value="center">Center</option>
+                                <option value="outside">Outside</option>
+                            </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <NumberControl
+                                label="Weight"
+                                value={strokeWidth}
+                                onChange={disableStrokeControls ? undefined : onStrokeWidthChange}
+                                min={0}
+                                max={64}
+                                step={1}
+                                disabled={disableStrokeControls}
+                            />
+                        </div>
+                    </div>
 
                 </Section>
 

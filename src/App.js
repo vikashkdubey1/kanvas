@@ -94,14 +94,42 @@ export default function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const handleSelectionChange = useCallback((shape) => {
+    const [selectionInfo, setSelectionInfo] = useState(null);
+    const [alignRequest, setAlignRequest] = useState(null);
+
+    const handleSelectionChange = useCallback((info) => {
+        const shape = info?.shape || null;
+        setSelectionInfo(info || null);
         setActiveShape(shape);
         if (!shape) {
+            setFillStyle([]);
+            setStrokeStyle([]);
             return;
         }
 
+        const normalizeStyleList = (styles, fallback) => {
+            const list = Array.isArray(styles)
+                ? styles.filter(Boolean)
+                : styles
+                    ? [styles]
+                    : [];
+            return list.length ? list : [fallback];
+        };
+
+        const stripMeta = (styles) =>
+            Array.isArray(styles)
+                ? styles.map((s) => {
+                    if (!s || typeof s !== 'object') return s;
+                    const { meta, ...rest } = s;
+                    return { ...rest };
+                })
+                : styles;
+
         setFillStyle((prev) => {
             const previousPrimary = Array.isArray(prev) && prev.length ? prev[0] : DEFAULT_FILL_STYLE;
+            if (Array.isArray(shape.fillStyles)) {
+                return stripMeta(shape.fillStyles);
+            }
             const nextType = typeof shape.fillType === 'string' ? shape.fillType : previousPrimary.type;
             if (nextType === 'gradient') {
                 const gradientValue = normalizeGradient(
@@ -117,14 +145,17 @@ export default function App() {
                     )
                         ? DEFAULT_FILL_STYLE.value
                         : previousPrimary.value;
-            return [{ type: nextType, value: nextValue }];
+            return normalizeStyleList([{ type: nextType, value: nextValue }], DEFAULT_FILL_STYLE);
         });
 
         setStrokeStyle((prev) => {
             const previousPrimary = Array.isArray(prev) && prev.length ? prev[0] : DEFAULT_STROKE_STYLE;
+            if (Array.isArray(shape.strokeStyles)) {
+                return stripMeta(shape.strokeStyles);
+            }
             const nextType = typeof shape.strokeType === 'string' ? shape.strokeType : previousPrimary.type;
             const nextValue = typeof shape.stroke === 'string' ? shape.stroke : previousPrimary.value;
-            return [{ type: nextType, value: nextValue }];
+            return normalizeStyleList([{ type: nextType, value: nextValue }], DEFAULT_STROKE_STYLE);
         });
 
         if (typeof shape.strokeWidth === 'number' && !Number.isNaN(shape.strokeWidth)) {
@@ -163,6 +194,14 @@ export default function App() {
 
     const handleShapePropertyRequestHandled = useCallback((version) => {
         setShapePropertyRequest((prev) => (prev && prev.version === version ? null : prev));
+    }, []);
+
+    const handleAlign = useCallback((mode) => {
+        setAlignRequest({ version: Date.now(), mode });
+    }, []);
+
+    const handleAlignRequestHandled = useCallback((version) => {
+        setAlignRequest((prev) => (prev && prev.version === version ? null : prev));
     }, []);
 
     const textOptions = useMemo(
@@ -366,20 +405,22 @@ export default function App() {
 
                 <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <Canvas
-                            selectedTool={selectedTool}
-                            onToolChange={setSelectedTool}
-                            fillStyle={fillStyle}
-                            strokeStyle={strokeStyle}
+                    <Canvas
+                        selectedTool={selectedTool}
+                        onToolChange={setSelectedTool}
+                        fillStyle={fillStyle}
+                        strokeStyle={strokeStyle}
                             strokeWidth={strokeWidth}
                             strokeWidthVersion={strokeWidthVersion}
                             textOptions={textOptions}
-                            onSelectionChange={handleSelectionChange}
-                            showGradientHandles={isGradientPickerOpen}
-                            gradientInteractionRef={gradientInteractionRef}
-                            shapePropertyRequest={shapePropertyRequest}
-                            onShapePropertyRequestHandled={handleShapePropertyRequestHandled}
-                        />
+                        onSelectionChange={handleSelectionChange}
+                        showGradientHandles={isGradientPickerOpen}
+                        gradientInteractionRef={gradientInteractionRef}
+                        shapePropertyRequest={shapePropertyRequest}
+                        onShapePropertyRequestHandled={handleShapePropertyRequestHandled}
+                        alignRequest={alignRequest}
+                        onAlignRequestHandled={handleAlignRequestHandled}
+                    />
                     </div>
 
                     <div
@@ -410,6 +451,7 @@ export default function App() {
                     <PropertiesPanel
                         panelWidth={propertiesPanelWidth}
                         shape={activeShape}
+                        selectionInfo={selectionInfo}
                         fillStyle={fillStyle}
                         onFillStyleChange={setFillStyle}
                         onGradientPickerToggle={setGradientPickerOpen}
@@ -443,6 +485,8 @@ export default function App() {
                         onArcChange={handleArcChange}
                         onPolygonSidesChange={handlePolygonSidesChange}
                         onRadiusChange={handleRadiusChange}
+                        onLayoutChange={(request) => setShapePropertyRequest(request)}
+                        onAlign={handleAlign}
                     />
                 </div>
             </div>
